@@ -14,7 +14,7 @@ import {
   DOCUMENT_TYPE_STYLE,
   DOCUMENT_TYPES,
 } from "@/features/documents/lib/labels";
-import { formatFileSize } from "@/lib/uploads";
+import { formatFileSize } from "@/lib/format-file-size";
 import { formatDateAR } from "@/lib/format-date";
 
 type PageProps = ProjectRouteParams & {

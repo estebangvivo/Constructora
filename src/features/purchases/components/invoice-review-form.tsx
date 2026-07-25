@@ -11,7 +11,7 @@ import {
 import type { PurchaseInvoiceDetail } from "@/features/purchases/queries/list-purchase-invoices";
 import { formatPurchaseMoney } from "@/features/purchases/lib/labels";
 import { toDateInputValue } from "@/lib/format-date";
-import { formatFileSize } from "@/lib/uploads";
+import { formatFileSize } from "@/lib/format-file-size";
 import { INVENTORY_CATEGORY_SUGGESTIONS } from "@/features/inventory/lib/labels";
 
 const fieldClass =

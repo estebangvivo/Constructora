@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { randomBytes } from "crypto";
+import "server-only";
 
 const MAX_BYTES = 25 * 1024 * 1024;
 
@@ -145,11 +146,4 @@ export async function saveProjectDocumentFile(input: {
     fileSize: saved.fileSize,
     mimeType: saved.mimeType,
   };
-}
-
-export function formatFileSize(bytes: number | null | undefined): string {
-  if (bytes == null || bytes <= 0) return "—";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

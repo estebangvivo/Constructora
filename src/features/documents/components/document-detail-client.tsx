@@ -13,7 +13,7 @@ import {
   DOCUMENT_TYPE_LABEL,
   DOCUMENT_TYPES,
 } from "@/features/documents/lib/labels";
-import { formatFileSize } from "@/lib/uploads";
+import { formatFileSize } from "@/lib/format-file-size";
 import { formatDateAR } from "@/lib/format-date";
 import type { DocumentDetail } from "@/features/documents/queries/list-documents";
 
