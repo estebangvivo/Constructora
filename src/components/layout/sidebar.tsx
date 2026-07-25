@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { HardHat, LogOut } from "lucide-react";
 import { SIDEBAR_NAV, filterNavByAccess } from "@/config/navigation";
 import { logoutLocal } from "@/features/auth/actions/auth-actions";
@@ -54,7 +53,7 @@ export function Sidebar({
               : pathname === item.href || pathname.startsWith(`${item.href}/`);
 
           return (
-            <Link
+            <a
               key={item.href}
               href={item.href}
               className={cn(
@@ -66,7 +65,7 @@ export function Sidebar({
             >
               <Icon className="size-4 shrink-0" aria-hidden />
               {item.title}
-            </Link>
+            </a>
           );
         })}
       </nav>

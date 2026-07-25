@@ -11,6 +11,7 @@ export const APP_MODULE_KEYS = [
   "settings",
   "users",
   "manual",
+  "turnero",
   "project.overview",
   "project.stakeholders",
   "project.budget",
@@ -78,6 +79,12 @@ export const APP_MODULES: AppModuleDef[] = [
     label: "Manual",
     group: "global",
     pathPrefixes: ["/manual"],
+  },
+  {
+    key: "turnero",
+    label: "Turnero",
+    group: "global",
+    pathPrefixes: ["/turnero"],
   },
   {
     key: "project.overview",
@@ -164,6 +171,7 @@ export const ROLE_DEFAULT_MODULES: Record<OrganizationRole, AppModuleKey[]> = {
     "clients",
     "suppliers",
     "manual",
+    "turnero",
     "project.overview",
     "project.stakeholders",
     "project.budget",
@@ -225,6 +233,7 @@ export const SIDEBAR_MODULE_BY_HREF: Record<string, AppModuleKey> = {
   "/suppliers": "suppliers",
   "/settings": "settings",
   "/manual": "manual",
+  "/turnero": "turnero",
 };
 
 /** Mapeo suffix project nav → módulo */
@@ -250,6 +259,7 @@ export function moduleForPathname(pathname: string): AppModuleKey | null {
   if (pathname.startsWith("/clients")) return "clients";
   if (pathname.startsWith("/suppliers")) return "suppliers";
   if (pathname.startsWith("/manual")) return "manual";
+  if (pathname.startsWith("/turnero")) return "turnero";
   if (pathname === "/" || pathname === "") return "home";
 
   const projectMatch = pathname.match(/^\/projects\/([^/]+)(\/.*)?$/);

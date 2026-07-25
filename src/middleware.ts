@@ -10,8 +10,12 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/health(.*)",
+  "/api/auth/login(.*)",
   "/api/webhooks(.*)",
   "/api/cron(.*)",
+  // Única vista de turnero sin login
+  "/turnero/pantalla(.*)",
+  "/api/turnero/pantalla(.*)",
 ]);
 
 const withClerk = clerkMiddleware(async (auth, request) => {

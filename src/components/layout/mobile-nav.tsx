@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { HardHat, LogOut, Menu } from "lucide-react";
 import { SIDEBAR_NAV, filterNavByAccess } from "@/config/navigation";
@@ -30,7 +29,7 @@ export function MobileNav({
   return (
     <div className="border-b border-border bg-sidebar text-sidebar-foreground md:hidden">
       <div className="flex h-14 items-center justify-between px-4">
-        <Link href="/" className="flex min-w-0 items-center gap-2">
+        <a href="/" className="flex min-w-0 items-center gap-2">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -44,7 +43,7 @@ export function MobileNav({
           <span className="truncate font-display text-lg tracking-tight">
             {organizationName ?? "Constructora"}
           </span>
-        </Link>
+        </a>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
@@ -69,7 +68,7 @@ export function MobileNav({
                 : pathname.startsWith(item.href);
 
             return (
-              <Link
+              <a
                 key={item.href}
                 href={item.href}
                 onClick={() => setOpen(false)}
@@ -82,7 +81,7 @@ export function MobileNav({
               >
                 <Icon className="size-4" aria-hidden />
                 {item.title}
-              </Link>
+              </a>
             );
           })}
           <form action={logoutLocal}>

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { isDevAuthBypass } from "@/lib/auth-config";
@@ -53,7 +52,7 @@ export default async function HomePage() {
         {modules.map((item) => {
           const Icon = item.icon;
           return (
-            <Link
+            <a
               key={item.href}
               href={item.href}
               className="group flex items-start gap-3 rounded-md border border-border bg-surface px-4 py-4 transition-colors hover:border-accent/40 hover:bg-surface-elevated"
@@ -75,7 +74,7 @@ export default async function HomePage() {
                   </span>
                 )}
               </span>
-            </Link>
+            </a>
           );
         })}
       </div>

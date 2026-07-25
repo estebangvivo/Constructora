@@ -146,32 +146,32 @@ enum DocumentType {
 
 /// Empresa constructora (tenant). Todo el dominio cuelga de Organization.
 model Organization {
-  id           String   @id @default(cuid())
-  name         String /// Nombre comercial
-  legalName    String? /// Razón social
-  slug         String   @unique /// Identificador URL-friendly
-  taxId        String? /// CUIT / RUT / NIT
-  email        String?
-  phone        String?
-  address      String?
-  city         String?
-  province     String?
-  postalCode   String?
-  country      String?  @default("AR")
-  website      String?
-  logoUrl      String?
-  facebookUrl  String?
-  instagramUrl String?
-  linkedinUrl  String?
-  xUrl         String? /// X / Twitter
-  whatsapp     String?
-  themeId      String   @default("obra") /// Paleta de color (config/themes)
+  id                String   @id @default(cuid())
+  name              String /// Nombre comercial
+  legalName         String? /// Razón social
+  slug              String   @unique /// Identificador URL-friendly
+  taxId             String? /// CUIT / RUT / NIT
+  email             String?
+  phone             String?
+  address           String?
+  city              String?
+  province          String?
+  postalCode        String?
+  country           String?  @default("AR")
+  website           String?
+  logoUrl           String?
+  facebookUrl       String?
+  instagramUrl      String?
+  linkedinUrl       String?
+  xUrl              String? /// X / Twitter
+  whatsapp          String?
+  themeId           String   @default("obra") /// Paleta de color (config/themes)
   /// Moneda principal / de reporte
-  currency     String   @default("ARS")
+  currency          String   @default("ARS")
   /// Monedas habilitadas para operar (multimoneda)
   enabledCurrencies String[] @default(["ARS", "USD"])
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   members       OrganizationMember[]
   projects      Project[]
@@ -184,6 +184,11 @@ model Organization {
   cashRegisters CashRegister[]
   cashSessions  CashSession[]
   cashMovements CashMovement[]
+
+  turneroClientes          TurneroCliente[]
+  turneroPuestos           TurneroPuesto[]
+  turneroTurnos            TurneroTurno[]
+  turneroContadoresDiarios TurneroContadorDiario[]
 
   @@map("organizations")
 }
@@ -244,14 +249,14 @@ model User {
 
 /// Membresía del usuario en una organización + rol global en esa org.
 model OrganizationMember {
-  id              String           @id @default(cuid())
-  organizationId  String
-  userId          String
-  role            OrganizationRole @default(VIEWER)
+  id             String           @id @default(cuid())
+  organizationId String
+  userId         String
+  role           OrganizationRole @default(VIEWER)
   /// Módulos habilitados (keys de APP_MODULES). Vacío = defaults del rol.
-  allowedModules  String[]         @default([])
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  allowedModules String[]         @default([])
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -304,22 +309,22 @@ model Project {
   updatedAt      DateTime      @updatedAt
   deletedAt      DateTime?
 
-  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  client       Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  createdBy    User?               @relation("ProjectCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  members      ProjectMembership[]
-  budgets      Budget[]
-  changeOrders ChangeOrder[]
-  certifications Certification[]
-  tasks        Task[]
-  milestones   Milestone[]
-  dailyReports DailyReport[]
-  punchItems   PunchListItem[]
-  documents    Document[]
-  inventory    InventoryItem[]
-  purchaseRequests PurchaseRequest[]
-  purchaseOrders   PurchaseOrder[]
-  purchaseInvoices PurchaseInvoice[]
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client             Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  createdBy          User?               @relation("ProjectCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  members            ProjectMembership[]
+  budgets            Budget[]
+  changeOrders       ChangeOrder[]
+  certifications     Certification[]
+  tasks              Task[]
+  milestones         Milestone[]
+  dailyReports       DailyReport[]
+  punchItems         PunchListItem[]
+  documents          Document[]
+  inventory          InventoryItem[]
+  purchaseRequests   PurchaseRequest[]
+  purchaseOrders     PurchaseOrder[]
+  purchaseInvoices   PurchaseInvoice[]
   projectContractors ProjectContractor[]
   projectSuppliers   ProjectSupplier[]
   receiptLines       ReceiptLine[]
@@ -383,16 +388,16 @@ model ProjectSupplier {
 
 /// Cabecera de presupuesto. Una obra puede tener varias versiones (baselines).
 model Budget {
-  id          String       @id @default(cuid())
-  projectId   String
-  name        String /// ej. "Presupuesto Base", "Rev. 2 — Post ODC-003"
-  version     Int          @default(1)
-  status      BudgetStatus @default(DRAFT)
-  currency    String? /// Si null, hereda Project.currency
-  notes       String?
-  approvedAt  DateTime?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id         String       @id @default(cuid())
+  projectId  String
+  name       String /// ej. "Presupuesto Base", "Rev. 2 — Post ODC-003"
+  version    Int          @default(1)
+  status     BudgetStatus @default(DRAFT)
+  currency   String? /// Si null, hereda Project.currency
+  notes      String?
+  approvedAt DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
 
   project Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   items   BudgetItem[]
@@ -406,29 +411,29 @@ model Budget {
 /// Total estimado = quantity * unitCost (persistido para reportes rápidos).
 /// actualCost se actualiza con costos reales ejecutados (compras, partes, etc.).
 model BudgetItem {
-  id          String   @id @default(cuid())
-  budgetId    String
-  parentId    String? /// Jerarquía de partidas (capítulo → subpartida)
-  code        String /// Código de partida (ej. 01.02.03)
-  description String
-  quantity    Decimal  @db.Decimal(14, 4)
-  unit        String /// Unidad de medida (m2, m3, kg, gl, etc.)
-  unitCost    Decimal  @db.Decimal(14, 2) /// Costo unitario estimado
-  totalCost   Decimal  @db.Decimal(14, 2) /// quantity * unitCost
-  actualCost  Decimal  @default(0) @db.Decimal(14, 2) /// Costo real acumulado (egresos / OP)
-  actualIncome Decimal @default(0) @db.Decimal(14, 2) /// Ingresos reales (recibos)
-  actualQty   Decimal  @default(0) @db.Decimal(14, 4) /// Cantidad ejecutada
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  budgetId     String
+  parentId     String? /// Jerarquía de partidas (capítulo → subpartida)
+  code         String /// Código de partida (ej. 01.02.03)
+  description  String
+  quantity     Decimal  @db.Decimal(14, 4)
+  unit         String /// Unidad de medida (m2, m3, kg, gl, etc.)
+  unitCost     Decimal  @db.Decimal(14, 2) /// Costo unitario estimado
+  totalCost    Decimal  @db.Decimal(14, 2) /// quantity * unitCost
+  actualCost   Decimal  @default(0) @db.Decimal(14, 2) /// Costo real acumulado (egresos / OP)
+  actualIncome Decimal  @default(0) @db.Decimal(14, 2) /// Ingresos reales (recibos)
+  actualQty    Decimal  @default(0) @db.Decimal(14, 4) /// Cantidad ejecutada
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  budget       Budget            @relation(fields: [budgetId], references: [id], onDelete: Cascade)
-  parent       BudgetItem?       @relation("BudgetItemTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children     BudgetItem[]      @relation("BudgetItemTree")
-  changeOrders ChangeOrderItem[]
-  certItems    CertificationItem[]
-  dailyAdvances DailyReportAdvance[]
-  inventory    InventoryItem[]
+  budget            Budget               @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  parent            BudgetItem?          @relation("BudgetItemTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children          BudgetItem[]         @relation("BudgetItemTree")
+  changeOrders      ChangeOrderItem[]
+  certItems         CertificationItem[]
+  dailyAdvances     DailyReportAdvance[]
+  inventory         InventoryItem[]
   receiptLines      ReceiptLine[]
   paymentOrderLines PaymentOrderLine[]
 
@@ -484,24 +489,24 @@ model ChangeOrderItem {
 
 /// Certificación de Obra: facturación por % de avance físico.
 model Certification {
-  id              String               @id @default(cuid())
+  id              String              @id @default(cuid())
   projectId       String
   number          String /// Certificación N° correlativo
   periodStart     DateTime
   periodEnd       DateTime
-  status          CertificationStatus  @default(DRAFT)
-  grossAmount     Decimal              @default(0) @db.Decimal(14, 2)
-  retentionPct    Decimal              @default(0) @db.Decimal(5, 2) /// % retención de garantía
-  retentionAmount Decimal              @default(0) @db.Decimal(14, 2)
-  netAmount       Decimal              @default(0) @db.Decimal(14, 2)
+  status          CertificationStatus @default(DRAFT)
+  grossAmount     Decimal             @default(0) @db.Decimal(14, 2)
+  retentionPct    Decimal             @default(0) @db.Decimal(5, 2) /// % retención de garantía
+  retentionAmount Decimal             @default(0) @db.Decimal(14, 2)
+  netAmount       Decimal             @default(0) @db.Decimal(14, 2)
   notes           String?
   submittedAt     DateTime?
   approvedAt      DateTime?
   paidAt          DateTime?
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
 
-  project Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   items   CertificationItem[]
 
   @@unique([projectId, number])
@@ -520,7 +525,7 @@ model CertificationItem {
   amount          Decimal @db.Decimal(14, 2)
 
   certification Certification @relation(fields: [certificationId], references: [id], onDelete: Cascade)
-  budgetItem    BudgetItem   @relation(fields: [budgetItemId], references: [id], onDelete: Restrict)
+  budgetItem    BudgetItem    @relation(fields: [budgetItemId], references: [id], onDelete: Restrict)
 
   @@unique([certificationId, budgetItemId])
   @@index([budgetItemId])
@@ -584,26 +589,26 @@ model Task {
 
 /// Parte Diario de Obra — cabecera del día en campo.
 model DailyReport {
-  id          String            @id @default(cuid())
-  projectId   String
-  authorId    String?
-  reportDate  DateTime          @db.Date
-  weather     WeatherCondition?
-  temperature Decimal?          @db.Decimal(5, 2) /// °C
-  notes       String? /// Notas generales del día
-  weatherNotes    String? /// Notas de la captura de clima
-  workforceNotes  String? /// Notas de la captura de personal
-  equipmentNotes  String? /// Notas de la captura de máquinas
-  advanceNotes    String? /// Notas de la captura de avances
-  incidentNotes   String? /// Notas de la captura de incidencias
+  id             String            @id @default(cuid())
+  projectId      String
+  authorId       String?
+  reportDate     DateTime          @db.Date
+  weather        WeatherCondition?
+  temperature    Decimal?          @db.Decimal(5, 2) /// °C
+  notes          String? /// Notas generales del día
+  weatherNotes   String? /// Notas de la captura de clima
+  workforceNotes String? /// Notas de la captura de personal
+  equipmentNotes String? /// Notas de la captura de máquinas
+  advanceNotes   String? /// Notas de la captura de avances
+  incidentNotes  String? /// Notas de la captura de incidencias
   /// Flag para sincronización offline → online (PWA / cola diferida)
-  syncedAt    DateTime?
-  clientUuid  String?           @unique /// UUID generado en dispositivo offline
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  syncedAt       DateTime?
+  clientUuid     String?           @unique /// UUID generado en dispositivo offline
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
-  project   Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  author    User?                @relation("DailyReportAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  project   Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author    User?                  @relation("DailyReportAuthor", fields: [authorId], references: [id], onDelete: SetNull)
   workforce DailyReportWorkforce[]
   equipment DailyReportEquipment[]
   advances  DailyReportAdvance[]
@@ -666,7 +671,7 @@ model DailyReportAdvance {
 
 /// Incidencias del día (accidentes, detenciones, clima extremo, etc.).
 model DailyReportIncident {
-  id            String  @id @default(cuid())
+  id            String            @id @default(cuid())
   dailyReportId String
   title         String
   description   String?
@@ -681,23 +686,23 @@ model DailyReportIncident {
 
 /// Punch List / Lista de defectos u observaciones de calidad.
 model PunchListItem {
-  id           String            @id @default(cuid())
-  projectId    String
-  createdById  String?
-  assigneeId   String?
-  title        String
-  description  String?
-  location     String? /// Ubicación en obra (piso, zona, eje)
-  status       PunchListStatus   @default(PENDING)
-  priority     PunchListPriority @default(MEDIUM)
-  photoUrls    String[] /// URLs de fotos (storage externo)
-  dueDate      DateTime?
-  resolvedAt   DateTime?
+  id          String            @id @default(cuid())
+  projectId   String
+  createdById String?
+  assigneeId  String?
+  title       String
+  description String?
+  location    String? /// Ubicación en obra (piso, zona, eje)
+  status      PunchListStatus   @default(PENDING)
+  priority    PunchListPriority @default(MEDIUM)
+  photoUrls   String[] /// URLs de fotos (storage externo)
+  dueDate     DateTime?
+  resolvedAt  DateTime?
   /// Soporte offline
-  syncedAt     DateTime?
-  clientUuid   String?           @unique
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  syncedAt    DateTime?
+  clientUuid  String?           @unique
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdBy User?   @relation("PunchListCreator", fields: [createdById], references: [id], onDelete: SetNull)
@@ -710,16 +715,16 @@ model PunchListItem {
 
 /// Documento / Plano con control de versiones.
 model Document {
-  id           String       @id @default(cuid())
-  projectId    String
-  uploadedById String?
-  title        String
-  description  String?
-  type         DocumentType @default(OTHER)
-  category     String? /// Carpeta lógica (ej. "Estructural", "MEP")
-  currentVersion Int        @default(1)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  id             String       @id @default(cuid())
+  projectId      String
+  uploadedById   String?
+  title          String
+  description    String?
+  type           DocumentType @default(OTHER)
+  category       String? /// Carpeta lógica (ej. "Estructural", "MEP")
+  currentVersion Int          @default(1)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   project    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   uploadedBy User?             @relation("DocumentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
@@ -792,8 +797,8 @@ model PurchaseRequest {
   createdAt   DateTime              @default(now())
   updatedAt   DateTime              @updatedAt
 
-  project   Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdBy User?                @relation("PurchaseRequestCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  project   Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User?                 @relation("PurchaseRequestCreator", fields: [createdById], references: [id], onDelete: SetNull)
   items     PurchaseRequestItem[]
   quotes    SupplierQuote[]
   orders    PurchaseOrder[]
@@ -804,15 +809,15 @@ model PurchaseRequest {
 }
 
 model PurchaseRequestItem {
-  id                String  @id @default(cuid())
+  id                String   @id @default(cuid())
   purchaseRequestId String
   description       String
-  quantity          Decimal @db.Decimal(14, 4)
+  quantity          Decimal  @db.Decimal(14, 4)
   unit              String
   estimatedUnitCost Decimal? @db.Decimal(14, 2)
   notes             String?
 
-  purchaseRequest PurchaseRequest @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
+  purchaseRequest PurchaseRequest     @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
   quoteItems      SupplierQuoteItem[]
   orderItems      PurchaseOrderItem[]
 
@@ -822,15 +827,15 @@ model PurchaseRequestItem {
 
 /// Cotización de un proveedor ante una solicitud (comparativa).
 model SupplierQuote {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   purchaseRequestId String
   supplierId        String
   validUntil        DateTime?
-  totalAmount       Decimal  @default(0) @db.Decimal(14, 2)
+  totalAmount       Decimal   @default(0) @db.Decimal(14, 2)
   notes             String?
-  isSelected        Boolean  @default(false) /// Cotización ganadora
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  isSelected        Boolean   @default(false) /// Cotización ganadora
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   purchaseRequest PurchaseRequest     @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
   supplier        Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
@@ -876,9 +881,9 @@ model PurchaseOrder {
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
 
-  project         Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  supplier        Supplier             @relation(fields: [supplierId], references: [id], onDelete: Restrict)
-  purchaseRequest PurchaseRequest?     @relation(fields: [purchaseRequestId], references: [id], onDelete: SetNull)
+  project         Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  supplier        Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchaseRequest PurchaseRequest?    @relation(fields: [purchaseRequestId], references: [id], onDelete: SetNull)
   items           PurchaseOrderItem[]
 
   @@unique([projectId, number])
@@ -1002,17 +1007,17 @@ enum InventoryMovementType {
 }
 
 model InventoryMovement {
-  id                   String                @id @default(cuid())
-  inventoryItemId      String
-  type                 InventoryMovementType
-  quantity             Decimal               @db.Decimal(14, 4)
-  reference            String? /// N° factura, parte diario, etc.
-  notes                String?
-  purchaseInvoiceId    String?
+  id                    String                @id @default(cuid())
+  inventoryItemId       String
+  type                  InventoryMovementType
+  quantity              Decimal               @db.Decimal(14, 4)
+  reference             String? /// N° factura, parte diario, etc.
+  notes                 String?
+  purchaseInvoiceId     String?
   purchaseInvoiceItemId String?
-  dailyReportId        String?
-  occurredAt           DateTime              @default(now())
-  createdAt            DateTime              @default(now())
+  dailyReportId         String?
+  occurredAt            DateTime              @default(now())
+  createdAt             DateTime              @default(now())
 
   inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
 
@@ -1035,7 +1040,7 @@ model Contractor {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   projects     ProjectContractor[]
   documents    ContractorDocument[]
 
@@ -1045,18 +1050,18 @@ model Contractor {
 
 /// Asignación de subcontratista a una obra + datos contractuales.
 model ProjectContractor {
-  id              String   @id @default(cuid())
-  projectId       String
-  contractorId    String
-  contractNumber  String?
-  contractAmount  Decimal? @db.Decimal(14, 2)
-  retentionPct    Decimal  @default(5) @db.Decimal(5, 2) /// % retención de garantía
-  retentionHeld   Decimal  @default(0) @db.Decimal(14, 2) /// Monto retenido acumulado
-  startDate       DateTime?
-  endDate         DateTime?
-  notes           String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String    @id @default(cuid())
+  projectId      String
+  contractorId   String
+  contractNumber String?
+  contractAmount Decimal?  @db.Decimal(14, 2)
+  retentionPct   Decimal   @default(5) @db.Decimal(5, 2) /// % retención de garantía
+  retentionHeld  Decimal   @default(0) @db.Decimal(14, 2) /// Monto retenido acumulado
+  startDate      DateTime?
+  endDate        DateTime?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   contractor Contractor @relation(fields: [contractorId], references: [id], onDelete: Cascade)
@@ -1068,7 +1073,7 @@ model ProjectContractor {
 
 /// Documentación del subcontratista (seguros, patentes, contratos, etc.).
 model ContractorDocument {
-  id           String             @id @default(cuid())
+  id           String              @id @default(cuid())
   contractorId String
   name         String
   docType      String /// ej. "seguro_rc", "patente", "f30", "contrato"
@@ -1077,8 +1082,8 @@ model ContractorDocument {
   issuedAt     DateTime?
   expiresAt    DateTime?
   notes        String?
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
 
   contractor Contractor @relation(fields: [contractorId], references: [id], onDelete: Cascade)
 
@@ -1107,29 +1112,29 @@ enum PaymentMethod {
 
 /// Recibo de cobro (ingreso). Puede imputarse a obra/partida → actualIncome.
 model Receipt {
-  id             String           @id @default(cuid())
+  id             String            @id @default(cuid())
   organizationId String
   createdById    String?
   clientId       String?
   number         String /// ej. REC-2026-0001
-  issueDate      DateTime         @db.Date
+  issueDate      DateTime          @db.Date
   status         TreasuryDocStatus @default(DRAFT)
-  paymentMethod  PaymentMethod    @default(TRANSFER)
+  paymentMethod  PaymentMethod     @default(TRANSFER)
   partyName      String? /// Si no hay cliente en catálogo
   concept        String?
-  currency       String           @default("ARS")
-  totalAmount    Decimal          @default(0) @db.Decimal(14, 2)
+  currency       String            @default("ARS")
+  totalAmount    Decimal           @default(0) @db.Decimal(14, 2)
   /// Datos de cheque (si paymentMethod = CHECK)
   checkNumber    String?
   checkBank      String?
-  checkIssueDate DateTime?        @db.Date
-  checkDueDate   DateTime?        @db.Date
+  checkIssueDate DateTime?         @db.Date
+  checkDueDate   DateTime?         @db.Date
   checkAccount   String?
   notes          String?
   postedAt       DateTime?
   cancelledAt    DateTime?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
   organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdBy    User?         @relation("ReceiptCreator", fields: [createdById], references: [id], onDelete: SetNull)
@@ -1187,9 +1192,9 @@ model PaymentOrder {
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
 
-  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy    User?             @relation("PaymentOrderCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  supplier     Supplier?         @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?              @relation("PaymentOrderCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  supplier     Supplier?          @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   lines        PaymentOrderLine[]
 
   @@unique([organizationId, number])
@@ -1199,13 +1204,13 @@ model PaymentOrder {
 }
 
 model PaymentOrderLine {
-  id           String  @id @default(cuid())
+  id             String  @id @default(cuid())
   paymentOrderId String
-  projectId    String?
-  budgetItemId String?
-  description  String
-  amount       Decimal @db.Decimal(14, 2)
-  sortOrder    Int     @default(0)
+  projectId      String?
+  budgetItemId   String?
+  description    String
+  amount         Decimal @db.Decimal(14, 2)
+  sortOrder      Int     @default(0)
 
   paymentOrder PaymentOrder @relation(fields: [paymentOrderId], references: [id], onDelete: Cascade)
   project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -1266,25 +1271,25 @@ model CashRegister {
 
 /// Sesión de caja diaria (un día / turno).
 model CashSession {
-  id                   String            @id @default(cuid())
-  organizationId       String
-  registerId           String /// Caja diaria
-  number               String /// ej. CAJA-2026-0001
-  businessDate         DateTime          @db.Date
-  status               CashSessionStatus @default(OPEN)
-  currency             String            @default("ARS")
-  openingBalance       Decimal           @default(0) @db.Decimal(14, 2)
-  expectedBalance      Decimal?          @db.Decimal(14, 2) /// Calculado al cerrar
-  countedBalance       Decimal?          @db.Decimal(14, 2) /// Arqueo físico
-  difference           Decimal?          @db.Decimal(14, 2) /// counted - expected
-  transferredAmount    Decimal?          @db.Decimal(14, 2) /// Enviado a tesorería
-  notes                String?
-  openedAt             DateTime          @default(now())
-  closedAt             DateTime?
-  openedById           String?
-  closedById           String?
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
+  id                String            @id @default(cuid())
+  organizationId    String
+  registerId        String /// Caja diaria
+  number            String /// ej. CAJA-2026-0001
+  businessDate      DateTime          @db.Date
+  status            CashSessionStatus @default(OPEN)
+  currency          String            @default("ARS")
+  openingBalance    Decimal           @default(0) @db.Decimal(14, 2)
+  expectedBalance   Decimal?          @db.Decimal(14, 2) /// Calculado al cerrar
+  countedBalance    Decimal?          @db.Decimal(14, 2) /// Arqueo físico
+  difference        Decimal?          @db.Decimal(14, 2) /// counted - expected
+  transferredAmount Decimal?          @db.Decimal(14, 2) /// Enviado a tesorería
+  notes             String?
+  openedAt          DateTime          @default(now())
+  closedAt          DateTime?
+  openedById        String?
+  closedById        String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   register     CashRegister   @relation(fields: [registerId], references: [id], onDelete: Restrict)
@@ -1326,4 +1331,77 @@ model CashMovement {
   @@index([sessionId])
   @@index([sourceSessionId])
   @@map("cash_movements")
+}
+
+// =============================================================================
+// MÓDULO TURNERO — Cola de atención (tótem, operador, pantalla)
+// =============================================================================
+
+/// Cliente que solicita turno, identificado por DNI (scoped por organización).
+model TurneroCliente {
+  id             String   @id @default(cuid())
+  organizationId String
+  dni            String
+  nombre         String
+  createdAt      DateTime @default(now())
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  turnos       TurneroTurno[]
+
+  @@unique([organizationId, dni])
+  @@map("turnero_clientes")
+}
+
+/// Puesto de atención (ventanilla / box) agrupado por categoría.
+model TurneroPuesto {
+  id             String   @id @default(cuid())
+  organizationId String
+  nombre         String
+  categoria      String
+  activo         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, nombre])
+  @@index([organizationId, categoria, activo])
+  @@map("turnero_puestos")
+}
+
+/// Turno emitido en el tótem y gestionado por el operador.
+model TurneroTurno {
+  id             String    @id @default(cuid())
+  organizationId String
+  codigo         String
+  categoria      String
+  estado         String    @default("ESPERA")
+  puesto         String?
+  creadoEn       DateTime  @default(now())
+  llamadoEn      DateTime?
+  clienteId      String?
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cliente      TurneroCliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, creadoEn])
+  @@index([organizationId, categoria, estado, creadoEn])
+  @@index([organizationId, llamadoEn])
+  @@index([clienteId])
+  @@map("turnero_turnos")
+}
+
+/// Numeración diaria independiente por categoría (evita duplicados por concurrencia).
+model TurneroContadorDiario {
+  id             String   @id @default(cuid())
+  organizationId String
+  fecha          String
+  categoria      String
+  valor          Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, fecha, categoria])
+  @@map("turnero_contadores_diarios")
 }

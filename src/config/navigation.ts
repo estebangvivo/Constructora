@@ -24,6 +24,7 @@ import {
   Handshake,
   Banknote,
   BookOpen,
+  Ticket,
   type LucideIcon,
 } from "lucide-react";
 
@@ -77,6 +78,13 @@ export const SIDEBAR_NAV: NavItem[] = [
     description: "Datos de la constructora, logo y contacto",
     roles: ["ADMIN", "DIRECTOR"],
     module: "settings",
+  },
+  {
+    title: "Turnero",
+    href: "/turnero",
+    icon: Ticket,
+    description: "Tótem, operador y pantalla de la cola de atención",
+    module: "turnero",
   },
   {
     title: "Manual",

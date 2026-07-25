@@ -12,9 +12,13 @@ import {
 } from "lucide-react";
 import { projectHref } from "@/config/navigation";
 import { getProjectById } from "@/features/projects/queries/get-projects";
-import { getProjectFinancialSummary } from "@/features/projects/queries/get-project-financials";
+import {
+  amountInCurrency,
+  getProjectFinancialSummary,
+} from "@/features/projects/queries/get-project-financials";
 import { getProjectDeleteBlockers } from "@/features/projects/actions/delete-project";
 import { DeleteProjectButton } from "@/features/projects/components/delete-project-button";
+import { ProjectOverviewCharts } from "@/features/projects/components/project-overview-charts";
 import { listProjectSuppliers } from "@/features/suppliers/queries/list-suppliers";
 import { formatBudgetMoney } from "@/features/budget/lib/labels";
 import { formatMoneyByCurrency } from "@/config/currencies";
@@ -102,8 +106,11 @@ export default async function ProjectOverviewPage({
   const currency = financials?.currency ?? project.currency ?? "ARS";
   const clientPaidByCurrency = financials?.clientPaidByCurrency ?? {};
   const clientPendingByCurrency = financials?.clientPendingByCurrency ?? {};
-  const budgetEstimated = financials?.budgetEstimated;
+  const paidOutByCurrency = financials?.paidOutByCurrency ?? {};
+  const budgetEstimated = financials?.budgetEstimated ?? 0;
   const hasPending = Object.values(clientPendingByCurrency).some((v) => v > 0);
+  const cobrado = amountInCurrency(clientPaidByCurrency, currency);
+  const pagado = amountInCurrency(paidOutByCurrency, currency);
 
   return (
     <div className="space-y-8">
@@ -152,7 +159,7 @@ export default async function ProjectOverviewPage({
               Presupuesto
             </dt>
             <dd className="mt-1 font-display text-2xl tracking-tight">
-              {budgetEstimated != null
+              {budgetEstimated > 0
                 ? formatBudgetMoney(budgetEstimated, currency)
                 : "—"}
             </dd>
@@ -168,17 +175,15 @@ export default async function ProjectOverviewPage({
             <p className="text-xs text-muted-foreground">Vinculados</p>
           </div>
         </dl>
-
-        {budgetEstimated != null && budgetEstimated > 0 && (
-          <p className="mt-4 text-sm text-muted-foreground">
-            Presupuesto estimado:{" "}
-            <span className="font-medium text-foreground">
-              {formatBudgetMoney(budgetEstimated, currency)}
-            </span>
-            . El cobro se informa por moneda (ARS / USD) sin mezclar.
-          </p>
-        )}
       </section>
+
+      <ProjectOverviewCharts
+        currency={currency}
+        scheduleProgressPct={financials?.scheduleProgressPct ?? 0}
+        budgetEstimated={budgetEstimated}
+        cobrado={cobrado}
+        pagado={pagado}
+      />
 
       <section>
         <h2 className="mb-4 font-display text-xl tracking-tight">

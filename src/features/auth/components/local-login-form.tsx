@@ -1,44 +1,39 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { loginWithPassword } from "@/features/auth/actions/auth-actions";
+import { useSearchParams } from "next/navigation";
 
 const fieldClass =
   "w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none ring-accent focus:ring-2";
 
+/**
+ * Login por POST clásico a /api/auth/login.
+ * Evita Server Actions (Silk / Fire OS suelen fallar con ellas).
+ */
 export function LocalLoginForm() {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-
-  function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    startTransition(async () => {
-      const result = await loginWithPassword({ email, password });
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      router.replace("/");
-      router.refresh();
-    });
-  }
+  const searchParams = useSearchParams();
+  const error = searchParams.get("error");
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4 text-left">
+    <form
+      method="POST"
+      action="/api/auth/login"
+      className="space-y-4 text-left"
+      noValidate
+    >
       <label className="block space-y-1.5">
         <span className="text-sm font-medium">Email</span>
+        {/* type=text: Silk rechaza emails .local con type=email */}
         <input
-          type="email"
+          type="text"
+          name="email"
+          inputMode="email"
           autoComplete="username"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           className={fieldClass}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
           required
+          defaultValue="admin@demo-constructora.local"
           placeholder="admin@demo-constructora.local"
         />
       </label>
@@ -46,10 +41,9 @@ export function LocalLoginForm() {
         <span className="text-sm font-medium">Contraseña</span>
         <input
           type="password"
+          name="password"
           autoComplete="current-password"
           className={fieldClass}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
           required
         />
       </label>
@@ -62,10 +56,9 @@ export function LocalLoginForm() {
 
       <button
         type="submit"
-        disabled={pending}
-        className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground disabled:opacity-60"
+        className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground"
       >
-        {pending ? "Ingresando…" : "Ingresar"}
+        Ingresar
       </button>
     </form>
   );

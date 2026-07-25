@@ -15,10 +15,14 @@ export {
 
 export async function setLocalSessionCookie(token: string) {
   const jar = await cookies();
+  // En HTTP (LAN / tablet) Secure=true impide guardar la cookie.
+  const secure =
+    process.env.NODE_ENV === "production" &&
+    process.env.FORCE_INSECURE_COOKIES !== "true";
   jar.set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure,
     path: "/",
     maxAge: 60 * 60 * 24 * 14,
   });
