@@ -14,6 +14,7 @@ import {
   BUDGET_UNITS,
   formatBudgetMoney,
 } from "@/features/budget/lib/labels";
+import { formatMoneyByCurrency } from "@/config/currencies";
 import type { BudgetStatus } from "@prisma/client";
 
 type BudgetItemRow = {
@@ -24,20 +25,30 @@ type BudgetItemRow = {
   unit: string;
   unitCost: number;
   totalCost: number;
+  currency: string;
+  actualCostByCurrency: Record<string, number>;
   actualCost: number;
+  actualIncomeByCurrency: Record<string, number>;
   actualIncome: number;
+  fxIncomplete?: boolean;
 };
 
 type BudgetItemsEditorProps = {
   budgetId: string;
   status: BudgetStatus;
-  currency: string;
+  /** Moneda por defecto al agregar partidas nuevas. */
+  defaultCurrency: string;
   items: BudgetItemRow[];
   canManage: boolean;
 };
 
 const fieldClass =
   "w-full rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm outline-none ring-accent focus:ring-2";
+
+const LINE_CURRENCIES = [
+  { code: "ARS", label: "Pesos" },
+  { code: "USD", label: "Dólares" },
+] as const;
 
 function ItemFormFields({
   value,
@@ -46,8 +57,10 @@ function ItemFormFields({
   value: BudgetItemInput;
   onChange: (patch: Partial<BudgetItemInput>) => void;
 }) {
+  const currency = value.currency === "USD" ? "USD" : "ARS";
+
   return (
-    <div className="grid gap-2 sm:grid-cols-6">
+    <div className="grid gap-2 sm:grid-cols-7">
       <label className="block text-sm sm:col-span-1">
         <span className="mb-1 block text-xs text-muted-foreground">Código</span>
         <input
@@ -95,7 +108,24 @@ function ItemFormFields({
         </select>
       </label>
       <label className="block text-sm">
-        <span className="mb-1 block text-xs text-muted-foreground">P. unit.</span>
+        <span className="mb-1 block text-xs text-muted-foreground">Moneda</span>
+        <select
+          value={currency}
+          onChange={(e) => onChange({ currency: e.target.value })}
+          className={fieldClass}
+          aria-label="Moneda de la partida"
+        >
+          {LINE_CURRENCIES.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.label} ({c.code})
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block text-sm">
+        <span className="mb-1 block text-xs text-muted-foreground">
+          P. unit. ({currency})
+        </span>
         <input
           type="number"
           min={0}
@@ -113,7 +143,7 @@ function ItemFormFields({
 export function BudgetItemsEditor({
   budgetId,
   status,
-  currency,
+  defaultCurrency,
   items,
   canManage,
 }: BudgetItemsEditorProps) {
@@ -128,6 +158,7 @@ export function BudgetItemsEditor({
     quantity: 1,
     unit: "u",
     unitCost: 0,
+    currency: defaultCurrency === "USD" ? "USD" : "ARS",
   });
 
   const editable = canManage && status !== "LOCKED";
@@ -157,6 +188,7 @@ export function BudgetItemsEditor({
       quantity: item.quantity,
       unit: item.unit,
       unitCost: item.unitCost,
+      currency: item.currency === "USD" ? "USD" : "ARS",
     });
   }
 
@@ -201,6 +233,7 @@ export function BudgetItemsEditor({
                   quantity: 1,
                   unit: "u",
                   unitCost: 0,
+                  currency: defaultCurrency === "USD" ? "USD" : "ARS",
                 });
                 setAdding(true);
               }}
@@ -245,17 +278,24 @@ export function BudgetItemsEditor({
       )}
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] text-left text-sm">
+        <table className="w-full min-w-[1180px] text-left text-sm">
           <thead>
             <tr className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
               <th className="py-3 pr-3 font-medium">Código</th>
               <th className="py-3 pr-3 font-medium">Descripción</th>
               <th className="py-3 pr-3 text-right font-medium">Cant.</th>
               <th className="py-3 pr-3 font-medium">Ud.</th>
+              <th className="py-3 pr-3 font-medium">Moneda</th>
               <th className="py-3 pr-3 text-right font-medium">P. unit.</th>
               <th className="py-3 pr-3 text-right font-medium">Estimado</th>
               <th className="py-3 pr-3 text-right font-medium">Costo real</th>
+              <th className="py-3 pr-3 text-right font-medium">
+                Costo equiv.
+              </th>
               <th className="py-3 pr-3 text-right font-medium">Ingreso real</th>
+              <th className="py-3 pr-3 text-right font-medium">
+                Ingreso equiv.
+              </th>
               {editable && <th className="py-3 font-medium"> </th>}
             </tr>
           </thead>
@@ -263,7 +303,7 @@ export function BudgetItemsEditor({
             {items.length === 0 && (
               <tr>
                 <td
-                  colSpan={editable ? 9 : 8}
+                  colSpan={editable ? 12 : 11}
                   className="py-8 text-center text-muted-foreground"
                 >
                   Sin partidas. Agregá la primera.
@@ -273,7 +313,7 @@ export function BudgetItemsEditor({
             {items.map((item) =>
               editingId === item.id ? (
                 <tr key={item.id} className="border-b border-border/70">
-                  <td colSpan={editable ? 9 : 8} className="py-3">
+                  <td colSpan={editable ? 12 : 11} className="py-3">
                     <div className="space-y-3">
                       <ItemFormFields
                         value={draft}
@@ -322,17 +362,48 @@ export function BudgetItemsEditor({
                     {item.quantity}
                   </td>
                   <td className="py-3 pr-3 text-muted-foreground">{item.unit}</td>
-                  <td className="py-3 pr-3 text-right tabular-nums">
-                    {formatBudgetMoney(item.unitCost, currency)}
+                  <td className="py-3 pr-3">
+                    <span
+                      className={
+                        item.currency === "USD"
+                          ? "rounded bg-accent/15 px-1.5 py-0.5 text-xs font-medium text-accent"
+                          : "rounded bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground"
+                      }
+                    >
+                      {item.currency === "USD" ? "USD · Dólares" : "ARS · Pesos"}
+                    </span>
                   </td>
                   <td className="py-3 pr-3 text-right tabular-nums">
-                    {formatBudgetMoney(item.totalCost, currency)}
+                    {formatBudgetMoney(item.unitCost, item.currency)}
+                  </td>
+                  <td className="py-3 pr-3 text-right tabular-nums">
+                    {formatBudgetMoney(item.totalCost, item.currency)}
                   </td>
                   <td className="py-3 pr-3 text-right tabular-nums font-medium">
-                    {formatBudgetMoney(item.actualCost, currency)}
+                    {formatMoneyByCurrency(item.actualCostByCurrency)}
+                  </td>
+                  <td className="py-3 pr-3 text-right tabular-nums text-muted-foreground">
+                    <div>
+                      {formatBudgetMoney(item.actualCost, item.currency)}
+                    </div>
+                    {item.fxIncomplete && (
+                      <div className="text-[10px] text-danger">
+                        Falta cotización
+                      </div>
+                    )}
                   </td>
                   <td className="py-3 pr-3 text-right tabular-nums font-medium text-success">
-                    {formatBudgetMoney(item.actualIncome, currency)}
+                    {formatMoneyByCurrency(item.actualIncomeByCurrency)}
+                  </td>
+                  <td className="py-3 pr-3 text-right tabular-nums text-muted-foreground">
+                    <div>
+                      {formatBudgetMoney(item.actualIncome, item.currency)}
+                    </div>
+                    {item.fxIncomplete && (
+                      <div className="text-[10px] text-danger">
+                        Falta cotización
+                      </div>
+                    )}
                   </td>
                   {editable && (
                     <td className="py-3">

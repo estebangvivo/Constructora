@@ -7,20 +7,32 @@ import {
   getEnabledCurrencies,
   getOrganizationCurrency,
 } from "@/features/settings/queries/get-organization";
+import { listActiveBankAccountsForPayment } from "@/features/treasury/queries/bank-queries";
 import { TreasuryDocumentForm } from "@/features/treasury/components/treasury-document-form";
 
 export const dynamic = "force-dynamic";
 
-export default async function NewReceiptPage() {
+type PageProps = {
+  searchParams: Promise<{ projectId?: string }>;
+};
+
+export default async function NewReceiptPage({ searchParams }: PageProps) {
   const session = await getSession();
   if (!session) redirect("/sign-in");
 
-  const [projects, clients, currency, enabledCurrencies] = await Promise.all([
-    listProjectsForTreasury(),
-    listActiveClients(),
-    getOrganizationCurrency(),
-    getEnabledCurrencies(),
-  ]);
+  const { projectId } = await searchParams;
+
+  const [projects, clients, currency, enabledCurrencies, bankAccounts] =
+    await Promise.all([
+      listProjectsForTreasury(),
+      listActiveClients(),
+      getOrganizationCurrency(),
+      getEnabledCurrencies(),
+      listActiveBankAccountsForPayment(),
+    ]);
+
+  const defaultProjectId =
+    projectId && projects.some((p) => p.id === projectId) ? projectId : "";
 
   return (
     <div className="px-4 py-6 lg:px-6">
@@ -36,6 +48,8 @@ export default async function NewReceiptPage() {
         parties={clients.map((c) => ({ id: c.id, name: c.name }))}
         defaultCurrency={currency}
         enabledCurrencies={enabledCurrencies}
+        defaultProjectId={defaultProjectId}
+        bankAccounts={bankAccounts}
       />
     </div>
   );

@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { getReceiptById } from "@/features/treasury/queries/list-treasury";
+import {
+  getReceiptById,
+  hasCashMovementForDoc,
+} from "@/features/treasury/queries/list-treasury";
 import { TreasuryDocActions } from "@/features/treasury/components/treasury-doc-actions";
 import {
   formatMoney,
@@ -9,7 +12,8 @@ import {
   TREASURY_STATUS_LABEL,
   TREASURY_STATUS_STYLE,
 } from "@/features/treasury/lib/labels";
-import { formatDateAR } from "@/lib/format-date";
+import { formatDateAR, formatDateTimeAR } from "@/lib/format-date";
+import { prisma } from "@/lib/prisma";
 
 type PageProps = { params: Promise<{ id: string }> };
 
@@ -20,6 +24,25 @@ export default async function ReceiptDetailPage({ params }: PageProps) {
   const { id } = await params;
   const doc = await getReceiptById(id);
   if (!doc) notFound();
+
+  const [hasCashMovement, cashMovements] = await Promise.all([
+    hasCashMovementForDoc({ receiptId: id }),
+    prisma.cashMovement.findMany({
+      where: {
+        organizationId: session.organizationId,
+        receiptId: id,
+      },
+      orderBy: { occurredAt: "asc" },
+      select: {
+        id: true,
+        type: true,
+        amount: true,
+        occurredAt: true,
+        description: true,
+        session: { select: { id: true, number: true } },
+      },
+    }),
+  ]);
 
   return (
     <div className="px-4 py-6 lg:px-6">
@@ -37,22 +60,157 @@ export default async function ReceiptDetailPage({ params }: PageProps) {
             >
               {TREASURY_STATUS_LABEL[doc.status]}
             </span>{" "}
-            · {PAYMENT_METHOD_LABEL[doc.paymentMethod]} ·{" "}
-            {formatDateAR(doc.issueDate)}
+            ·{" "}
+            {(doc.payments.length > 0
+              ? [...new Set(doc.payments.map((p) => PAYMENT_METHOD_LABEL[p.method]))]
+              : [PAYMENT_METHOD_LABEL[doc.paymentMethod]]
+            ).join(" + ")}{" "}
+            · {formatDateAR(doc.issueDate)}
           </p>
           {doc.paymentMethod === "CASH" &&
             (doc.status === "DRAFT" || doc.status === "ISSUED") && (
               <p className="mt-2 text-sm text-muted-foreground">
                 Al imputar, el efectivo se registrará en la{" "}
-                <Link href="/treasury/cash" className="text-accent underline">
+                <Link href="/treasury/cash" className="underline">
                   caja diaria abierta
                 </Link>
                 .
               </p>
             )}
         </div>
-        <TreasuryDocActions kind="receipt" id={doc.id} status={doc.status} />
+        <TreasuryDocActions
+          kind="receipt"
+          id={doc.id}
+          status={doc.status}
+          paymentMethod={doc.paymentMethod}
+          hasCashMovement={hasCashMovement}
+        />
       </div>
+
+      <section className="mb-6 space-y-3">
+        <h2 className="font-medium">Pago y movimiento</h2>
+        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="sm:col-span-2 lg:col-span-3">
+            <dt className="text-xs uppercase text-muted-foreground">
+              Medios de pago
+            </dt>
+            <dd className="mt-1 space-y-1">
+              {(doc.payments.length > 0
+                ? doc.payments
+                : [
+                    {
+                      id: "legacy",
+                      method: doc.paymentMethod,
+                      amount: doc.totalAmount,
+                      checkNumber: doc.checkNumber,
+                      checkBank: doc.checkBank,
+                      checkIssueDate: doc.checkIssueDate,
+                      checkDueDate: doc.checkDueDate,
+                      checkAccount: doc.checkAccount,
+                    },
+                  ]
+              ).map((p) => (
+                <div key={p.id} className="text-sm">
+                  <span className="font-medium">
+                    {PAYMENT_METHOD_LABEL[p.method]}
+                  </span>
+                  {" · "}
+                  <span className="tabular-nums">
+                    {formatMoney(Number(p.amount), doc.currency)}
+                  </span>
+                  {p.method === "CHECK" && (p.checkNumber || p.checkBank) ? (
+                    <span className="text-muted-foreground">
+                      {" · "}
+                      {[p.checkNumber, p.checkBank].filter(Boolean).join(" · ")}
+                    </span>
+                  ) : null}
+                  {p.method === "TRANSFER" &&
+                  "bankAccount" in p &&
+                  p.bankAccount ? (
+                    <span className="text-muted-foreground">
+                      {" · "}
+                      <Link
+                        href={`/treasury/banks/${p.bankAccount.id}`}
+                        className="text-accent hover:underline"
+                      >
+                        {p.bankAccount.name}
+                      </Link>
+                    </span>
+                  ) : null}
+                </div>
+              ))}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase text-muted-foreground">Moneda</dt>
+            <dd className="font-medium">{doc.currency}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase text-muted-foreground">
+              Fecha del documento
+            </dt>
+            <dd className="font-medium">{formatDateAR(doc.issueDate)}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase text-muted-foreground">Estado</dt>
+            <dd className="font-medium">{TREASURY_STATUS_LABEL[doc.status]}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase text-muted-foreground">
+              Imputado el
+            </dt>
+            <dd className="font-medium">
+              {doc.postedAt ? formatDateTimeAR(doc.postedAt) : "—"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase text-muted-foreground">
+              Impacto en caja
+            </dt>
+            <dd className="font-medium">
+              {hasCashMovement
+                ? "Registrado en caja diaria (solo porción efectivo)"
+                : doc.payments.some((p) => p.method === "CASH") ||
+                    doc.paymentMethod === "CASH"
+                  ? "Pendiente de caja"
+                  : "No aplica (sin efectivo)"}
+            </dd>
+          </div>
+        </dl>
+
+        {cashMovements.length > 0 && (
+          <ul className="divide-y divide-border rounded-md border border-border">
+            {cashMovements.map((m) => (
+              <li
+                key={m.id}
+                className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+              >
+                <span>
+                  {m.description}
+                  {m.session ? (
+                    <>
+                      {" · "}
+                      <Link
+                        href={`/treasury/cash/sessions/${m.session.id}`}
+                        className="underline"
+                      >
+                        {m.session.number}
+                      </Link>
+                    </>
+                  ) : null}
+                  <span className="text-muted-foreground">
+                    {" · "}
+                    {formatDateTimeAR(m.occurredAt)}
+                  </span>
+                </span>
+                <span className="font-medium tabular-nums">
+                  {formatMoney(Number(m.amount), doc.currency)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <dl className="mb-6 grid gap-3 sm:grid-cols-2">
         <div>
@@ -71,47 +229,11 @@ export default async function ReceiptDetailPage({ params }: PageProps) {
           <dt className="text-xs uppercase text-muted-foreground">Concepto</dt>
           <dd>{doc.concept ?? "—"}</dd>
         </div>
-        {doc.paymentMethod === "CHECK" && (
-          <>
-            <div>
-              <dt className="text-xs uppercase text-muted-foreground">
-                N° cheque
-              </dt>
-              <dd className="font-medium">{doc.checkNumber ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-xs uppercase text-muted-foreground">Banco</dt>
-              <dd className="font-medium">{doc.checkBank ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-xs uppercase text-muted-foreground">
-                Emisión cheque
-              </dt>
-              <dd>
-                {doc.checkIssueDate
-                  ? formatDateAR(doc.checkIssueDate)
-                  : "—"}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs uppercase text-muted-foreground">
-                Cobro / vencimiento
-              </dt>
-              <dd>
-                {doc.checkDueDate
-                  ? formatDateAR(doc.checkDueDate)
-                  : "—"}
-              </dd>
-            </div>
-            {doc.checkAccount && (
-              <div className="sm:col-span-2">
-                <dt className="text-xs uppercase text-muted-foreground">
-                  Cuenta / sucursal
-                </dt>
-                <dd>{doc.checkAccount}</dd>
-              </div>
-            )}
-          </>
+        {doc.notes && (
+          <div className="sm:col-span-2">
+            <dt className="text-xs uppercase text-muted-foreground">Notas</dt>
+            <dd>{doc.notes}</dd>
+          </div>
         )}
       </dl>
 

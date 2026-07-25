@@ -19,6 +19,7 @@ export async function listProjectsForTreasury(): Promise<
     where: {
       organizationId: session.organizationId,
       deletedAt: null,
+      status: { in: ["DRAFT", "ACTIVE", "ON_HOLD"] },
     },
     orderBy: [{ code: "asc" }, { name: "asc" }],
     select: {

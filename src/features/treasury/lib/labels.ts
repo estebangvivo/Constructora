@@ -1,4 +1,8 @@
-import type { PaymentMethod, TreasuryDocStatus } from "@prisma/client";
+import type {
+  CheckStatus,
+  PaymentMethod,
+  TreasuryDocStatus,
+} from "@prisma/client";
 import { normalizeCurrency } from "@/config/currencies";
 
 export const TREASURY_STATUS_LABEL: Record<TreasuryDocStatus, string> = {
@@ -8,11 +12,33 @@ export const TREASURY_STATUS_LABEL: Record<TreasuryDocStatus, string> = {
   CANCELLED: "Anulado",
 };
 
+export const CHECK_STATUS_LABEL: Record<CheckStatus, string> = {
+  IN_PORTFOLIO: "En cartera",
+  DELIVERED: "Entregado",
+  CANCELLED: "Anulado",
+};
+
+export const CHECK_STATUS_STYLE: Record<CheckStatus, string> = {
+  IN_PORTFOLIO: "border border-border bg-background text-foreground",
+  DELIVERED: "border border-border bg-muted text-muted-foreground",
+  CANCELLED: "border border-border bg-muted text-muted-foreground",
+};
+
 export const TREASURY_STATUS_STYLE: Record<TreasuryDocStatus, string> = {
-  DRAFT: "bg-muted text-muted-foreground",
-  ISSUED: "bg-accent/15 text-accent",
-  POSTED: "bg-success/15 text-success",
-  CANCELLED: "bg-danger/15 text-danger",
+  DRAFT: "border border-border bg-muted text-foreground",
+  ISSUED: "border border-border bg-background text-foreground",
+  POSTED: "border border-border bg-background text-foreground",
+  CANCELLED: "border border-border bg-muted text-foreground",
+};
+
+export const BANK_MOVEMENT_LABEL: Record<
+  import("@prisma/client").BankMovementType,
+  string
+> = {
+  OPENING: "Saldo inicial",
+  INCOME: "Ingreso",
+  EXPENSE: "Egreso",
+  ADJUSTMENT: "Ajuste",
 };
 
 export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {

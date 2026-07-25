@@ -9,13 +9,13 @@ import {
   Wallet,
   CalendarRange,
   Handshake,
+  Receipt,
+  Banknote,
+  type LucideIcon,
 } from "lucide-react";
 import { projectHref } from "@/config/navigation";
 import { getProjectById } from "@/features/projects/queries/get-projects";
-import {
-  amountInCurrency,
-  getProjectFinancialSummary,
-} from "@/features/projects/queries/get-project-financials";
+import { getProjectFinancialSummary } from "@/features/projects/queries/get-project-financials";
 import { getProjectDeleteBlockers } from "@/features/projects/actions/delete-project";
 import { DeleteProjectButton } from "@/features/projects/components/delete-project-button";
 import { ProjectOverviewCharts } from "@/features/projects/components/project-overview-charts";
@@ -26,59 +26,78 @@ import { getSession } from "@/lib/auth";
 import type { ProjectRouteParams } from "@/types";
 import { notFound, redirect } from "next/navigation";
 
-const QUICK_LINKS = [
+type QuickLink = {
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  href: (projectId: string) => string;
+};
+
+const QUICK_LINKS: QuickLink[] = [
+  {
+    title: "Emitir recibo",
+    description: "Cobro del cliente imputado a esta obra",
+    href: (projectId) => `/treasury/receipts/new?projectId=${projectId}`,
+    icon: Receipt,
+  },
+  {
+    title: "Emitir orden de pago",
+    description: "Pago a proveedor imputado a esta obra",
+    href: (projectId) => `/treasury/payment-orders/new?projectId=${projectId}`,
+    icon: Banknote,
+  },
   {
     title: "Cliente y proveedores",
     description: "Asigná mandante y proveedores de la obra",
-    suffix: "/stakeholders",
+    href: (projectId) => projectHref(projectId, "/stakeholders"),
     icon: Handshake,
   },
   {
     title: "Certificaciones",
     description: "Avance por partida y retenciones (documento interno)",
-    suffix: "/certifications",
+    href: (projectId) => projectHref(projectId, "/certifications"),
     icon: BadgePercent,
   },
   {
     title: "Presupuesto",
     description: "Partidas, estimado vs real y control financiero",
-    suffix: "/budget",
+    href: (projectId) => projectHref(projectId, "/budget"),
     icon: Wallet,
   },
   {
     title: "Parte Diario",
     description: "Personal, clima, máquinas e incidencias del día",
-    suffix: "/daily-report",
+    href: (projectId) => projectHref(projectId, "/daily-report"),
     icon: ClipboardList,
   },
   {
     title: "Punch List",
     description: "Observaciones con foto, estado y responsable",
-    suffix: "/punch-list",
+    href: (projectId) => projectHref(projectId, "/punch-list"),
     icon: TriangleAlert,
   },
   {
     title: "Cronograma",
     description: "Tareas, hitos y vista Gantt",
-    suffix: "/schedule",
+    href: (projectId) => projectHref(projectId, "/schedule"),
     icon: CalendarRange,
   },
   {
     title: "Documentos",
     description: "Contratos, planos, especificaciones e informes",
-    suffix: "/documents",
+    href: (projectId) => projectHref(projectId, "/documents"),
     icon: FileStack,
   },
   {
     title: "Compras",
     description: "Facturas de proveedor con desglose automático",
-    suffix: "/purchases",
+    href: (projectId) => projectHref(projectId, "/purchases"),
     icon: ShoppingCart,
   },
   {
     title: "Inventario",
     description: "Stock por categoría y consumo del día",
-    suffix: "/inventory",
+    href: (projectId) => projectHref(projectId, "/inventory"),
     icon: Package,
   },
 ];
@@ -106,11 +125,11 @@ export default async function ProjectOverviewPage({
   const currency = financials?.currency ?? project.currency ?? "ARS";
   const clientPaidByCurrency = financials?.clientPaidByCurrency ?? {};
   const clientPendingByCurrency = financials?.clientPendingByCurrency ?? {};
-  const paidOutByCurrency = financials?.paidOutByCurrency ?? {};
   const budgetEstimated = financials?.budgetEstimated ?? 0;
   const hasPending = Object.values(clientPendingByCurrency).some((v) => v > 0);
-  const cobrado = amountInCurrency(clientPaidByCurrency, currency);
-  const pagado = amountInCurrency(paidOutByCurrency, currency);
+  const cobrado = financials?.clientPaidConverted ?? 0;
+  const pagado = financials?.paidOutConverted ?? 0;
+  const fxIncomplete = financials?.fxIncomplete ?? false;
 
   return (
     <div className="space-y-8">
@@ -183,6 +202,7 @@ export default async function ProjectOverviewPage({
         budgetEstimated={budgetEstimated}
         cobrado={cobrado}
         pagado={pagado}
+        fxIncomplete={fxIncomplete}
       />
 
       <section>
@@ -192,10 +212,11 @@ export default async function ProjectOverviewPage({
         <ul className="grid gap-3 sm:grid-cols-2">
           {QUICK_LINKS.map((item) => {
             const Icon = item.icon;
+            const href = item.href(id);
             return (
-              <li key={item.suffix}>
+              <li key={href}>
                 <Link
-                  href={projectHref(id, item.suffix)}
+                  href={href}
                   className="flex gap-3 rounded-md border border-border bg-surface p-4 transition-colors hover:border-accent/40 hover:bg-surface-elevated"
                 >
                   <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-background text-accent">

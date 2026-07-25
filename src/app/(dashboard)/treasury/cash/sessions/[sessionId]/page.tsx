@@ -9,7 +9,7 @@ import {
   CASH_SESSION_STATUS_STYLE,
   formatCashMoney,
 } from "@/features/treasury/lib/cash-labels";
-import { formatDateAR } from "@/lib/format-date";
+import { formatDateAR, formatDateTimeAR } from "@/lib/format-date";
 
 type PageProps = { params: Promise<{ sessionId: string }> };
 
@@ -109,31 +109,68 @@ export default async function CashSessionPage({ params }: PageProps) {
 
       <section className="mt-8 space-y-3">
         <h2 className="font-medium">Movimientos</h2>
+        <p className="text-sm text-muted-foreground">
+          Tocá un movimiento vinculado a recibo u OP para ver medio de pago,
+          partidas y el resto del detalle.
+        </p>
         {session.movements.length === 0 ? (
           <p className="text-sm text-muted-foreground">Sin movimientos aún.</p>
         ) : (
           <ul className="divide-y divide-border border-y border-border">
-            {session.movements.map((m) => (
-              <li
-                key={m.id}
-                className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div>
-                  <p className="font-medium">{CASH_MOVEMENT_LABEL[m.type]}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {m.description}
+            {session.movements.map((m) => {
+              const methodLabel = m.linkedDoc?.paymentMethod ?? null;
+              const content = (
+                <>
+                  <div className="min-w-0">
+                    <p className="font-medium">
+                      {CASH_MOVEMENT_LABEL[m.type]}
+                      {m.linkedDoc ? (
+                        <span className="ml-2 text-sm font-normal text-muted-foreground">
+                          {m.linkedDoc.number}
+                        </span>
+                      ) : null}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {m.description}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {[
+                        methodLabel,
+                        m.linkedDoc?.partyName,
+                        formatDateTimeAR(m.occurredAt),
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  </div>
+                  <p
+                    className={`shrink-0 text-sm font-medium tabular-nums ${
+                      m.amount >= 0 ? "text-success" : "text-danger"
+                    }`}
+                  >
+                    {m.amount >= 0 ? "+" : ""}
+                    {formatCashMoney(m.amount, session.currency)}
                   </p>
-                </div>
-                <p
-                  className={`text-sm font-medium tabular-nums ${
-                    m.amount >= 0 ? "text-success" : "text-danger"
-                  }`}
-                >
-                  {m.amount >= 0 ? "+" : ""}
-                  {formatCashMoney(m.amount, session.currency)}
-                </p>
-              </li>
-            ))}
+                </>
+              );
+
+              return (
+                <li key={m.id}>
+                  {m.linkedDoc ? (
+                    <Link
+                      href={m.linkedDoc.href}
+                      className="flex flex-col gap-1 py-3 transition-colors hover:bg-surface/60 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      {content}
+                    </Link>
+                  ) : (
+                    <div className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      {content}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

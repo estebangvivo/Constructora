@@ -53,12 +53,32 @@ export default async function BudgetPage({ params }: ProjectRouteParams) {
     );
   }
 
-  const estimated = budget.items.reduce((s, i) => s + i.totalCost, 0);
-  const actualCost = budget.items.reduce((s, i) => s + i.actualCost, 0);
+  const estimatedByCurrency = budget.items.reduce<Record<string, number>>(
+    (acc, i) => {
+      const key = i.currency || budget.currency;
+      acc[key] = (acc[key] ?? 0) + i.totalCost;
+      return acc;
+    },
+    {},
+  );
+  const actualCostByCurrency = budget.items.reduce<Record<string, number>>(
+    (acc, i) => {
+      for (const [cur, amount] of Object.entries(i.actualCostByCurrency)) {
+        acc[cur] = (acc[cur] ?? 0) + amount;
+      }
+      return acc;
+    },
+    {},
+  );
   const clientPaidByCurrency = financials?.clientPaidByCurrency ?? {};
   const clientPendingByCurrency = financials?.clientPendingByCurrency ?? {};
+  const primaryCurrency = budget.currency;
+  const estimated = estimatedByCurrency[primaryCurrency] ?? 0;
+  const actualCostConverted = budget.items
+    .filter((i) => (i.currency || budget.currency) === primaryCurrency)
+    .reduce((acc, i) => acc + i.actualCost, 0);
   const variancePct = estimated
-    ? (((actualCost - estimated) / estimated) * 100).toFixed(1)
+    ? (((actualCostConverted - estimated) / estimated) * 100).toFixed(1)
     : "0";
 
   return (
@@ -91,8 +111,14 @@ export default async function BudgetPage({ params }: ProjectRouteParams) {
           <dt className="text-xs uppercase tracking-wider text-muted-foreground">
             Estimado
           </dt>
-          <dd className="mt-1 font-display text-xl">
-            {formatBudgetMoney(estimated, budget.currency)}
+          <dd className="mt-1 space-y-0.5 font-display text-xl">
+            {Object.keys(estimatedByCurrency).length === 0 ? (
+              "—"
+            ) : (
+              Object.entries(estimatedByCurrency).map(([cur, amount]) => (
+                <div key={cur}>{formatBudgetMoney(amount, cur)}</div>
+              ))
+            )}
           </dd>
         </div>
         <div className="border-l-2 border-success pl-3">
@@ -112,13 +138,19 @@ export default async function BudgetPage({ params }: ProjectRouteParams) {
           <dt className="text-xs uppercase tracking-wider text-muted-foreground">
             Costo real (OP)
           </dt>
-          <dd className="mt-1 font-display text-xl">
-            {formatBudgetMoney(actualCost, budget.currency)}
+          <dd className="mt-1 space-y-0.5 font-display text-xl">
+            {Object.keys(actualCostByCurrency).length === 0 ? (
+              "—"
+            ) : (
+              Object.entries(actualCostByCurrency).map(([cur, amount]) => (
+                <div key={cur}>{formatBudgetMoney(amount, cur)}</div>
+              ))
+            )}
           </dd>
         </div>
         <div className="border-l-2 border-accent pl-3">
           <dt className="text-xs uppercase tracking-wider text-muted-foreground">
-            Variación costo
+            Variación costo ({primaryCurrency})
           </dt>
           <dd className="mt-1 font-display text-xl">{variancePct}%</dd>
         </div>
@@ -127,7 +159,7 @@ export default async function BudgetPage({ params }: ProjectRouteParams) {
       <BudgetItemsEditor
         budgetId={budget.budgetId}
         status={budget.status}
-        currency={budget.currency}
+        defaultCurrency={budget.currency}
         items={budget.items}
         canManage={canManage}
       />

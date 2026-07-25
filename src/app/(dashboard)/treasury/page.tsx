@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Banknote, FileInput, FileOutput, Wallet } from "lucide-react";
+import {
+  Banknote,
+  FileInput,
+  FileOutput,
+  Landmark,
+  ScrollText,
+  Wallet,
+} from "lucide-react";
 import { getSession } from "@/lib/auth";
 import {
   listPaymentOrders,
@@ -17,6 +24,7 @@ import {
 } from "@/config/currencies";
 import type { TreasuryDocStatus } from "@prisma/client";
 import { getCashOverview } from "@/features/treasury/queries/cash-queries";
+import { listBankAccounts } from "@/features/treasury/queries/bank-queries";
 import { formatCashMoney } from "@/features/treasury/lib/cash-labels";
 
 export const dynamic = "force-dynamic";
@@ -29,11 +37,16 @@ export default async function TreasuryPage() {
   const session = await getSession();
   if (!session) redirect("/sign-in");
 
-  const [receipts, orders, cash] = await Promise.all([
+  const [receipts, orders, cash, bankAccounts] = await Promise.all([
     listReceipts(),
     listPaymentOrders(),
     getCashOverview("ARS"),
+    listBankAccounts({ activeOnly: true }),
   ]);
+
+  const bankTotals = sumByCurrency(
+    bankAccounts.map((a) => ({ currency: a.currency, amount: a.balance })),
+  );
 
   const incomeTotal = sumByCurrency(
     receipts
@@ -119,10 +132,10 @@ export default async function TreasuryPage() {
         </p>
       )}
 
-      <div className="mb-8 grid gap-3 sm:grid-cols-3">
+      <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Link
           href="/treasury/cash"
-          className="flex items-center gap-3 rounded-md border border-border bg-surface p-4 hover:border-accent/40 sm:col-span-1"
+          className="flex items-center gap-3 rounded-md border border-border bg-surface p-4 hover:border-accent/40"
         >
           <span className="flex size-10 items-center justify-center rounded-md bg-background text-accent">
             <Wallet className="size-5" aria-hidden />
@@ -135,6 +148,39 @@ export default async function TreasuryPage() {
               {" · "}
               Tesorería{" "}
               {formatCashMoney(cash.treasury.balance, cash.treasury.currency)}
+            </span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              Solo movimientos en efectivo (no transferencias ni cheques)
+            </span>
+          </span>
+        </Link>
+        <Link
+          href="/treasury/banks"
+          className="flex items-center gap-3 rounded-md border border-border bg-surface p-4 hover:border-accent/40"
+        >
+          <span className="flex size-10 items-center justify-center rounded-md bg-background text-accent">
+            <Landmark className="size-5" aria-hidden />
+          </span>
+          <span>
+            <span className="block font-medium">Bancos</span>
+            <span className="text-sm text-muted-foreground">
+              {bankAccounts.length === 0
+                ? "Sin cuentas · configurar en Ajustes"
+                : formatMoneyByCurrency(bankTotals)}
+            </span>
+          </span>
+        </Link>
+        <Link
+          href="/treasury/checks"
+          className="flex items-center gap-3 rounded-md border border-border bg-surface p-4 hover:border-accent/40"
+        >
+          <span className="flex size-10 items-center justify-center rounded-md bg-background text-accent">
+            <ScrollText className="size-5" aria-hidden />
+          </span>
+          <span>
+            <span className="block font-medium">Cheques en cartera</span>
+            <span className="text-sm text-muted-foreground">
+              Disponibles para pagar
             </span>
           </span>
         </Link>
@@ -254,6 +300,8 @@ function DocList({
                 <p className="text-sm text-muted-foreground">
                   {item.partyName}
                   {item.concept ? ` · ${item.concept}` : ""}
+                  {" · "}
+                  {item.paymentMethodsLabel}
                   {needsPost ? " · Pendiente de imputar" : ""}
                 </p>
               </div>

@@ -18,7 +18,7 @@ type CreateBudgetFormProps = {
   enabledCurrencies?: string[];
 };
 
-function emptyLine(): LineState {
+function emptyLine(currency = "ARS"): LineState {
   return {
     key: Math.random().toString(36).slice(2),
     code: "",
@@ -26,6 +26,7 @@ function emptyLine(): LineState {
     quantity: 1,
     unit: "u",
     unitCost: 0,
+    currency,
   };
 }
 
@@ -43,16 +44,20 @@ export function CreateBudgetForm({
   const [name, setName] = useState("Presupuesto Base");
   const [currency, setCurrency] = useState(defaultCurrency);
   const [notes, setNotes] = useState("");
-  const [lines, setLines] = useState<LineState[]>([emptyLine()]);
+  const [lines, setLines] = useState<LineState[]>([
+    emptyLine(defaultCurrency),
+  ]);
 
-  const total = useMemo(
-    () =>
-      lines.reduce(
-        (acc, l) => acc + (Number(l.quantity) || 0) * (Number(l.unitCost) || 0),
-        0,
-      ),
-    [lines],
-  );
+  const totalsByCurrency = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const l of lines) {
+      const cur = l.currency === "USD" ? "USD" : "ARS";
+      const amount =
+        (Number(l.quantity) || 0) * (Number(l.unitCost) || 0);
+      map[cur] = (map[cur] ?? 0) + amount;
+    }
+    return map;
+  }, [lines]);
 
   function updateLine(key: string, patch: Partial<LineState>) {
     setLines((prev) =>
@@ -109,10 +114,14 @@ export function CreateBudgetForm({
             className={fieldClass}
           >
             {enabledCurrencies.map((code) => {
+              const short: Record<string, string> = {
+                ARS: "Pesos (ARS)",
+                USD: "Dólares (USD)",
+              };
               const meta = APP_CURRENCIES.find((c) => c.code === code);
               return (
                 <option key={code} value={code}>
-                  {meta?.label ?? code}
+                  {short[code] ?? meta?.label ?? code}
                 </option>
               );
             })}
@@ -134,7 +143,9 @@ export function CreateBudgetForm({
           <h3 className="font-medium">Partidas</h3>
           <button
             type="button"
-            onClick={() => setLines((prev) => [...prev, emptyLine()])}
+            onClick={() =>
+              setLines((prev) => [...prev, emptyLine(currency)])
+            }
             className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm hover:bg-surface"
           >
             <Plus className="size-4" aria-hidden />
@@ -146,7 +157,7 @@ export function CreateBudgetForm({
           {lines.map((line) => (
             <li
               key={line.key}
-              className="grid gap-2 rounded-md border border-border bg-surface/50 p-3 sm:grid-cols-6"
+              className="grid gap-2 rounded-md border border-border bg-surface/50 p-3 sm:grid-cols-7"
             >
               <label className="block text-sm sm:col-span-1">
                 <span className="mb-1 block text-xs text-muted-foreground">
@@ -211,10 +222,25 @@ export function CreateBudgetForm({
                   ))}
                 </select>
               </label>
+              <label className="block text-sm">
+                <span className="mb-1 block text-xs text-muted-foreground">
+                  Moneda
+                </span>
+                <select
+                  value={line.currency === "USD" ? "USD" : "ARS"}
+                  onChange={(e) =>
+                    updateLine(line.key, { currency: e.target.value })
+                  }
+                  className={fieldClass}
+                >
+                  <option value="ARS">Pesos (ARS)</option>
+                  <option value="USD">Dólares (USD)</option>
+                </select>
+              </label>
               <div className="flex items-end gap-2">
                 <label className="block min-w-0 flex-1 text-sm">
                   <span className="mb-1 block text-xs text-muted-foreground">
-                    P. unit.
+                    P. unit. ({line.currency === "USD" ? "USD" : "ARS"})
                   </span>
                   <input
                     type="number"
@@ -246,9 +272,13 @@ export function CreateBudgetForm({
           ))}
         </ul>
 
-        <p className="text-right text-sm font-medium">
-          Total estimado: {formatBudgetMoney(total, currency)}
-        </p>
+        <div className="space-y-1 text-right text-sm font-medium">
+          {Object.entries(totalsByCurrency).map(([cur, amount]) => (
+            <p key={cur}>
+              Total {cur}: {formatBudgetMoney(amount, cur)}
+            </p>
+          ))}
+        </div>
       </section>
 
       {error && (

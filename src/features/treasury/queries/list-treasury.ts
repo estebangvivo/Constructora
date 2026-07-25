@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import type { PaymentMethod, TreasuryDocStatus } from "@prisma/client";
+import { formatPaymentMethodsShort } from "@/features/treasury/lib/payments";
 
 export type TreasuryListItem = {
   id: string;
@@ -8,6 +9,7 @@ export type TreasuryListItem = {
   issueDate: Date;
   status: TreasuryDocStatus;
   paymentMethod: PaymentMethod;
+  paymentMethodsLabel: string;
   partyName: string;
   concept: string | null;
   totalAmount: number;
@@ -27,6 +29,7 @@ export async function listReceipts(): Promise<TreasuryListItem[]> {
     orderBy: [{ issueDate: "desc" }, { number: "desc" }],
     include: {
       client: { select: { name: true } },
+      payments: { select: { method: true }, orderBy: { sortOrder: "asc" } },
       lines: {
         include: { project: { select: { code: true, name: true } } },
       },
@@ -39,6 +42,10 @@ export async function listReceipts(): Promise<TreasuryListItem[]> {
     issueDate: r.issueDate,
     status: r.status,
     paymentMethod: r.paymentMethod,
+    paymentMethodsLabel: formatPaymentMethodsShort(
+      r.payments,
+      r.paymentMethod,
+    ),
     partyName: r.client?.name ?? r.partyName ?? "—",
     concept: r.concept,
     totalAmount: toNumber(r.totalAmount),
@@ -61,6 +68,7 @@ export async function listPaymentOrders(): Promise<TreasuryListItem[]> {
     orderBy: [{ issueDate: "desc" }, { number: "desc" }],
     include: {
       supplier: { select: { name: true } },
+      payments: { select: { method: true }, orderBy: { sortOrder: "asc" } },
       lines: {
         include: { project: { select: { code: true, name: true } } },
       },
@@ -73,6 +81,10 @@ export async function listPaymentOrders(): Promise<TreasuryListItem[]> {
     issueDate: r.issueDate,
     status: r.status,
     paymentMethod: r.paymentMethod,
+    paymentMethodsLabel: formatPaymentMethodsShort(
+      r.payments,
+      r.paymentMethod,
+    ),
     partyName: r.supplier?.name ?? r.partyName ?? "—",
     concept: r.concept,
     totalAmount: toNumber(r.totalAmount),
@@ -93,6 +105,12 @@ export async function getReceiptById(id: string) {
     where: { id, organizationId: session.organizationId },
     include: {
       client: true,
+      payments: {
+        orderBy: { sortOrder: "asc" },
+        include: {
+          bankAccount: { select: { id: true, name: true, bankName: true } },
+        },
+      },
       lines: {
         include: {
           project: { select: { id: true, code: true, name: true } },
@@ -112,6 +130,15 @@ export async function getPaymentOrderById(id: string) {
     where: { id, organizationId: session.organizationId },
     include: {
       supplier: true,
+      payments: {
+        orderBy: { sortOrder: "asc" },
+        include: {
+          bankAccount: { select: { id: true, name: true, bankName: true } },
+          checkInstrument: {
+            select: { id: true, number: true, bank: true, status: true },
+          },
+        },
+      },
       lines: {
         include: {
           project: { select: { id: true, code: true, name: true } },
@@ -123,6 +150,25 @@ export async function getPaymentOrderById(id: string) {
       },
     },
   });
+}
+
+/** Indica si el documento ya tiene movimiento de caja (ingreso/egreso). */
+export async function hasCashMovementForDoc(input: {
+  receiptId?: string;
+  paymentOrderId?: string;
+}): Promise<boolean> {
+  const session = await requireSession();
+  const count = await prisma.cashMovement.count({
+    where: {
+      organizationId: session.organizationId,
+      type: { in: ["INCOME", "EXPENSE"] },
+      ...(input.receiptId ? { receiptId: input.receiptId } : {}),
+      ...(input.paymentOrderId
+        ? { paymentOrderId: input.paymentOrderId }
+        : {}),
+    },
+  });
+  return count > 0;
 }
 
 /** Partidas del presupuesto activo (última versión) de una obra. */

@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import type { ProjectStatus } from "@prisma/client";
 
+export type ProjectListScope = "open" | "closed";
+
 export type ProjectListItem = {
   id: string;
   code: string;
@@ -12,6 +14,9 @@ export type ProjectListItem = {
   /** Avance promedio de tareas; 0 si no hay cronograma. */
   progressPct: number;
 };
+
+const OPEN_STATUSES: ProjectStatus[] = ["DRAFT", "ACTIVE", "ON_HOLD"];
+const CLOSED_STATUSES: ProjectStatus[] = ["COMPLETED", "CANCELLED"];
 
 function averageProgress(
   tasks: { progressPct: { toNumber(): number } | number }[],
@@ -27,14 +32,19 @@ function averageProgress(
   return Math.round(sum / tasks.length);
 }
 
-/** Lista obras de la organización del usuario autenticado. */
-export async function listProjects(): Promise<ProjectListItem[]> {
+/** Lista obras de la organización. Por defecto solo pendientes (no terminadas). */
+export async function listProjects(
+  scope: ProjectListScope = "open",
+): Promise<ProjectListItem[]> {
   const session = await requireSession();
 
   const projects = await prisma.project.findMany({
     where: {
       organizationId: session.organizationId,
       deletedAt: null,
+      status: {
+        in: scope === "closed" ? CLOSED_STATUSES : OPEN_STATUSES,
+      },
     },
     orderBy: [{ status: "asc" }, { name: "asc" }],
     include: {
@@ -54,6 +64,29 @@ export async function listProjects(): Promise<ProjectListItem[]> {
     clientName: project.client?.name ?? null,
     progressPct: averageProgress(project.tasks),
   }));
+}
+
+/** Conteos para pestañas del listado. */
+export async function countProjectsByScope(): Promise<{
+  open: number;
+  closed: number;
+}> {
+  const session = await requireSession();
+  const base = {
+    organizationId: session.organizationId,
+    deletedAt: null,
+  } as const;
+
+  const [open, closed] = await Promise.all([
+    prisma.project.count({
+      where: { ...base, status: { in: OPEN_STATUSES } },
+    }),
+    prisma.project.count({
+      where: { ...base, status: { in: CLOSED_STATUSES } },
+    }),
+  ]);
+
+  return { open, closed };
 }
 
 export type ProjectSummary = {

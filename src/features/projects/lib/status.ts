@@ -8,10 +8,11 @@ export const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = {
   CANCELLED: "Cancelada",
 };
 
+/** Estilos sin opacidades (/15) para que el texto se lea en navegadores legacy. */
 export const PROJECT_STATUS_STYLE: Record<ProjectStatus, string> = {
-  ACTIVE: "bg-success/15 text-success",
-  ON_HOLD: "bg-warning/15 text-warning",
-  COMPLETED: "bg-muted text-muted-foreground",
-  DRAFT: "bg-muted text-muted-foreground",
-  CANCELLED: "bg-danger/15 text-danger",
+  ACTIVE: "border border-border bg-background text-foreground",
+  ON_HOLD: "border border-border bg-background text-foreground",
+  COMPLETED: "border border-border bg-muted text-foreground",
+  DRAFT: "border border-border bg-muted text-foreground",
+  CANCELLED: "border border-border bg-background text-foreground",
 };

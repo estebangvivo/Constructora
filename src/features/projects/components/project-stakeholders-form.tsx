@@ -1,12 +1,13 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setProjectClient } from "@/features/clients/actions/client-actions";
 import {
   linkSupplierToProject,
   unlinkSupplierFromProject,
 } from "@/features/suppliers/actions/supplier-actions";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 
 type Option = { id: string; name: string; taxId: string | null };
 
@@ -74,20 +75,20 @@ export function ProjectStakeholdersForm({
           </a>
           .
         </p>
-        <select
-          value={currentClientId ?? ""}
-          onChange={(e) => onClientChange(e.target.value)}
-          disabled={pending}
-          className="w-full max-w-md rounded-md border border-border bg-background px-3 py-2.5 outline-none ring-accent focus:ring-2 disabled:opacity-60"
-        >
-          <option value="">Sin cliente asignado</option>
-          {clients.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-              {c.taxId ? ` · ${c.taxId}` : ""}
-            </option>
-          ))}
-        </select>
+        <div className="max-w-md">
+          <SearchableSelect
+            value={currentClientId ?? ""}
+            onChange={onClientChange}
+            disabled={pending}
+            emptyLabel="Sin cliente asignado"
+            searchPlaceholder="Buscar cliente…"
+            options={clients.map((c) => ({
+              value: c.id,
+              label: c.taxId ? `${c.name} · ${c.taxId}` : c.name,
+              keywords: `${c.name} ${c.taxId ?? ""}`,
+            }))}
+          />
+        </div>
       </section>
 
       <section className="space-y-4">
@@ -145,19 +146,7 @@ export function ProjectStakeholdersForm({
               <span className="mb-1 block text-muted-foreground">
                 Agregar proveedor
               </span>
-              <select
-                name="supplierId"
-                required
-                className="w-full rounded-md border border-border bg-background px-3 py-2.5 outline-none ring-accent focus:ring-2"
-              >
-                <option value="">Seleccionar…</option>
-                {unlinkable.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                    {s.taxId ? ` · ${s.taxId}` : ""}
-                  </option>
-                ))}
-              </select>
+              <SupplierLinkSelect options={unlinkable} />
             </label>
             <label className="block flex-1 text-sm">
               <span className="mb-1 block text-muted-foreground">
@@ -194,5 +183,23 @@ export function ProjectStakeholdersForm({
         )}
       </section>
     </div>
+  );
+}
+
+function SupplierLinkSelect({ options }: { options: Option[] }) {
+  const [value, setValue] = useState("");
+  return (
+    <SearchableSelect
+      name="supplierId"
+      value={value}
+      onChange={setValue}
+      emptyLabel="Seleccionar…"
+      searchPlaceholder="Buscar proveedor…"
+      options={options.map((s) => ({
+        value: s.id,
+        label: s.taxId ? `${s.name} · ${s.taxId}` : s.name,
+        keywords: `${s.name} ${s.taxId ?? ""}`,
+      }))}
+    />
   );
 }

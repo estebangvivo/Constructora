@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { normalizeCurrency, sumByCurrency } from "@/config/currencies";
+import { tryConvertAmountOnDate } from "@/lib/exchange/convert-on-date";
 
 function toNumber(value: { toNumber(): number } | number): number {
   return typeof value === "number" ? value : value.toNumber();
@@ -14,13 +15,22 @@ export type ProjectFinancialSummary = {
   clientPendingByCurrency: Record<string, number>;
   /** Totales egresos imputados por moneda. */
   paidOutByCurrency: Record<string, number>;
-  /** Presupuesto estimado (última versión). */
+  /**
+   * Cobrado convertido a `currency` (TC a fecha de cada recibo).
+   * Para gráficos vs presupuesto.
+   */
+  clientPaidConverted: number;
+  /** Pagado convertido a `currency` (TC a fecha de cada OP). */
+  paidOutConverted: number;
+  /** Presupuesto estimado convertido a `currency`. */
   budgetEstimated: number | null;
   budgetCurrency: string | null;
   /** Promedio de avance de tareas del cronograma (0–100). */
   scheduleProgressPct: number;
-  /** Costo real acumulado en partidas (actualCost). */
+  /** Costo real acumulado en partidas (actualCost, ya en moneda de partida). */
   budgetActualCost: number | null;
+  /** true si faltó alguna cotización al convertir. */
+  fxIncomplete: boolean;
 };
 
 /** Resumen financiero de la obra desde tesorería + presupuesto + cronograma. */
@@ -56,7 +66,7 @@ export async function getProjectFinancialSummary(
       },
       select: {
         amount: true,
-        receipt: { select: { currency: true } },
+        receipt: { select: { currency: true, issueDate: true } },
       },
     }),
     prisma.receiptLine.findMany({
@@ -82,14 +92,18 @@ export async function getProjectFinancialSummary(
       },
       select: {
         amount: true,
-        paymentOrder: { select: { currency: true } },
+        paymentOrder: {
+          select: { currency: true, issueDate: true },
+        },
       },
     }),
     prisma.budget.findFirst({
       where: { projectId },
       orderBy: { version: "desc" },
       include: {
-        items: { select: { totalCost: true, actualCost: true } },
+        items: {
+          select: { totalCost: true, actualCost: true, currency: true },
+        },
       },
     }),
     prisma.task.findMany({
@@ -98,12 +112,89 @@ export async function getProjectFinancialSummary(
     }),
   ]);
 
-  const budgetEstimated = budget
-    ? budget.items.reduce((acc, item) => acc + toNumber(item.totalCost), 0)
-    : null;
-  const budgetActualCost = budget
-    ? budget.items.reduce((acc, item) => acc + toNumber(item.actualCost), 0)
-    : null;
+  const chartCurrency = normalizeCurrency(
+    budget?.currency ?? project.currency,
+  );
+  let fxIncomplete = false;
+
+  let budgetEstimated: number | null = null;
+  let budgetActualCost: number | null = null;
+
+  if (budget) {
+    budgetEstimated = 0;
+    budgetActualCost = 0;
+    const asOf = new Date();
+    for (const item of budget.items) {
+      const itemCurrency = normalizeCurrency(
+        item.currency || chartCurrency,
+      );
+      const estimated = await tryConvertAmountOnDate(
+        prisma,
+        session.organizationId,
+        toNumber(item.totalCost),
+        itemCurrency,
+        chartCurrency,
+        asOf,
+      );
+      if (estimated == null) {
+        fxIncomplete = true;
+      } else {
+        budgetEstimated += estimated;
+      }
+
+      const actual = await tryConvertAmountOnDate(
+        prisma,
+        session.organizationId,
+        toNumber(item.actualCost),
+        itemCurrency,
+        chartCurrency,
+        asOf,
+      );
+      if (actual == null) {
+        fxIncomplete = true;
+      } else {
+        budgetActualCost += actual;
+      }
+    }
+    budgetEstimated = Math.round(budgetEstimated * 100) / 100;
+    budgetActualCost = Math.round(budgetActualCost * 100) / 100;
+  }
+
+  let clientPaidConverted = 0;
+  for (const line of postedReceiptLines) {
+    const converted = await tryConvertAmountOnDate(
+      prisma,
+      session.organizationId,
+      toNumber(line.amount),
+      line.receipt.currency,
+      chartCurrency,
+      line.receipt.issueDate,
+    );
+    if (converted == null) {
+      fxIncomplete = true;
+    } else {
+      clientPaidConverted += converted;
+    }
+  }
+  clientPaidConverted = Math.round(clientPaidConverted * 100) / 100;
+
+  let paidOutConverted = 0;
+  for (const line of postedPaymentLines) {
+    const converted = await tryConvertAmountOnDate(
+      prisma,
+      session.organizationId,
+      toNumber(line.amount),
+      line.paymentOrder.currency,
+      chartCurrency,
+      line.paymentOrder.issueDate,
+    );
+    if (converted == null) {
+      fxIncomplete = true;
+    } else {
+      paidOutConverted += converted;
+    }
+  }
+  paidOutConverted = Math.round(paidOutConverted * 100) / 100;
 
   const scheduleProgressPct =
     tasks.length === 0
@@ -114,7 +205,7 @@ export async function getProjectFinancialSummary(
         );
 
   return {
-    currency: normalizeCurrency(budget?.currency ?? project.currency),
+    currency: chartCurrency,
     clientPaidByCurrency: sumByCurrency(
       postedReceiptLines.map((l) => ({
         currency: l.receipt.currency,
@@ -133,10 +224,13 @@ export async function getProjectFinancialSummary(
         amount: toNumber(l.amount),
       })),
     ),
+    clientPaidConverted,
+    paidOutConverted,
     budgetEstimated,
     budgetCurrency: budget?.currency ?? project.currency,
     scheduleProgressPct,
     budgetActualCost,
+    fxIncomplete,
   };
 }
 

@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { TreasuryDocStatus } from "@prisma/client";
+import type { PaymentMethod, TreasuryDocStatus } from "@prisma/client";
 import {
   cancelPaymentOrder,
   cancelReceipt,
@@ -10,18 +10,24 @@ import {
   issueReceipt,
   postPaymentOrder,
   postReceipt,
+  syncPostedDocumentToCash,
 } from "@/features/treasury/actions/treasury-actions";
 
 type TreasuryDocActionsProps = {
   kind: "receipt" | "payment-order";
   id: string;
   status: TreasuryDocStatus;
+  paymentMethod?: PaymentMethod;
+  /** true si ya hay movimiento de caja ligado al documento */
+  hasCashMovement?: boolean;
 };
 
 export function TreasuryDocActions({
   kind,
   id,
   status,
+  paymentMethod,
+  hasCashMovement = false,
 }: TreasuryDocActionsProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -38,6 +44,13 @@ export function TreasuryDocActions({
       router.refresh();
     });
   }
+
+  const canSyncCash =
+    status === "POSTED" &&
+    !hasCashMovement &&
+    (paymentMethod === "CASH" ||
+      paymentMethod === "TRANSFER" ||
+      paymentMethod === "OTHER");
 
   return (
     <div className="flex flex-wrap gap-2">
@@ -60,9 +73,39 @@ export function TreasuryDocActions({
           onClick={() =>
             run(kind === "receipt" ? postReceipt : postPaymentOrder)
           }
-          className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground disabled:opacity-60"
+          className="rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-60"
         >
           Imputar a presupuesto
+        </button>
+      )}
+      {canSyncCash && (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => {
+            if (
+              !window.confirm(
+                paymentMethod === "CASH"
+                  ? "¿Registrar este documento en la caja diaria abierta?"
+                  : "Este documento figura como transferencia. ¿Marcarlo como efectivo y registrarlo en la caja diaria?",
+              )
+            ) {
+              return;
+            }
+            startTransition(async () => {
+              const result = await syncPostedDocumentToCash(kind, id);
+              if (!result.ok) {
+                window.alert(result.error ?? "No se pudo sincronizar con caja.");
+                return;
+              }
+              router.refresh();
+            });
+          }}
+          className="rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-60"
+        >
+          {paymentMethod === "CASH"
+            ? "Registrar en caja"
+            : "Pasar a efectivo y caja"}
         </button>
       )}
       {status !== "CANCELLED" && (

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
 import { createProject } from "@/features/projects/actions/create-project";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 
 type ClientOption = { id: string; name: string };
 
@@ -18,6 +19,7 @@ export function CreateProjectButton({
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [clientId, setClientId] = useState("");
 
   function onSubmit(formData: FormData) {
     setError(null);
@@ -26,7 +28,7 @@ export function CreateProjectButton({
         code: String(formData.get("code") ?? ""),
         name: String(formData.get("name") ?? ""),
         city: String(formData.get("city") ?? "") || undefined,
-        clientId: String(formData.get("clientId") ?? "") || undefined,
+        clientId: clientId || undefined,
       });
 
       if (!result.ok) {
@@ -35,6 +37,7 @@ export function CreateProjectButton({
       }
 
       setOpen(false);
+      setClientId("");
       router.push(`/projects/${result.projectId}`);
       router.refresh();
     });
@@ -109,17 +112,16 @@ export function CreateProjectButton({
               </label>
               <label className="block text-sm">
                 <span className="mb-1 block text-muted-foreground">Cliente</span>
-                <select
-                  name="clientId"
-                  className="w-full rounded-md border border-border bg-background px-3 py-2.5 outline-none ring-accent focus:ring-2"
-                >
-                  <option value="">Sin cliente (asignar después)</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                <SearchableSelect
+                  value={clientId}
+                  onChange={setClientId}
+                  emptyLabel="Sin cliente (asignar después)"
+                  searchPlaceholder="Buscar cliente…"
+                  options={clients.map((c) => ({
+                    value: c.id,
+                    label: c.name,
+                  }))}
+                />
               </label>
 
               {error && (

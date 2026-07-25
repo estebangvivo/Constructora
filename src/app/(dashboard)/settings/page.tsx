@@ -9,9 +9,11 @@ import {
 import { ensureTodayBnaRate } from "@/features/settings/lib/sync-bna-rate";
 import { OrganizationSettingsForm } from "@/features/settings/components/organization-settings-form";
 import { ExchangeRateForm } from "@/features/settings/components/exchange-rate-form";
+import { BanksSettingsPanel } from "@/features/settings/components/banks-settings-panel";
 import { listOrganizationUsers } from "@/features/auth/actions/user-actions";
 import { UsersAdminPanel } from "@/features/auth/components/users-admin-panel";
 import { hasModule } from "@/features/auth/lib/modules";
+import { listBankAccounts } from "@/features/treasury/queries/bank-queries";
 
 export const dynamic = "force-dynamic";
 
@@ -39,10 +41,15 @@ export default async function SettingsPage() {
     hasModule(session.allowedModules, "users") ||
     ["ADMIN", "DIRECTOR"].includes(session.organizationRole);
 
-  const [latestUsdArs, recentRates, users] = await Promise.all([
+  const canManageBanks = ["ADMIN", "DIRECTOR"].includes(
+    session.organizationRole,
+  );
+
+  const [latestUsdArs, recentRates, users, bankAccounts] = await Promise.all([
     getLatestExchangeRate("USD", "ARS"),
     listRecentExchangeRates(14),
     canManageUsers ? listOrganizationUsers() : Promise.resolve([]),
+    listBankAccounts(),
   ]);
 
   return (
@@ -50,7 +57,8 @@ export default async function SettingsPage() {
       <div className="mb-8">
         <h1 className="font-display text-3xl tracking-tight">Configuración</h1>
         <p className="mt-1 text-muted-foreground">
-          Empresa, monedas, cotización y usuarios con permisos por módulo.
+          Empresa, monedas, bancos, cotización y usuarios con permisos por
+          módulo.
         </p>
         <p className="mt-2 text-sm">
           <Link href="/settings/users" className="text-accent hover:underline">
@@ -60,6 +68,11 @@ export default async function SettingsPage() {
       </div>
       <div className="space-y-10">
         <OrganizationSettingsForm organization={organization} />
+        <BanksSettingsPanel
+          accounts={bankAccounts}
+          enabledCurrencies={organization.enabledCurrencies}
+          canManage={canManageBanks}
+        />
         <ExchangeRateForm
           enabledCurrencies={organization.enabledCurrencies}
           recentRates={recentRates}

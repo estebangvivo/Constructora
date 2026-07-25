@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { ProjectNav } from "@/components/layout/project-nav";
 import { getProjectById } from "@/features/projects/queries/get-projects";
 import { PROJECT_STATUS_LABEL } from "@/features/projects/lib/status";
+import { ProjectLifecycleButton } from "@/features/projects/components/project-lifecycle-button";
 import { getProjectRole, getSession } from "@/lib/auth";
 import type { AppRole } from "@/types";
 
@@ -34,15 +35,21 @@ export default async function ProjectLayout({
     session.organizationRole,
   );
 
+  const canManage = ["ADMIN", "DIRECTOR", "RESIDENT"].includes(
+    session.organizationRole,
+  );
+  const isClosed =
+    project.status === "COMPLETED" || project.status === "CANCELLED";
+
   return (
     <div className="flex min-h-full flex-col">
       <header className="border-b border-border bg-surface px-4 py-4 lg:px-6">
         <Link
-          href="/projects"
+          href={isClosed ? "/projects?vista=terminadas" : "/projects"}
           className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-3.5" aria-hidden />
-          Obras
+          {isClosed ? "Obras terminadas" : "Obras"}
         </Link>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -59,6 +66,12 @@ export default async function ProjectLayout({
               · {PROJECT_STATUS_LABEL[project.status]}
             </p>
           </div>
+          {canManage && (
+            <ProjectLifecycleButton
+              projectId={project.id}
+              status={project.status}
+            />
+          )}
         </div>
       </header>
 

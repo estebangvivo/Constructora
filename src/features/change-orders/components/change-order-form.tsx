@@ -10,6 +10,7 @@ import {
 } from "@/features/change-orders/actions/change-order-actions";
 import type { BudgetItemOption } from "@/features/change-orders/queries/list-change-orders";
 import { formatCoMoney, round2 } from "@/features/change-orders/lib/labels";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 
 type LineState = {
   key: string;
@@ -225,20 +226,19 @@ export function ChangeOrderForm({
                 <span className="text-xs text-muted-foreground">
                   Partida (opcional)
                 </span>
-                <select
-                  className={fieldClass}
+                <SearchableSelect
                   value={line.budgetItemId}
-                  onChange={(e) =>
-                    updateLine(line.key, { budgetItemId: e.target.value })
+                  onChange={(budgetItemId) =>
+                    updateLine(line.key, { budgetItemId })
                   }
-                >
-                  <option value="">Sin partida / libre</option>
-                  {budgetItems.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.code} — {b.description}
-                    </option>
-                  ))}
-                </select>
+                  emptyLabel="Sin partida / libre"
+                  searchPlaceholder="Buscar partida…"
+                  options={budgetItems.map((b) => ({
+                    value: b.id,
+                    label: `${b.code} — ${b.description}`,
+                    keywords: `${b.code} ${b.description}`,
+                  }))}
+                />
               </label>
               <label className="block space-y-1.5">
                 <span className="text-xs text-muted-foreground">Descripción</span>

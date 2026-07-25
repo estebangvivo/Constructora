@@ -4,6 +4,7 @@ import {
   ensureCashRegisters,
   toNumber,
 } from "@/features/treasury/lib/cash-helpers";
+import { formatPaymentMethodsShort } from "@/features/treasury/lib/payments";
 import type {
   CashMovementType,
   CashSessionStatus,
@@ -42,6 +43,15 @@ export type CashMovementView = {
   receiptId: string | null;
   paymentOrderId: string | null;
   sourceSessionId: string | null;
+  /** Datos del documento de tesorería vinculado (si hay). */
+  linkedDoc: {
+    kind: "receipt" | "payment-order";
+    id: string;
+    number: string;
+    paymentMethod: string;
+    partyName: string | null;
+    href: string;
+  } | null;
 };
 
 export type CashSessionDetail = CashSessionListItem & {
@@ -176,17 +186,106 @@ export async function getCashSessionById(
   });
   if (!row) return null;
 
-  const movements = row.movements.map((m) => ({
-    id: m.id,
-    type: m.type,
-    amount: toNumber(m.amount),
-    balanceAfter: m.balanceAfter != null ? toNumber(m.balanceAfter) : null,
-    description: m.description,
-    occurredAt: m.occurredAt,
-    receiptId: m.receiptId,
-    paymentOrderId: m.paymentOrderId,
-    sourceSessionId: m.sourceSessionId,
-  }));
+  const receiptIds = [
+    ...new Set(
+      row.movements
+        .map((m) => m.receiptId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const paymentOrderIds = [
+    ...new Set(
+      row.movements
+        .map((m) => m.paymentOrderId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+
+  const [receipts, paymentOrders] = await Promise.all([
+    receiptIds.length
+      ? prisma.receipt.findMany({
+          where: {
+            id: { in: receiptIds },
+            organizationId: auth.organizationId,
+          },
+          select: {
+            id: true,
+            number: true,
+            paymentMethod: true,
+            partyName: true,
+            client: { select: { name: true } },
+            payments: { select: { method: true }, orderBy: { sortOrder: "asc" } },
+          },
+        })
+      : Promise.resolve([]),
+    paymentOrderIds.length
+      ? prisma.paymentOrder.findMany({
+          where: {
+            id: { in: paymentOrderIds },
+            organizationId: auth.organizationId,
+          },
+          select: {
+            id: true,
+            number: true,
+            paymentMethod: true,
+            partyName: true,
+            supplier: { select: { name: true } },
+            payments: { select: { method: true }, orderBy: { sortOrder: "asc" } },
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const receiptById = new Map(receipts.map((r) => [r.id, r]));
+  const orderById = new Map(paymentOrders.map((o) => [o.id, o]));
+
+  const movements = row.movements.map((m) => {
+    let linkedDoc: CashMovementView["linkedDoc"] = null;
+    if (m.receiptId) {
+      const r = receiptById.get(m.receiptId);
+      if (r) {
+        linkedDoc = {
+          kind: "receipt",
+          id: r.id,
+          number: r.number,
+          paymentMethod: formatPaymentMethodsShort(
+            r.payments,
+            r.paymentMethod,
+          ),
+          partyName: r.client?.name ?? r.partyName,
+          href: `/treasury/receipts/${r.id}`,
+        };
+      }
+    } else if (m.paymentOrderId) {
+      const o = orderById.get(m.paymentOrderId);
+      if (o) {
+        linkedDoc = {
+          kind: "payment-order",
+          id: o.id,
+          number: o.number,
+          paymentMethod: formatPaymentMethodsShort(
+            o.payments,
+            o.paymentMethod,
+          ),
+          partyName: o.supplier?.name ?? o.partyName,
+          href: `/treasury/payment-orders/${o.id}`,
+        };
+      }
+    }
+
+    return {
+      id: m.id,
+      type: m.type,
+      amount: toNumber(m.amount),
+      balanceAfter: m.balanceAfter != null ? toNumber(m.balanceAfter) : null,
+      description: m.description,
+      occurredAt: m.occurredAt,
+      receiptId: m.receiptId,
+      paymentOrderId: m.paymentOrderId,
+      sourceSessionId: m.sourceSessionId,
+      linkedDoc,
+    };
+  });
 
   const incomeTotal = movements
     .filter((m) => m.amount > 0 && m.type !== "CLOSE_TRANSFER")

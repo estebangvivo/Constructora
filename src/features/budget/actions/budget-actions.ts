@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
+import { normalizeCurrency } from "@/config/currencies";
 import type { BudgetStatus } from "@prisma/client";
 
 export type BudgetItemInput = {
@@ -11,6 +12,8 @@ export type BudgetItemInput = {
   quantity: number;
   unit: string;
   unitCost: number;
+  /** Moneda de la partida: ARS (pesos) o USD (dólares). */
+  currency?: string;
 };
 
 export type ActionResult =
@@ -51,12 +54,13 @@ async function getEditableBudget(budgetId: string, organizationId: string) {
   return budget;
 }
 
-function normalizeItem(input: BudgetItemInput) {
+function normalizeItem(input: BudgetItemInput, fallbackCurrency = "ARS") {
   const code = input.code.trim();
   const description = input.description.trim();
   const unit = input.unit.trim() || "u";
   const quantity = Number(input.quantity);
   const unitCost = Number(input.unitCost);
+  const currency = normalizeCurrency(input.currency || fallbackCurrency);
 
   if (!code || !description) {
     throw new Error("Código y descripción son obligatorios.");
@@ -69,7 +73,7 @@ function normalizeItem(input: BudgetItemInput) {
   }
 
   const totalCost = Number((quantity * unitCost).toFixed(2));
-  return { code, description, unit, quantity, unitCost, totalCost };
+  return { code, description, unit, quantity, unitCost, totalCost, currency };
 }
 
 export async function createBudget(input: {
@@ -103,10 +107,12 @@ export async function createBudget(input: {
       };
     }
 
+    const budgetCurrency =
+      input.currency?.trim() || project.currency || "ARS";
     const rawItems = (input.items ?? []).filter(
       (i) => i.code.trim() && i.description.trim(),
     );
-    const items = rawItems.map(normalizeItem);
+    const items = rawItems.map((i) => normalizeItem(i, budgetCurrency));
 
     const budget = await prisma.budget.create({
       data: {
@@ -114,7 +120,7 @@ export async function createBudget(input: {
         name,
         version: 1,
         status: "DRAFT",
-        currency: input.currency?.trim() || project.currency || "ARS",
+        currency: budgetCurrency,
         notes: input.notes?.trim() || null,
         items: {
           create: items.map((item, index) => ({
@@ -245,7 +251,10 @@ export async function addBudgetItem(input: {
       input.budgetId,
       session.organizationId,
     );
-    const item = normalizeItem(input.item);
+    const item = normalizeItem(
+      input.item,
+      budget.currency ?? "ARS",
+    );
 
     const last = await prisma.budgetItem.findFirst({
       where: { budgetId: budget.id },
@@ -304,7 +313,10 @@ export async function updateBudgetItem(input: {
       return { ok: false, error: "El presupuesto está cerrado." };
     }
 
-    const item = normalizeItem(input.item);
+    const item = normalizeItem(
+      input.item,
+      existing.budget.currency ?? "ARS",
+    );
     await prisma.budgetItem.update({
       where: { id: existing.id },
       data: item,

@@ -13,6 +13,7 @@ import { formatPurchaseMoney } from "@/features/purchases/lib/labels";
 import { toDateInputValue } from "@/lib/format-date";
 import { formatFileSize } from "@/lib/format-file-size";
 import { INVENTORY_CATEGORY_SUGGESTIONS } from "@/features/inventory/lib/labels";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 
 const fieldClass =
   "w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none ring-accent focus:ring-2";
@@ -265,19 +266,17 @@ export function InvoiceReviewForm({ invoice, suppliers, canManage }: Props) {
           <span className="mb-1 block text-muted-foreground">
             Proveedor del catálogo
           </span>
-          <select
+          <SearchableSelect
             value={supplierId}
-            onChange={(e) => setSupplierId(e.target.value)}
-            className={fieldClass}
-          >
-            <option value="">Sin vincular</option>
-            {suppliers.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-                {s.taxId ? ` (${s.taxId})` : ""}
-              </option>
-            ))}
-          </select>
+            onChange={setSupplierId}
+            emptyLabel="Sin vincular"
+            searchPlaceholder="Buscar proveedor…"
+            options={suppliers.map((s) => ({
+              value: s.id,
+              label: s.taxId ? `${s.name} (${s.taxId})` : s.name,
+              keywords: `${s.name} ${s.taxId ?? ""}`,
+            }))}
+          />
         </label>
         <label className="block text-sm">
           <span className="mb-1 block text-muted-foreground">CAE</span>

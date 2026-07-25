@@ -184,6 +184,9 @@ model Organization {
   cashRegisters CashRegister[]
   cashSessions  CashSession[]
   cashMovements CashMovement[]
+  checks        CheckInstrument[]
+  bankAccounts  BankAccount[]
+  bankMovements BankMovement[]
 
   turneroClientes          TurneroCliente[]
   turneroPuestos           TurneroPuesto[]
@@ -243,6 +246,7 @@ model User {
   cashSessionsOpened   CashSession[]        @relation("CashSessionOpener")
   cashSessionsClosed   CashSession[]        @relation("CashSessionCloser")
   cashMovementsCreated CashMovement[]       @relation("CashMovementCreator")
+  bankMovementsCreated BankMovement[]       @relation("BankMovementCreator")
 
   @@map("users")
 }
@@ -420,8 +424,11 @@ model BudgetItem {
   unit         String /// Unidad de medida (m2, m3, kg, gl, etc.)
   unitCost     Decimal  @db.Decimal(14, 2) /// Costo unitario estimado
   totalCost    Decimal  @db.Decimal(14, 2) /// quantity * unitCost
-  actualCost   Decimal  @default(0) @db.Decimal(14, 2) /// Costo real acumulado (egresos / OP)
-  actualIncome Decimal  @default(0) @db.Decimal(14, 2) /// Ingresos reales (recibos)
+  currency     String   @default("ARS") /// Moneda de esta partida (ARS / USD)
+  /// Costo real acumulado en moneda de la partida (OP convertidas por TC a fecha)
+  actualCost   Decimal  @default(0) @db.Decimal(14, 2)
+  /// Ingresos reales acumulados en moneda de la partida (recibos convertidos por TC a fecha)
+  actualIncome Decimal  @default(0) @db.Decimal(14, 2)
   actualQty    Decimal  @default(0) @db.Decimal(14, 4) /// Cantidad ejecutada
   sortOrder    Int      @default(0)
   createdAt    DateTime @default(now())
@@ -1110,6 +1117,42 @@ enum PaymentMethod {
   OTHER
 }
 
+enum CheckStatus {
+  IN_PORTFOLIO /// Recibido y disponible para entregar
+  DELIVERED /// Entregado en una orden de pago
+  CANCELLED
+}
+
+/// Cheque en cartera (entra por recibo, sale por orden de pago).
+model CheckInstrument {
+  id             String      @id @default(cuid())
+  organizationId String
+  number         String
+  bank           String
+  amount         Decimal     @db.Decimal(14, 2)
+  currency       String      @default("ARS")
+  issueDate      DateTime?   @db.Date
+  dueDate        DateTime?   @db.Date
+  account        String?
+  drawerName     String? /// Quien entregó el cheque (cliente)
+  status         CheckStatus @default(IN_PORTFOLIO)
+  receiptId      String?
+  paymentOrderId String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  receipt      Receipt?     @relation(fields: [receiptId], references: [id], onDelete: SetNull)
+  paymentOrder PaymentOrder? @relation(fields: [paymentOrderId], references: [id], onDelete: SetNull)
+  paymentOrderPayments PaymentOrderPayment[]
+
+  @@unique([organizationId, bank, number])
+  @@index([organizationId, status])
+  @@index([receiptId])
+  @@index([paymentOrderId])
+  @@map("check_instruments")
+}
+
 /// Recibo de cobro (ingreso). Puede imputarse a obra/partida → actualIncome.
 model Receipt {
   id             String            @id @default(cuid())
@@ -1119,7 +1162,7 @@ model Receipt {
   number         String /// ej. REC-2026-0001
   issueDate      DateTime          @db.Date
   status         TreasuryDocStatus @default(DRAFT)
-  paymentMethod  PaymentMethod     @default(TRANSFER)
+  paymentMethod     PaymentMethod     @default(CASH)
   partyName      String? /// Si no hay cliente en catálogo
   concept        String?
   currency       String            @default("ARS")
@@ -1140,11 +1183,36 @@ model Receipt {
   createdBy    User?         @relation("ReceiptCreator", fields: [createdById], references: [id], onDelete: SetNull)
   client       Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
   lines        ReceiptLine[]
+  payments     ReceiptPayment[]
+  checks       CheckInstrument[]
 
   @@unique([organizationId, number])
   @@index([organizationId, status])
   @@index([clientId])
   @@map("receipts")
+}
+
+/// Medio de pago parcial de un recibo (permite combinar efectivo + transferencia + cheque).
+model ReceiptPayment {
+  id             String        @id @default(cuid())
+  receiptId      String
+  method         PaymentMethod
+  amount         Decimal       @db.Decimal(14, 2)
+  bankAccountId  String? /// Cuenta propia cuando method = TRANSFER
+  checkNumber    String?
+  checkBank      String?
+  checkIssueDate DateTime?     @db.Date
+  checkDueDate   DateTime?     @db.Date
+  checkAccount   String?
+  sortOrder      Int           @default(0)
+  createdAt      DateTime      @default(now())
+
+  receipt     Receipt      @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+
+  @@index([receiptId])
+  @@index([bankAccountId])
+  @@map("receipt_payments")
 }
 
 model ReceiptLine {
@@ -1175,7 +1243,7 @@ model PaymentOrder {
   number         String /// ej. OP-2026-0001
   issueDate      DateTime          @db.Date
   status         TreasuryDocStatus @default(DRAFT)
-  paymentMethod  PaymentMethod     @default(TRANSFER)
+  paymentMethod     PaymentMethod     @default(CASH)
   partyName      String? /// Beneficiario libre
   concept        String?
   currency       String            @default("ARS")
@@ -1196,11 +1264,39 @@ model PaymentOrder {
   createdBy    User?              @relation("PaymentOrderCreator", fields: [createdById], references: [id], onDelete: SetNull)
   supplier     Supplier?          @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   lines        PaymentOrderLine[]
+  payments     PaymentOrderPayment[]
+  checksDelivered CheckInstrument[]
 
   @@unique([organizationId, number])
   @@index([organizationId, status])
   @@index([supplierId])
   @@map("payment_orders")
+}
+
+/// Medio de pago parcial de una orden de pago.
+model PaymentOrderPayment {
+  id                String        @id @default(cuid())
+  paymentOrderId    String
+  method            PaymentMethod
+  amount            Decimal       @db.Decimal(14, 2)
+  bankAccountId     String? /// Cuenta propia cuando method = TRANSFER
+  checkInstrumentId String?
+  checkNumber       String?
+  checkBank         String?
+  checkIssueDate    DateTime?     @db.Date
+  checkDueDate      DateTime?     @db.Date
+  checkAccount      String?
+  sortOrder         Int           @default(0)
+  createdAt         DateTime      @default(now())
+
+  paymentOrder    PaymentOrder     @relation(fields: [paymentOrderId], references: [id], onDelete: Cascade)
+  bankAccount     BankAccount?     @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  checkInstrument CheckInstrument? @relation(fields: [checkInstrumentId], references: [id], onDelete: Restrict)
+
+  @@index([paymentOrderId])
+  @@index([bankAccountId])
+  @@index([checkInstrumentId])
+  @@map("payment_order_payments")
 }
 
 model PaymentOrderLine {
@@ -1331,6 +1427,65 @@ model CashMovement {
   @@index([sessionId])
   @@index([sourceSessionId])
   @@map("cash_movements")
+}
+
+enum BankMovementType {
+  OPENING /// Saldo inicial al dar de alta la cuenta
+  INCOME /// Ingreso (cobro por transferencia)
+  EXPENSE /// Egreso (pago por transferencia)
+  ADJUSTMENT /// Ajuste / anulación
+}
+
+/// Cuenta bancaria propia de la organización.
+model BankAccount {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String /// Ej. Galicia operativa
+  bankName       String /// Ej. Banco Galicia
+  accountNumber  String?
+  cbu            String?
+  alias          String?
+  currency       String   @default("ARS")
+  balance        Decimal  @default(0) @db.Decimal(14, 2)
+  isActive       Boolean  @default(true)
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  movements            BankMovement[]
+  receiptPayments      ReceiptPayment[]
+  paymentOrderPayments PaymentOrderPayment[]
+
+  @@index([organizationId, isActive])
+  @@map("bank_accounts")
+}
+
+/// Movimiento en una cuenta bancaria.
+model BankMovement {
+  id             String           @id @default(cuid())
+  organizationId String
+  bankAccountId  String
+  type           BankMovementType
+  /// Monto con signo: + ingreso / − egreso
+  amount         Decimal          @db.Decimal(14, 2)
+  balanceAfter   Decimal?         @db.Decimal(14, 2)
+  description    String
+  occurredAt     DateTime         @default(now())
+  receiptId      String?
+  paymentOrderId String?
+  createdById    String?
+  createdAt      DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bankAccount  BankAccount  @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  createdBy    User?        @relation("BankMovementCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, occurredAt])
+  @@index([bankAccountId, occurredAt])
+  @@index([receiptId])
+  @@index([paymentOrderId])
+  @@map("bank_movements")
 }
 
 // =============================================================================

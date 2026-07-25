@@ -12,6 +12,7 @@ type ProjectOverviewChartsProps = {
   budgetEstimated: number;
   cobrado: number;
   pagado: number;
+  fxIncomplete?: boolean;
 };
 
 function clampPct(n: number) {
@@ -122,13 +123,21 @@ export function ProjectOverviewCharts({
   budgetEstimated,
   cobrado,
   pagado,
+  fxIncomplete = false,
 }: ProjectOverviewChartsProps) {
   return (
     <section>
       <h2 className="font-display text-xl tracking-tight">Indicadores</h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Progreso de obra y contraste del presupuesto con cobros y pagos.
+        Progreso de obra y contraste del presupuesto con cobros y pagos
+        (convertidos a {currency} con el TC de la fecha de cada documento).
       </p>
+      {fxIncomplete && (
+        <p className="mt-2 text-sm text-danger" role="status">
+          Falta alguna cotización en Ajustes: parte de los montos no se pudo
+          convertir a {currency}.
+        </p>
+      )}
 
       <div className="mt-5 grid gap-6 lg:grid-cols-3">
         <div className="flex items-center justify-center rounded-md border border-border bg-surface px-4 py-6">
@@ -138,7 +147,7 @@ export function ProjectOverviewCharts({
         <div className="rounded-md border border-border bg-surface p-5">
           <CompareChart
             title="Cobrado vs presupuestado"
-            subtitle={`Moneda ${currency} · recibos imputados`}
+            subtitle={`Moneda ${currency} · recibos imputados (convertidos)`}
             currency={currency}
             bars={[
               {
@@ -158,7 +167,7 @@ export function ProjectOverviewCharts({
         <div className="rounded-md border border-border bg-surface p-5">
           <CompareChart
             title="Presupuestado vs pagado"
-            subtitle={`Moneda ${currency} · órdenes de pago`}
+            subtitle={`Moneda ${currency} · órdenes de pago (convertidas)`}
             currency={currency}
             bars={[
               {

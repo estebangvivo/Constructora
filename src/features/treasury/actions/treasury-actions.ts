@@ -5,16 +5,33 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import type { PaymentMethod } from "@prisma/client";
 import {
-  applyBudgetImpact,
   nextTreasuryNumber,
   sumAmounts,
+  syncBudgetItemsFromTreasury,
 } from "@/features/treasury/lib/helpers";
 import {
   postCashMovementFromTreasuryDoc,
   reverseCashMovementsForTreasuryDoc,
 } from "@/features/treasury/lib/cash-from-treasury";
+import {
+  postBankMovementsFromTreasuryDoc,
+  reverseBankMovementsForTreasuryDoc,
+} from "@/features/treasury/lib/bank-from-treasury";
 import { getOrganizationCurrency } from "@/features/settings/queries/get-organization";
 import { toNumber } from "@/features/treasury/lib/cash-helpers";
+import {
+  cancelChecksFromReceipt,
+  deliverChecksFromPostedPaymentOrder,
+  ingestChecksFromPostedReceipt,
+  returnChecksFromPaymentOrder,
+} from "@/features/treasury/lib/check-portfolio";
+import {
+  cashAmountFromPayments,
+  paymentCreateData,
+  primaryPaymentMethod,
+  validatePaymentsAgainstTotal,
+  type TreasuryPaymentInput,
+} from "@/features/treasury/lib/payments";
 
 export type TreasuryLineInput = {
   projectId?: string;
@@ -31,16 +48,21 @@ export type CheckDetailsInput = {
   checkAccount?: string;
 };
 
+export type { TreasuryPaymentInput };
+
 export type CreateReceiptInput = {
   issueDate: string;
   clientId?: string;
   partyName?: string;
   concept?: string;
+  /** @deprecated Preferí `payments`. */
   paymentMethod?: PaymentMethod;
   currency?: string;
   notes?: string;
+  /** @deprecated Preferí `payments`. */
   check?: CheckDetailsInput;
   lines: TreasuryLineInput[];
+  payments?: TreasuryPaymentInput[];
 };
 
 export type CreatePaymentOrderInput = {
@@ -48,11 +70,14 @@ export type CreatePaymentOrderInput = {
   supplierId?: string;
   partyName?: string;
   concept?: string;
+  /** @deprecated Preferí `payments`. */
   paymentMethod?: PaymentMethod;
   currency?: string;
   notes?: string;
+  /** @deprecated Preferí `payments`. */
   check?: CheckDetailsInput;
   lines: TreasuryLineInput[];
+  payments?: TreasuryPaymentInput[];
 };
 
 export type ActionResult =
@@ -63,34 +88,51 @@ function canManage(role: string) {
   return ["ADMIN", "DIRECTOR", "RESIDENT"].includes(role);
 }
 
-function normalizeCheck(
-  paymentMethod: PaymentMethod | undefined,
-  check?: CheckDetailsInput,
-) {
-  if (paymentMethod !== "CHECK") {
+function resolvePayments(
+  input: {
+    payments?: TreasuryPaymentInput[];
+    paymentMethod?: PaymentMethod;
+    check?: CheckDetailsInput;
+  },
+  totalAmount: number,
+): TreasuryPaymentInput[] {
+  if (input.payments && input.payments.length > 0) {
+    return input.payments.filter((p) => Number(p.amount) > 0);
+  }
+  // Compatibilidad con documentos de un solo medio.
+  const method = input.paymentMethod ?? "CASH";
+  return [
+    {
+      method,
+      amount: totalAmount,
+      checkNumber: input.check?.checkNumber,
+      checkBank: input.check?.checkBank,
+      checkIssueDate: input.check?.checkIssueDate,
+      checkDueDate: input.check?.checkDueDate,
+      checkAccount: input.check?.checkAccount,
+    },
+  ];
+}
+
+function legacyCheckFromPayments(payments: TreasuryPaymentInput[]) {
+  const check = payments.find((p) => p.method === "CHECK");
+  if (!check) {
     return {
-      checkNumber: null,
-      checkBank: null,
-      checkIssueDate: null,
-      checkDueDate: null,
-      checkAccount: null,
+      checkNumber: null as string | null,
+      checkBank: null as string | null,
+      checkIssueDate: null as Date | null,
+      checkDueDate: null as Date | null,
+      checkAccount: null as string | null,
     };
   }
-
-  const checkNumber = check?.checkNumber?.trim() || "";
-  const checkBank = check?.checkBank?.trim() || "";
-  if (!checkNumber || !checkBank) {
-    throw new Error("Completá número y banco del cheque.");
-  }
-
   return {
-    checkNumber,
-    checkBank,
-    checkIssueDate: check?.checkIssueDate
+    checkNumber: check.checkNumber?.trim() || null,
+    checkBank: check.checkBank?.trim() || null,
+    checkIssueDate: check.checkIssueDate
       ? new Date(check.checkIssueDate)
       : null,
-    checkDueDate: check?.checkDueDate ? new Date(check.checkDueDate) : null,
-    checkAccount: check?.checkAccount?.trim() || null,
+    checkDueDate: check.checkDueDate ? new Date(check.checkDueDate) : null,
+    checkAccount: check.checkAccount?.trim() || null,
   };
 }
 
@@ -98,6 +140,8 @@ function revalidateTreasury(projectIds: string[], doc?: { kind: "receipt" | "pay
   revalidatePath("/treasury");
   revalidatePath("/treasury/receipts");
   revalidatePath("/treasury/payment-orders");
+  revalidatePath("/treasury/checks");
+  revalidatePath("/treasury/banks");
   revalidatePath("/treasury/cash");
   revalidatePath("/treasury/cash/treasury");
   if (doc) {
@@ -152,9 +196,15 @@ export async function createReceipt(
       lines.map((l) => l.projectId ?? ""),
     );
 
-    const checkData = normalizeCheck(input.paymentMethod, input.check);
+    const totalAmount = Number(sumAmounts(lines).toString());
+    const payments = resolvePayments(input, totalAmount);
+    const paymentError = validatePaymentsAgainstTotal(payments, totalAmount);
+    if (paymentError) return { ok: false, error: paymentError };
+
     const currency =
       input.currency?.trim() || (await getOrganizationCurrency());
+    const primaryMethod = primaryPaymentMethod(payments);
+    const checkData = legacyCheckFromPayments(payments);
 
     const receipt = await prisma.$transaction(async (tx) => {
       const number = await nextTreasuryNumber(
@@ -171,10 +221,10 @@ export async function createReceipt(
           number,
           issueDate: new Date(input.issueDate),
           status: "DRAFT",
-          paymentMethod: input.paymentMethod ?? "TRANSFER",
+          paymentMethod: primaryMethod,
           concept: input.concept?.trim() || null,
           currency,
-          totalAmount: sumAmounts(lines),
+          totalAmount,
           notes: input.notes?.trim() || null,
           ...checkData,
           lines: {
@@ -185,6 +235,9 @@ export async function createReceipt(
               amount: line.amount,
               sortOrder: index,
             })),
+          },
+          payments: {
+            create: paymentCreateData(payments),
           },
         },
       });
@@ -229,12 +282,71 @@ export async function createPaymentOrder(
       lines.map((l) => l.projectId ?? ""),
     );
 
-    const checkData = normalizeCheck(input.paymentMethod, input.check);
+    const totalAmount = Number(sumAmounts(lines).toString());
+    const payments = resolvePayments(input, totalAmount);
+    const paymentError = validatePaymentsAgainstTotal(payments, totalAmount, {
+      requirePortfolioChecks: true,
+    });
+    if (paymentError) return { ok: false, error: paymentError };
+
     const currency =
       input.currency?.trim() || (await getOrganizationCurrency());
+    const primaryMethod = primaryPaymentMethod(payments);
+    const checkData = legacyCheckFromPayments(payments);
 
     const order = await prisma.$transaction(async (tx) => {
       const number = await nextTreasuryNumber(session.organizationId, "OP", tx);
+
+      // Resolver datos de cheques de cartera antes de crear.
+      const paymentRows = paymentCreateData(payments, {
+        forPaymentOrder: true,
+      });
+      for (const row of paymentRows) {
+        if (row.method !== "CHECK" || !row.checkInstrumentId) continue;
+        const check = await tx.checkInstrument.findFirst({
+          where: {
+            id: row.checkInstrumentId,
+            organizationId: session.organizationId,
+            status: "IN_PORTFOLIO",
+          },
+        });
+        if (!check) {
+          throw new Error(
+            "Uno de los cheques elegidos no está disponible en cartera.",
+          );
+        }
+        const alreadyLinked = await tx.paymentOrderPayment.findFirst({
+          where: {
+            checkInstrumentId: check.id,
+            paymentOrder: {
+              organizationId: session.organizationId,
+              status: { not: "CANCELLED" },
+            },
+          },
+        });
+        if (alreadyLinked) {
+          throw new Error(
+            `El cheque ${check.number} (${check.bank}) ya está usado en otra orden de pago.`,
+          );
+        }
+        row.amount = toNumber(check.amount);
+        row.checkNumber = check.number;
+        row.checkBank = check.bank;
+        row.checkIssueDate = check.issueDate;
+        row.checkDueDate = check.dueDate;
+        row.checkAccount = check.account;
+      }
+
+      const paymentsSum = paymentRows.reduce(
+        (acc, p) => acc + Number(p.amount),
+        0,
+      );
+      if (Math.abs(paymentsSum - totalAmount) > 0.009) {
+        throw new Error(
+          "La suma de medios (con montos de cheques de cartera) no coincide con el total de líneas.",
+        );
+      }
+
       return tx.paymentOrder.create({
         data: {
           organizationId: session.organizationId,
@@ -244,10 +356,10 @@ export async function createPaymentOrder(
           number,
           issueDate: new Date(input.issueDate),
           status: "DRAFT",
-          paymentMethod: input.paymentMethod ?? "TRANSFER",
+          paymentMethod: primaryMethod,
           concept: input.concept?.trim() || null,
           currency,
-          totalAmount: sumAmounts(lines),
+          totalAmount,
           notes: input.notes?.trim() || null,
           ...checkData,
           lines: {
@@ -258,6 +370,9 @@ export async function createPaymentOrder(
               amount: line.amount,
               sortOrder: index,
             })),
+          },
+          payments: {
+            create: paymentRows,
           },
         },
       });
@@ -322,31 +437,92 @@ export async function postReceipt(id: string): Promise<ActionResult> {
     const result = await prisma.$transaction(async (tx) => {
       const doc = await tx.receipt.findFirst({
         where: { id, organizationId: session.organizationId },
-        include: { lines: true },
+        include: {
+          lines: true,
+          payments: true,
+          client: { select: { name: true } },
+        },
       });
       if (!doc) throw new Error("Recibo no encontrado.");
       if (doc.status !== "DRAFT" && doc.status !== "ISSUED") {
         throw new Error("El recibo no se puede imputar en este estado.");
       }
 
-      await applyBudgetImpact(tx, doc.lines, "actualIncome", 1);
+      const cashAmount =
+        doc.payments.length > 0
+          ? cashAmountFromPayments(
+              doc.payments.map((p) => ({
+                method: p.method,
+                amount: toNumber(p.amount),
+              })),
+            )
+          : doc.paymentMethod === "CASH"
+            ? toNumber(doc.totalAmount)
+            : 0;
 
-      if (doc.paymentMethod === "CASH") {
+      if (cashAmount > 0) {
         await postCashMovementFromTreasuryDoc(tx, {
           organizationId: session.organizationId,
           currency: doc.currency,
-          amount: toNumber(doc.totalAmount),
+          amount: cashAmount,
           kind: "INCOME",
-          description: `Recibo ${doc.number}${doc.partyName ? ` · ${doc.partyName}` : ""}`,
+          description: `Recibo ${doc.number}${
+            doc.client?.name || doc.partyName
+              ? ` · ${doc.client?.name ?? doc.partyName}`
+              : ""
+          }`,
           receiptId: doc.id,
           createdById: session.user.id,
         });
       }
 
+      await ingestChecksFromPostedReceipt(tx, {
+        organizationId: session.organizationId,
+        receiptId: doc.id,
+        currency: doc.currency,
+        drawerName: doc.client?.name ?? doc.partyName,
+        payments:
+          doc.payments.length > 0
+            ? doc.payments
+            : doc.paymentMethod === "CHECK"
+              ? [
+                  {
+                    method: "CHECK" as const,
+                    amount: doc.totalAmount,
+                    checkNumber: doc.checkNumber,
+                    checkBank: doc.checkBank,
+                    checkIssueDate: doc.checkIssueDate,
+                    checkDueDate: doc.checkDueDate,
+                    checkAccount: doc.checkAccount,
+                  },
+                ]
+              : [],
+      });
+
+      await postBankMovementsFromTreasuryDoc(tx, {
+        organizationId: session.organizationId,
+        currency: doc.currency,
+        kind: "INCOME",
+        description: `Recibo ${doc.number}${
+          doc.client?.name || doc.partyName
+            ? ` · ${doc.client?.name ?? doc.partyName}`
+            : ""
+        }`,
+        receiptId: doc.id,
+        createdById: session.user.id,
+        payments: doc.payments,
+      });
+
       await tx.receipt.update({
         where: { id },
         data: { status: "POSTED", postedAt: new Date() },
       });
+
+      await syncBudgetItemsFromTreasury(
+        tx,
+        session.organizationId,
+        doc.lines.map((l) => l.budgetItemId),
+      );
 
       return doc;
     });
@@ -384,8 +560,20 @@ export async function cancelReceipt(id: string): Promise<ActionResult> {
       }
 
       if (doc.status === "POSTED") {
-        await applyBudgetImpact(tx, doc.lines, "actualIncome", -1);
-        if (doc.paymentMethod === "CASH") {
+        await cancelChecksFromReceipt(
+          tx,
+          session.organizationId,
+          doc.id,
+        );
+        await reverseBankMovementsForTreasuryDoc(tx, {
+          organizationId: session.organizationId,
+          receiptId: doc.id,
+          createdById: session.user.id,
+        });
+        const cashMovements = await tx.cashMovement.count({
+          where: { receiptId: doc.id, type: { in: ["INCOME", "EXPENSE"] } },
+        });
+        if (cashMovements > 0) {
           await reverseCashMovementsForTreasuryDoc(tx, {
             organizationId: session.organizationId,
             receiptId: doc.id,
@@ -398,6 +586,14 @@ export async function cancelReceipt(id: string): Promise<ActionResult> {
         where: { id },
         data: { status: "CANCELLED", cancelledAt: new Date() },
       });
+
+      if (doc.status === "POSTED") {
+        await syncBudgetItemsFromTreasury(
+          tx,
+          session.organizationId,
+          doc.lines.map((l) => l.budgetItemId),
+        );
+      }
 
       return doc;
     });
@@ -459,20 +655,30 @@ export async function postPaymentOrder(id: string): Promise<ActionResult> {
     const result = await prisma.$transaction(async (tx) => {
       const doc = await tx.paymentOrder.findFirst({
         where: { id, organizationId: session.organizationId },
-        include: { lines: true },
+        include: { lines: true, payments: true },
       });
       if (!doc) throw new Error("Orden de pago no encontrada.");
       if (doc.status !== "DRAFT" && doc.status !== "ISSUED") {
         throw new Error("La orden no se puede imputar en este estado.");
       }
 
-      await applyBudgetImpact(tx, doc.lines, "actualCost", 1);
+      const cashAmount =
+        doc.payments.length > 0
+          ? cashAmountFromPayments(
+              doc.payments.map((p) => ({
+                method: p.method,
+                amount: toNumber(p.amount),
+              })),
+            )
+          : doc.paymentMethod === "CASH"
+            ? toNumber(doc.totalAmount)
+            : 0;
 
-      if (doc.paymentMethod === "CASH") {
+      if (cashAmount > 0) {
         await postCashMovementFromTreasuryDoc(tx, {
           organizationId: session.organizationId,
           currency: doc.currency,
-          amount: toNumber(doc.totalAmount),
+          amount: cashAmount,
           kind: "EXPENSE",
           description: `OP ${doc.number}${doc.partyName ? ` · ${doc.partyName}` : ""}`,
           paymentOrderId: doc.id,
@@ -480,10 +686,36 @@ export async function postPaymentOrder(id: string): Promise<ActionResult> {
         });
       }
 
+      await deliverChecksFromPostedPaymentOrder(tx, {
+        organizationId: session.organizationId,
+        paymentOrderId: doc.id,
+        payments: doc.payments.map((p) => ({
+          method: p.method,
+          amount: p.amount,
+          checkInstrumentId: p.checkInstrumentId,
+        })),
+      });
+
+      await postBankMovementsFromTreasuryDoc(tx, {
+        organizationId: session.organizationId,
+        currency: doc.currency,
+        kind: "EXPENSE",
+        description: `OP ${doc.number}${doc.partyName ? ` · ${doc.partyName}` : ""}`,
+        paymentOrderId: doc.id,
+        createdById: session.user.id,
+        payments: doc.payments,
+      });
+
       await tx.paymentOrder.update({
         where: { id },
         data: { status: "POSTED", postedAt: new Date() },
       });
+
+      await syncBudgetItemsFromTreasury(
+        tx,
+        session.organizationId,
+        doc.lines.map((l) => l.budgetItemId),
+      );
 
       return doc;
     });
@@ -523,8 +755,23 @@ export async function cancelPaymentOrder(id: string): Promise<ActionResult> {
       }
 
       if (doc.status === "POSTED") {
-        await applyBudgetImpact(tx, doc.lines, "actualCost", -1);
-        if (doc.paymentMethod === "CASH") {
+        await returnChecksFromPaymentOrder(
+          tx,
+          session.organizationId,
+          doc.id,
+        );
+        await reverseBankMovementsForTreasuryDoc(tx, {
+          organizationId: session.organizationId,
+          paymentOrderId: doc.id,
+          createdById: session.user.id,
+        });
+        const cashMovements = await tx.cashMovement.count({
+          where: {
+            paymentOrderId: doc.id,
+            type: { in: ["INCOME", "EXPENSE"] },
+          },
+        });
+        if (cashMovements > 0) {
           await reverseCashMovementsForTreasuryDoc(tx, {
             organizationId: session.organizationId,
             paymentOrderId: doc.id,
@@ -537,6 +784,14 @@ export async function cancelPaymentOrder(id: string): Promise<ActionResult> {
         where: { id },
         data: { status: "CANCELLED", cancelledAt: new Date() },
       });
+
+      if (doc.status === "POSTED") {
+        await syncBudgetItemsFromTreasury(
+          tx,
+          session.organizationId,
+          doc.lines.map((l) => l.budgetItemId),
+        );
+      }
 
       return doc;
     });
@@ -554,6 +809,108 @@ export async function cancelPaymentOrder(id: string): Promise<ActionResult> {
         error instanceof Error
           ? error.message
           : "No se pudo anular la orden de pago.",
+    };
+  }
+}
+
+/**
+ * Corrige el medio de pago a Efectivo y, si el doc ya está imputado,
+ * registra el movimiento faltante en la caja diaria abierta.
+ */
+export async function syncPostedDocumentToCash(
+  kind: "receipt" | "payment-order",
+  id: string,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    if (!canManage(session.organizationRole)) {
+      return { ok: false, error: "Sin permiso." };
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      if (kind === "receipt") {
+        const doc = await tx.receipt.findFirst({
+          where: { id, organizationId: session.organizationId },
+          include: { lines: true },
+        });
+        if (!doc) throw new Error("Recibo no encontrado.");
+        if (doc.status !== "POSTED") {
+          throw new Error("Solo se puede sincronizar un recibo ya imputado.");
+        }
+
+        if (doc.paymentMethod !== "CASH") {
+          await tx.receipt.update({
+            where: { id },
+            data: { paymentMethod: "CASH" },
+          });
+        }
+
+        const existing = await tx.cashMovement.findFirst({
+          where: { receiptId: id, type: { in: ["INCOME", "EXPENSE"] } },
+        });
+        if (!existing) {
+          await postCashMovementFromTreasuryDoc(tx, {
+            organizationId: session.organizationId,
+            currency: doc.currency,
+            amount: toNumber(doc.totalAmount),
+            kind: "INCOME",
+            description: `Recibo ${doc.number}${doc.partyName ? ` · ${doc.partyName}` : ""}`,
+            receiptId: doc.id,
+            createdById: session.user.id,
+          });
+        }
+
+        return { id: doc.id, number: doc.number, projectIds: doc.lines.map((l) => l.projectId ?? "") };
+      }
+
+      const doc = await tx.paymentOrder.findFirst({
+        where: { id, organizationId: session.organizationId },
+        include: { lines: true },
+      });
+      if (!doc) throw new Error("Orden de pago no encontrada.");
+      if (doc.status !== "POSTED") {
+        throw new Error("Solo se puede sincronizar una OP ya imputada.");
+      }
+
+      if (doc.paymentMethod !== "CASH") {
+        await tx.paymentOrder.update({
+          where: { id },
+          data: { paymentMethod: "CASH" },
+        });
+      }
+
+      const existing = await tx.cashMovement.findFirst({
+        where: { paymentOrderId: id, type: { in: ["INCOME", "EXPENSE"] } },
+      });
+      if (!existing) {
+        await postCashMovementFromTreasuryDoc(tx, {
+          organizationId: session.organizationId,
+          currency: doc.currency,
+          amount: toNumber(doc.totalAmount),
+          kind: "EXPENSE",
+          description: `OP ${doc.number}${doc.partyName ? ` · ${doc.partyName}` : ""}`,
+          paymentOrderId: doc.id,
+          createdById: session.user.id,
+        });
+      }
+
+      return {
+        id: doc.id,
+        number: doc.number,
+        projectIds: doc.lines.map((l) => l.projectId ?? ""),
+      };
+    });
+
+    revalidateTreasury(result.projectIds, { kind, id });
+    return { ok: true, id: result.id, number: result.number };
+  } catch (error) {
+    console.error("syncPostedDocumentToCash", error);
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo registrar el movimiento en caja.",
     };
   }
 }
