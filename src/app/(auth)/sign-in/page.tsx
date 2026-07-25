@@ -1,0 +1,42 @@
+import { SignIn } from "@clerk/nextjs";
+import { LocalLoginForm } from "@/features/auth/components/local-login-form";
+import { isClerkConfigured, isDevAuthBypass } from "@/lib/auth-config";
+import { getSession } from "@/lib/auth";
+import { redirect } from "next/navigation";
+
+export default async function SignInPage() {
+  const session = await getSession();
+  if (session && !isDevAuthBypass()) {
+    redirect("/");
+  }
+
+  if (isClerkConfigured() && !isDevAuthBypass()) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-background px-4">
+        <SignIn routing="path" path="/sign-in" signUpUrl="/sign-up" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-dvh items-center justify-center bg-background px-4">
+      <div className="w-full max-w-md space-y-5 rounded-lg border border-border bg-surface p-6">
+        <div className="text-center">
+          <h1 className="font-display text-2xl tracking-tight">
+            Iniciar sesión
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Ingresá con tu email y contraseña de la constructora.
+          </p>
+        </div>
+        <LocalLoginForm />
+        {isDevAuthBypass() && (
+          <p className="text-center text-xs text-muted-foreground">
+            Bypass de desarrollo activo: también podés entrar sin login si ya
+            hay sesión seed.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}

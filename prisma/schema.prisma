@@ -1,0 +1,1329 @@
+// =============================================================================
+// Constructora ERP — Esquema de Base de Datos (Prisma)
+// =============================================================================
+// Software de Gestión para Empresas Constructoras
+// Motor: PostgreSQL | ORM: Prisma
+//
+// Módulos cubiertos:
+//   1. Presupuesto y Control Financiero
+//   2. Gestión de Obra y Campo
+//   3. Logística y Subcontratas
+//   4. Configuración y Seguridad (RBAC)
+//
+// Convenciones:
+//   - IDs: cuid() para claves primarias
+//   - Montos: Decimal(14, 2) en moneda de la obra
+//   - Soft-delete selectivo vía deletedAt donde aplique
+//   - Multi-tenancy ligero: Organization → Projects → resto
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+/// Roles de acceso (RBAC). Un usuario puede tener distinto rol por proyecto
+/// vía ProjectMembership; OrganizationRole define su rol a nivel empresa.
+enum OrganizationRole {
+  ADMIN /// Administrador de la organización (acceso total)
+  DIRECTOR /// Director de Obra / Gerencia de proyectos
+  RESIDENT /// Residente / Jefe de Obra (campo)
+  PROVIDER /// Proveedor / Subcontratista (acceso limitado)
+  VIEWER /// Solo lectura
+}
+
+enum ProjectStatus {
+  DRAFT
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum BudgetStatus {
+  DRAFT
+  APPROVED
+  REVISED /// Versión revisada tras órdenes de cambio
+  LOCKED /// Cerrado / no editable
+}
+
+enum ChangeOrderStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum CertificationStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  PAID
+  REJECTED
+}
+
+enum TaskStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  BLOCKED
+  CANCELLED
+}
+
+enum PunchListStatus {
+  PENDING
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum PunchListPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum PurchaseRequestStatus {
+  DRAFT
+  SUBMITTED
+  QUOTED /// Con cotizaciones de proveedores
+  APPROVED
+  ORDERED
+  REJECTED
+  CANCELLED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SENT
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+enum PurchaseInvoiceStatus {
+  DRAFT /// Subida / desglosada, pendiente de revisión
+  CONFIRMED /// Datos confirmados por el usuario
+  CANCELLED
+}
+
+enum ContractorDocStatus {
+  PENDING
+  VALID
+  EXPIRED
+  REJECTED
+}
+
+enum WeatherCondition {
+  CLEAR
+  CLOUDY
+  RAIN
+  STORM
+  WIND
+  FOG
+  OTHER
+}
+
+enum DocumentType {
+  PLAN /// Plano
+  SPEC /// Especificación técnica
+  CONTRACT
+  REPORT
+  PHOTO
+  OTHER
+}
+
+// =============================================================================
+// ORGANIZACIÓN Y USUARIOS (Módulo 4 — Seguridad)
+// =============================================================================
+
+/// Empresa constructora (tenant). Todo el dominio cuelga de Organization.
+model Organization {
+  id           String   @id @default(cuid())
+  name         String /// Nombre comercial
+  legalName    String? /// Razón social
+  slug         String   @unique /// Identificador URL-friendly
+  taxId        String? /// CUIT / RUT / NIT
+  email        String?
+  phone        String?
+  address      String?
+  city         String?
+  province     String?
+  postalCode   String?
+  country      String?  @default("AR")
+  website      String?
+  logoUrl      String?
+  facebookUrl  String?
+  instagramUrl String?
+  linkedinUrl  String?
+  xUrl         String? /// X / Twitter
+  whatsapp     String?
+  themeId      String   @default("obra") /// Paleta de color (config/themes)
+  /// Moneda principal / de reporte
+  currency     String   @default("ARS")
+  /// Monedas habilitadas para operar (multimoneda)
+  enabledCurrencies String[] @default(["ARS", "USD"])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  members       OrganizationMember[]
+  projects      Project[]
+  clients       Client[]
+  contractors   Contractor[]
+  suppliers     Supplier[]
+  receipts      Receipt[]
+  paymentOrders PaymentOrder[]
+  exchangeRates ExchangeRate[]
+  cashRegisters CashRegister[]
+  cashSessions  CashSession[]
+  cashMovements CashMovement[]
+
+  @@map("organizations")
+}
+
+/// Tipo de cambio entre monedas de la organización.
+/// `rate` = unidades de `toCurrency` por 1 unidad de `fromCurrency` (ej. USD→ARS = 1200).
+model ExchangeRate {
+  id             String   @id @default(cuid())
+  organizationId String
+  fromCurrency   String
+  toCurrency     String
+  rate           Decimal  @db.Decimal(18, 6)
+  effectiveAt    DateTime @db.Date
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, fromCurrency, toCurrency, effectiveAt])
+  @@index([organizationId, fromCurrency, toCurrency, effectiveAt])
+  @@map("exchange_rates")
+}
+
+/// Usuario de la plataforma. clerkId / authId enlaza con el proveedor de Auth
+/// (Clerk, NextAuth o Supabase Auth). No almacenamos contraseñas aquí.
+model User {
+  id           String   @id @default(cuid())
+  authId       String   @unique /// ID externo (Clerk) o local:{userId}
+  email        String   @unique
+  passwordHash String? /// Login local (null si solo Clerk)
+  firstName    String?
+  lastName     String?
+  phone        String?
+  avatarUrl    String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships          OrganizationMember[]
+  projectMemberships   ProjectMembership[]
+  createdProjects      Project[]            @relation("ProjectCreator")
+  dailyReports         DailyReport[]        @relation("DailyReportAuthor")
+  punchItemsCreated    PunchListItem[]      @relation("PunchListCreator")
+  punchItemsAssigned   PunchListItem[]      @relation("PunchListAssignee")
+  tasksAssigned        Task[]               @relation("TaskAssignee")
+  changeOrdersCreated  ChangeOrder[]        @relation("ChangeOrderCreator")
+  documentsUploaded    Document[]           @relation("DocumentUploader")
+  purchaseRequests     PurchaseRequest[]    @relation("PurchaseRequestCreator")
+  receiptsCreated      Receipt[]            @relation("ReceiptCreator")
+  paymentOrdersCreated PaymentOrder[]       @relation("PaymentOrderCreator")
+  cashSessionsOpened   CashSession[]        @relation("CashSessionOpener")
+  cashSessionsClosed   CashSession[]        @relation("CashSessionCloser")
+  cashMovementsCreated CashMovement[]       @relation("CashMovementCreator")
+
+  @@map("users")
+}
+
+/// Membresía del usuario en una organización + rol global en esa org.
+model OrganizationMember {
+  id              String           @id @default(cuid())
+  organizationId  String
+  userId          String
+  role            OrganizationRole @default(VIEWER)
+  /// Módulos habilitados (keys de APP_MODULES). Vacío = defaults del rol.
+  allowedModules  String[]         @default([])
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@map("organization_members")
+}
+
+/// Rol del usuario dentro de un proyecto concreto (puede diferir del rol org).
+model ProjectMembership {
+  id        String           @id @default(cuid())
+  projectId String
+  userId    String
+  role      OrganizationRole @default(RESIDENT)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId])
+  @@map("project_memberships")
+}
+
+// =============================================================================
+// PROYECTO / OBRA (núcleo del dominio)
+// =============================================================================
+
+/// Obra / proyecto de construcción. Entidad raíz de los módulos 1–3.
+model Project {
+  id             String        @id @default(cuid())
+  organizationId String
+  clientId       String? /// Mandante / cliente de la obra
+  createdById    String?
+  code           String /// Código interno de obra (ej. OB-2026-001)
+  name           String
+  description    String?
+  address        String?
+  city           String?
+  country        String?
+  latitude       Decimal?      @db.Decimal(10, 7)
+  longitude      Decimal?      @db.Decimal(10, 7)
+  status         ProjectStatus @default(DRAFT)
+  startDate      DateTime?
+  endDate        DateTime? /// Fecha planificada de término
+  currency       String        @default("ARS") /// ISO 4217
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  createdBy    User?               @relation("ProjectCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  members      ProjectMembership[]
+  budgets      Budget[]
+  changeOrders ChangeOrder[]
+  certifications Certification[]
+  tasks        Task[]
+  milestones   Milestone[]
+  dailyReports DailyReport[]
+  punchItems   PunchListItem[]
+  documents    Document[]
+  inventory    InventoryItem[]
+  purchaseRequests PurchaseRequest[]
+  purchaseOrders   PurchaseOrder[]
+  purchaseInvoices PurchaseInvoice[]
+  projectContractors ProjectContractor[]
+  projectSuppliers   ProjectSupplier[]
+  receiptLines       ReceiptLine[]
+  paymentOrderLines  PaymentOrderLine[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@index([clientId])
+  @@map("projects")
+}
+
+// =============================================================================
+// CLIENTES Y PROVEEDORES (catálogo org + vínculo a obras)
+// =============================================================================
+
+/// Cliente / mandante (dueño de la obra o contratante).
+model Client {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  taxId          String? /// RUT / NIT / CUIT
+  email          String?
+  phone          String?
+  address        String?
+  contactName    String? /// Persona de contacto
+  notes          String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  projects     Project[]
+  receipts     Receipt[]
+
+  @@index([organizationId, isActive])
+  @@index([organizationId, name])
+  @@map("clients")
+}
+
+/// Proveedor del catálogo de la organización, asignado a una obra concreta.
+model ProjectSupplier {
+  id         String   @id @default(cuid())
+  projectId  String
+  supplierId String
+  roleNotes  String? /// ej. "Hormigón", "Ferretería"
+  isPrimary  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, supplierId])
+  @@index([supplierId])
+  @@map("project_suppliers")
+}
+
+// =============================================================================
+// MÓDULO 1 — PRESUPUESTO Y CONTROL FINANCIERO
+// =============================================================================
+
+/// Cabecera de presupuesto. Una obra puede tener varias versiones (baselines).
+model Budget {
+  id          String       @id @default(cuid())
+  projectId   String
+  name        String /// ej. "Presupuesto Base", "Rev. 2 — Post ODC-003"
+  version     Int          @default(1)
+  status      BudgetStatus @default(DRAFT)
+  currency    String? /// Si null, hereda Project.currency
+  notes       String?
+  approvedAt  DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  project Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  items   BudgetItem[]
+
+  @@unique([projectId, version])
+  @@index([projectId, status])
+  @@map("budgets")
+}
+
+/// Partida / Unidad de Obra dentro del presupuesto.
+/// Total estimado = quantity * unitCost (persistido para reportes rápidos).
+/// actualCost se actualiza con costos reales ejecutados (compras, partes, etc.).
+model BudgetItem {
+  id          String   @id @default(cuid())
+  budgetId    String
+  parentId    String? /// Jerarquía de partidas (capítulo → subpartida)
+  code        String /// Código de partida (ej. 01.02.03)
+  description String
+  quantity    Decimal  @db.Decimal(14, 4)
+  unit        String /// Unidad de medida (m2, m3, kg, gl, etc.)
+  unitCost    Decimal  @db.Decimal(14, 2) /// Costo unitario estimado
+  totalCost   Decimal  @db.Decimal(14, 2) /// quantity * unitCost
+  actualCost  Decimal  @default(0) @db.Decimal(14, 2) /// Costo real acumulado (egresos / OP)
+  actualIncome Decimal @default(0) @db.Decimal(14, 2) /// Ingresos reales (recibos)
+  actualQty   Decimal  @default(0) @db.Decimal(14, 4) /// Cantidad ejecutada
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  budget       Budget            @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  parent       BudgetItem?       @relation("BudgetItemTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children     BudgetItem[]      @relation("BudgetItemTree")
+  changeOrders ChangeOrderItem[]
+  certItems    CertificationItem[]
+  dailyAdvances DailyReportAdvance[]
+  inventory    InventoryItem[]
+  receiptLines      ReceiptLine[]
+  paymentOrderLines PaymentOrderLine[]
+
+  @@unique([budgetId, code])
+  @@index([budgetId, parentId])
+  @@index([parentId])
+  @@map("budget_items")
+}
+
+/// Orden de Cambio (Change Order / Extra / Modificación contractual).
+model ChangeOrder {
+  id          String            @id @default(cuid())
+  projectId   String
+  createdById String?
+  number      String /// Número correlativo (ODC-001)
+  title       String
+  description String?
+  status      ChangeOrderStatus @default(PENDING)
+  amountDelta Decimal           @default(0) @db.Decimal(14, 2) /// Impacto neto (+/-)
+  requestedAt DateTime          @default(now())
+  decidedAt   DateTime?
+  decidedBy   String? /// authId o nombre de quien aprobó/rechazó
+  notes       String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  project   Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User?             @relation("ChangeOrderCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  items     ChangeOrderItem[]
+
+  @@unique([projectId, number])
+  @@index([projectId, status])
+  @@map("change_orders")
+}
+
+/// Detalle de impacto de una Orden de Cambio sobre partidas.
+model ChangeOrderItem {
+  id            String  @id @default(cuid())
+  changeOrderId String
+  budgetItemId  String?
+  description   String
+  quantityDelta Decimal @default(0) @db.Decimal(14, 4)
+  unitCostDelta Decimal @default(0) @db.Decimal(14, 2)
+  amountDelta   Decimal @db.Decimal(14, 2)
+
+  changeOrder ChangeOrder @relation(fields: [changeOrderId], references: [id], onDelete: Cascade)
+  budgetItem  BudgetItem? @relation(fields: [budgetItemId], references: [id], onDelete: SetNull)
+
+  @@index([changeOrderId])
+  @@index([budgetItemId])
+  @@map("change_order_items")
+}
+
+/// Certificación de Obra: facturación por % de avance físico.
+model Certification {
+  id              String               @id @default(cuid())
+  projectId       String
+  number          String /// Certificación N° correlativo
+  periodStart     DateTime
+  periodEnd       DateTime
+  status          CertificationStatus  @default(DRAFT)
+  grossAmount     Decimal              @default(0) @db.Decimal(14, 2)
+  retentionPct    Decimal              @default(0) @db.Decimal(5, 2) /// % retención de garantía
+  retentionAmount Decimal              @default(0) @db.Decimal(14, 2)
+  netAmount       Decimal              @default(0) @db.Decimal(14, 2)
+  notes           String?
+  submittedAt     DateTime?
+  approvedAt      DateTime?
+  paidAt          DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  project Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  items   CertificationItem[]
+
+  @@unique([projectId, number])
+  @@index([projectId, status])
+  @@map("certifications")
+}
+
+/// Línea de certificación ligada a una partida (avance % o cantidad).
+model CertificationItem {
+  id              String  @id @default(cuid())
+  certificationId String
+  budgetItemId    String
+  previousPct     Decimal @default(0) @db.Decimal(5, 2) /// % acumulado anterior
+  currentPct      Decimal @db.Decimal(5, 2) /// % acumulado esta certificación
+  periodPct       Decimal @db.Decimal(5, 2) /// % del período (current - previous)
+  amount          Decimal @db.Decimal(14, 2)
+
+  certification Certification @relation(fields: [certificationId], references: [id], onDelete: Cascade)
+  budgetItem    BudgetItem   @relation(fields: [budgetItemId], references: [id], onDelete: Restrict)
+
+  @@unique([certificationId, budgetItemId])
+  @@index([budgetItemId])
+  @@map("certification_items")
+}
+
+// =============================================================================
+// MÓDULO 2 — GESTIÓN DE OBRA Y CAMPO
+// =============================================================================
+
+/// Hito del cronograma (marcador temporal de alto nivel).
+model Milestone {
+  id          String    @id @default(cuid())
+  projectId   String
+  name        String
+  description String?
+  dueDate     DateTime?
+  completedAt DateTime?
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+
+  @@index([projectId])
+  @@map("milestones")
+}
+
+/// Tarea del cronograma (base para Diagrama de Gantt).
+/// Dependencias simples vía predecessorId (FS — Finish-to-Start).
+model Task {
+  id            String     @id @default(cuid())
+  projectId     String
+  milestoneId   String?
+  assigneeId    String?
+  predecessorId String?
+  name          String
+  description   String?
+  status        TaskStatus @default(NOT_STARTED)
+  progressPct   Decimal    @default(0) @db.Decimal(5, 2)
+  plannedStart  DateTime?
+  plannedEnd    DateTime?
+  actualStart   DateTime?
+  actualEnd     DateTime?
+  sortOrder     Int        @default(0)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  milestone   Milestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  assignee    User?      @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  predecessor Task?      @relation("TaskDependency", fields: [predecessorId], references: [id], onDelete: SetNull)
+  successors  Task[]     @relation("TaskDependency")
+
+  @@index([projectId, status])
+  @@index([assigneeId])
+  @@index([milestoneId])
+  @@map("tasks")
+}
+
+/// Parte Diario de Obra — cabecera del día en campo.
+model DailyReport {
+  id          String            @id @default(cuid())
+  projectId   String
+  authorId    String?
+  reportDate  DateTime          @db.Date
+  weather     WeatherCondition?
+  temperature Decimal?          @db.Decimal(5, 2) /// °C
+  notes       String? /// Notas generales del día
+  weatherNotes    String? /// Notas de la captura de clima
+  workforceNotes  String? /// Notas de la captura de personal
+  equipmentNotes  String? /// Notas de la captura de máquinas
+  advanceNotes    String? /// Notas de la captura de avances
+  incidentNotes   String? /// Notas de la captura de incidencias
+  /// Flag para sincronización offline → online (PWA / cola diferida)
+  syncedAt    DateTime?
+  clientUuid  String?           @unique /// UUID generado en dispositivo offline
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  project   Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author    User?                @relation("DailyReportAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  workforce DailyReportWorkforce[]
+  equipment DailyReportEquipment[]
+  advances  DailyReportAdvance[]
+  incidents DailyReportIncident[]
+
+  @@unique([projectId, reportDate])
+  @@index([projectId, reportDate])
+  @@index([authorId])
+  @@map("daily_reports")
+}
+
+/// Personal presente en obra ese día.
+model DailyReportWorkforce {
+  id            String  @id @default(cuid())
+  dailyReportId String
+  workerName    String
+  roleOrTrade   String? /// Oficio / cargo
+  companyName   String? /// Empresa / subcontratista
+  hoursWorked   Decimal @db.Decimal(5, 2)
+  notes         String?
+
+  dailyReport DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
+
+  @@index([dailyReportId])
+  @@map("daily_report_workforce")
+}
+
+/// Horas máquina / equipos utilizados.
+model DailyReportEquipment {
+  id            String  @id @default(cuid())
+  dailyReportId String
+  equipmentName String
+  hoursUsed     Decimal @db.Decimal(5, 2)
+  operatorName  String?
+  notes         String?
+
+  dailyReport DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
+
+  @@index([dailyReportId])
+  @@map("daily_report_equipment")
+}
+
+/// Avance físico registrado en el parte diario (ligado a partida).
+model DailyReportAdvance {
+  id            String  @id @default(cuid())
+  dailyReportId String
+  budgetItemId  String?
+  description   String
+  quantity      Decimal @db.Decimal(14, 4)
+  unit          String?
+  notes         String?
+
+  dailyReport DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
+  budgetItem  BudgetItem? @relation(fields: [budgetItemId], references: [id], onDelete: SetNull)
+
+  @@index([dailyReportId])
+  @@index([budgetItemId])
+  @@map("daily_report_advances")
+}
+
+/// Incidencias del día (accidentes, detenciones, clima extremo, etc.).
+model DailyReportIncident {
+  id            String  @id @default(cuid())
+  dailyReportId String
+  title         String
+  description   String?
+  notes         String?
+  severity      PunchListPriority @default(MEDIUM)
+
+  dailyReport DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
+
+  @@index([dailyReportId])
+  @@map("daily_report_incidents")
+}
+
+/// Punch List / Lista de defectos u observaciones de calidad.
+model PunchListItem {
+  id           String            @id @default(cuid())
+  projectId    String
+  createdById  String?
+  assigneeId   String?
+  title        String
+  description  String?
+  location     String? /// Ubicación en obra (piso, zona, eje)
+  status       PunchListStatus   @default(PENDING)
+  priority     PunchListPriority @default(MEDIUM)
+  photoUrls    String[] /// URLs de fotos (storage externo)
+  dueDate      DateTime?
+  resolvedAt   DateTime?
+  /// Soporte offline
+  syncedAt     DateTime?
+  clientUuid   String?           @unique
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation("PunchListCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  assignee  User?   @relation("PunchListAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, status])
+  @@index([assigneeId])
+  @@map("punch_list_items")
+}
+
+/// Documento / Plano con control de versiones.
+model Document {
+  id           String       @id @default(cuid())
+  projectId    String
+  uploadedById String?
+  title        String
+  description  String?
+  type         DocumentType @default(OTHER)
+  category     String? /// Carpeta lógica (ej. "Estructural", "MEP")
+  currentVersion Int        @default(1)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  project    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy User?             @relation("DocumentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  versions   DocumentVersion[]
+
+  @@index([projectId, type])
+  @@map("documents")
+}
+
+/// Versión concreta de un documento (archivo en storage).
+model DocumentVersion {
+  id          String   @id @default(cuid())
+  documentId  String
+  version     Int
+  fileName    String
+  fileUrl     String /// URL en S3 / Supabase Storage / etc.
+  fileSize    Int? /// bytes
+  mimeType    String?
+  changeNotes String?
+  createdAt   DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, version])
+  @@index([documentId])
+  @@map("document_versions")
+}
+
+// =============================================================================
+// MÓDULO 3 — LOGÍSTICA Y SUBCONTRATAS
+// =============================================================================
+
+/// Proveedor de materiales / servicios (catálogo de la organización).
+model Supplier {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  taxId          String?
+  email          String?
+  phone          String?
+  address        String?
+  contactName    String?
+  notes          String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quotes           SupplierQuote[]
+  purchaseOrders   PurchaseOrder[]
+  purchaseInvoices PurchaseInvoice[]
+  projects         ProjectSupplier[]
+  paymentOrders    PaymentOrder[]
+
+  @@index([organizationId, isActive])
+  @@index([organizationId, name])
+  @@map("suppliers")
+}
+
+/// Solicitud de compra originada desde una obra.
+model PurchaseRequest {
+  id          String                @id @default(cuid())
+  projectId   String
+  createdById String?
+  number      String
+  title       String
+  status      PurchaseRequestStatus @default(DRAFT)
+  neededBy    DateTime?
+  notes       String?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  project   Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User?                @relation("PurchaseRequestCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  items     PurchaseRequestItem[]
+  quotes    SupplierQuote[]
+  orders    PurchaseOrder[]
+
+  @@unique([projectId, number])
+  @@index([projectId, status])
+  @@map("purchase_requests")
+}
+
+model PurchaseRequestItem {
+  id                String  @id @default(cuid())
+  purchaseRequestId String
+  description       String
+  quantity          Decimal @db.Decimal(14, 4)
+  unit              String
+  estimatedUnitCost Decimal? @db.Decimal(14, 2)
+  notes             String?
+
+  purchaseRequest PurchaseRequest @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
+  quoteItems      SupplierQuoteItem[]
+  orderItems      PurchaseOrderItem[]
+
+  @@index([purchaseRequestId])
+  @@map("purchase_request_items")
+}
+
+/// Cotización de un proveedor ante una solicitud (comparativa).
+model SupplierQuote {
+  id                String   @id @default(cuid())
+  purchaseRequestId String
+  supplierId        String
+  validUntil        DateTime?
+  totalAmount       Decimal  @default(0) @db.Decimal(14, 2)
+  notes             String?
+  isSelected        Boolean  @default(false) /// Cotización ganadora
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  purchaseRequest PurchaseRequest     @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
+  supplier        Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  items           SupplierQuoteItem[]
+
+  @@unique([purchaseRequestId, supplierId])
+  @@index([supplierId])
+  @@map("supplier_quotes")
+}
+
+model SupplierQuoteItem {
+  id                    String  @id @default(cuid())
+  supplierQuoteId       String
+  purchaseRequestItemId String?
+  description           String
+  quantity              Decimal @db.Decimal(14, 4)
+  unitCost              Decimal @db.Decimal(14, 2)
+  totalCost             Decimal @db.Decimal(14, 2)
+  leadTimeDays          Int?
+
+  supplierQuote       SupplierQuote        @relation(fields: [supplierQuoteId], references: [id], onDelete: Cascade)
+  purchaseRequestItem PurchaseRequestItem? @relation(fields: [purchaseRequestItemId], references: [id], onDelete: SetNull)
+
+  @@index([supplierQuoteId])
+  @@map("supplier_quote_items")
+}
+
+/// Orden de Compra emitida a un proveedor.
+model PurchaseOrder {
+  id                String              @id @default(cuid())
+  projectId         String
+  supplierId        String
+  purchaseRequestId String?
+  number            String
+  status            PurchaseOrderStatus @default(DRAFT)
+  orderedAt         DateTime?
+  expectedAt        DateTime?
+  receivedAt        DateTime?
+  subtotal          Decimal             @default(0) @db.Decimal(14, 2)
+  taxAmount         Decimal             @default(0) @db.Decimal(14, 2)
+  totalAmount       Decimal             @default(0) @db.Decimal(14, 2)
+  notes             String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  project         Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  supplier        Supplier             @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchaseRequest PurchaseRequest?     @relation(fields: [purchaseRequestId], references: [id], onDelete: SetNull)
+  items           PurchaseOrderItem[]
+
+  @@unique([projectId, number])
+  @@index([projectId, status])
+  @@index([supplierId])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id                    String  @id @default(cuid())
+  purchaseOrderId       String
+  purchaseRequestItemId String?
+  description           String
+  quantity              Decimal @db.Decimal(14, 4)
+  unit                  String
+  unitCost              Decimal @db.Decimal(14, 2)
+  totalCost             Decimal @db.Decimal(14, 2)
+  quantityReceived      Decimal @default(0) @db.Decimal(14, 4)
+
+  purchaseOrder       PurchaseOrder        @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  purchaseRequestItem PurchaseRequestItem? @relation(fields: [purchaseRequestItemId], references: [id], onDelete: SetNull)
+
+  @@index([purchaseOrderId])
+  @@map("purchase_order_items")
+}
+
+/// Factura de compra (proveedor) asociada a una obra, con archivo y desglose.
+model PurchaseInvoice {
+  id              String                @id @default(cuid())
+  projectId       String
+  supplierId      String?
+  number          String /// N° de comprobante (ej. 0001-00001234)
+  invoiceType     String? /// A / B / C / M / E
+  pointOfSale     String? /// Punto de venta
+  status          PurchaseInvoiceStatus @default(DRAFT)
+  issueDate       DateTime?
+  dueDate         DateTime?
+  currency        String                @default("ARS")
+  netAmount       Decimal               @default(0) @db.Decimal(14, 2) /// Neto gravado
+  taxAmount       Decimal               @default(0) @db.Decimal(14, 2) /// IVA
+  otherTaxes      Decimal               @default(0) @db.Decimal(14, 2)
+  totalAmount     Decimal               @default(0) @db.Decimal(14, 2)
+  supplierTaxId   String? /// CUIT emisor
+  supplierName    String?
+  cae             String?
+  caeDueDate      DateTime?
+  fileUrl         String
+  fileName        String
+  mimeType        String?
+  fileSize        Int?
+  rawText         String? /// Texto extraído (PDF/OCR)
+  extractionNotes String? /// Resumen del desglose automático
+  confidencePct   Decimal?              @db.Decimal(5, 2)
+  notes           String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  project  Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  supplier Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  items    PurchaseInvoiceItem[]
+
+  @@unique([projectId, number])
+  @@index([projectId, status])
+  @@index([supplierId])
+  @@index([supplierTaxId])
+  @@map("purchase_invoices")
+}
+
+model PurchaseInvoiceItem {
+  id                String  @id @default(cuid())
+  purchaseInvoiceId String
+  description       String
+  quantity          Decimal @default(1) @db.Decimal(14, 4)
+  unit              String  @default("u")
+  unitCost          Decimal @default(0) @db.Decimal(14, 2)
+  taxPct            Decimal @default(21) @db.Decimal(5, 2)
+  totalCost         Decimal @default(0) @db.Decimal(14, 2)
+  category          String? /// Categoría de inventario (ej. Hierros, Hormigón)
+  sortOrder         Int     @default(0)
+  inventoryItemId   String? /// Artículo de inventario generado/vinculado al confirmar
+
+  purchaseInvoice PurchaseInvoice @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Cascade)
+  inventoryItem   InventoryItem?  @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+
+  @@index([purchaseInvoiceId])
+  @@index([inventoryItemId])
+  @@map("purchase_invoice_items")
+}
+
+/// Stock / inventario por obra (y opcionalmente ligado a partida).
+model InventoryItem {
+  id             String   @id @default(cuid())
+  projectId      String
+  budgetItemId   String?
+  sku            String?
+  name           String
+  category       String   @default("General")
+  unit           String
+  quantityOnHand Decimal  @default(0) @db.Decimal(14, 4)
+  minQuantity    Decimal? @db.Decimal(14, 4) /// Umbral de alerta
+  unitCost       Decimal? @db.Decimal(14, 2)
+  location       String? /// Bodega / zona en obra
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  project              Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  budgetItem           BudgetItem?           @relation(fields: [budgetItemId], references: [id], onDelete: SetNull)
+  movements            InventoryMovement[]
+  purchaseInvoiceItems PurchaseInvoiceItem[]
+
+  @@index([projectId, category])
+  @@index([projectId, name])
+  @@index([budgetItemId])
+  @@map("inventory_items")
+}
+
+enum InventoryMovementType {
+  IN /// Ingreso (compra, transferencia)
+  OUT /// Consumo / salida
+  ADJUSTMENT /// Ajuste de inventario
+}
+
+model InventoryMovement {
+  id                   String                @id @default(cuid())
+  inventoryItemId      String
+  type                 InventoryMovementType
+  quantity             Decimal               @db.Decimal(14, 4)
+  reference            String? /// N° factura, parte diario, etc.
+  notes                String?
+  purchaseInvoiceId    String?
+  purchaseInvoiceItemId String?
+  dailyReportId        String?
+  occurredAt           DateTime              @default(now())
+  createdAt            DateTime              @default(now())
+
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  @@index([inventoryItemId, occurredAt])
+  @@index([dailyReportId])
+  @@index([purchaseInvoiceId])
+  @@map("inventory_movements")
+}
+
+/// Subcontratista (empresa) a nivel organización.
+model Contractor {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  taxId          String?
+  email          String?
+  phone          String?
+  address        String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  projects     ProjectContractor[]
+  documents    ContractorDocument[]
+
+  @@index([organizationId])
+  @@map("contractors")
+}
+
+/// Asignación de subcontratista a una obra + datos contractuales.
+model ProjectContractor {
+  id              String   @id @default(cuid())
+  projectId       String
+  contractorId    String
+  contractNumber  String?
+  contractAmount  Decimal? @db.Decimal(14, 2)
+  retentionPct    Decimal  @default(5) @db.Decimal(5, 2) /// % retención de garantía
+  retentionHeld   Decimal  @default(0) @db.Decimal(14, 2) /// Monto retenido acumulado
+  startDate       DateTime?
+  endDate         DateTime?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  contractor Contractor @relation(fields: [contractorId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, contractorId])
+  @@index([contractorId])
+  @@map("project_contractors")
+}
+
+/// Documentación del subcontratista (seguros, patentes, contratos, etc.).
+model ContractorDocument {
+  id           String             @id @default(cuid())
+  contractorId String
+  name         String
+  docType      String /// ej. "seguro_rc", "patente", "f30", "contrato"
+  fileUrl      String?
+  status       ContractorDocStatus @default(PENDING)
+  issuedAt     DateTime?
+  expiresAt    DateTime?
+  notes        String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  contractor Contractor @relation(fields: [contractorId], references: [id], onDelete: Cascade)
+
+  @@index([contractorId, status])
+  @@index([expiresAt])
+  @@map("contractor_documents")
+}
+
+// =============================================================================
+// MÓDULO TESORERÍA — Recibos y Órdenes de Pago
+// =============================================================================
+
+enum TreasuryDocStatus {
+  DRAFT /// Borrador editable
+  ISSUED /// Emitido (aún no impacta presupuesto)
+  POSTED /// Contabilizado: impacta BudgetItem.actualCost / actualIncome
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  CHECK
+  OTHER
+}
+
+/// Recibo de cobro (ingreso). Puede imputarse a obra/partida → actualIncome.
+model Receipt {
+  id             String           @id @default(cuid())
+  organizationId String
+  createdById    String?
+  clientId       String?
+  number         String /// ej. REC-2026-0001
+  issueDate      DateTime         @db.Date
+  status         TreasuryDocStatus @default(DRAFT)
+  paymentMethod  PaymentMethod    @default(TRANSFER)
+  partyName      String? /// Si no hay cliente en catálogo
+  concept        String?
+  currency       String           @default("ARS")
+  totalAmount    Decimal          @default(0) @db.Decimal(14, 2)
+  /// Datos de cheque (si paymentMethod = CHECK)
+  checkNumber    String?
+  checkBank      String?
+  checkIssueDate DateTime?        @db.Date
+  checkDueDate   DateTime?        @db.Date
+  checkAccount   String?
+  notes          String?
+  postedAt       DateTime?
+  cancelledAt    DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?         @relation("ReceiptCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  client       Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  lines        ReceiptLine[]
+
+  @@unique([organizationId, number])
+  @@index([organizationId, status])
+  @@index([clientId])
+  @@map("receipts")
+}
+
+model ReceiptLine {
+  id           String  @id @default(cuid())
+  receiptId    String
+  projectId    String?
+  budgetItemId String?
+  description  String
+  amount       Decimal @db.Decimal(14, 2)
+  sortOrder    Int     @default(0)
+
+  receipt    Receipt     @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  project    Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  budgetItem BudgetItem? @relation(fields: [budgetItemId], references: [id], onDelete: SetNull)
+
+  @@index([receiptId])
+  @@index([projectId])
+  @@index([budgetItemId])
+  @@map("receipt_lines")
+}
+
+/// Orden de pago (egreso). Puede imputarse a obra/partida → actualCost.
+model PaymentOrder {
+  id             String            @id @default(cuid())
+  organizationId String
+  createdById    String?
+  supplierId     String?
+  number         String /// ej. OP-2026-0001
+  issueDate      DateTime          @db.Date
+  status         TreasuryDocStatus @default(DRAFT)
+  paymentMethod  PaymentMethod     @default(TRANSFER)
+  partyName      String? /// Beneficiario libre
+  concept        String?
+  currency       String            @default("ARS")
+  totalAmount    Decimal           @default(0) @db.Decimal(14, 2)
+  /// Datos de cheque (si paymentMethod = CHECK)
+  checkNumber    String?
+  checkBank      String?
+  checkIssueDate DateTime?         @db.Date
+  checkDueDate   DateTime?         @db.Date
+  checkAccount   String?
+  notes          String?
+  postedAt       DateTime?
+  cancelledAt    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?             @relation("PaymentOrderCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  supplier     Supplier?         @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  lines        PaymentOrderLine[]
+
+  @@unique([organizationId, number])
+  @@index([organizationId, status])
+  @@index([supplierId])
+  @@map("payment_orders")
+}
+
+model PaymentOrderLine {
+  id           String  @id @default(cuid())
+  paymentOrderId String
+  projectId    String?
+  budgetItemId String?
+  description  String
+  amount       Decimal @db.Decimal(14, 2)
+  sortOrder    Int     @default(0)
+
+  paymentOrder PaymentOrder @relation(fields: [paymentOrderId], references: [id], onDelete: Cascade)
+  project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  budgetItem   BudgetItem?  @relation(fields: [budgetItemId], references: [id], onDelete: SetNull)
+
+  @@index([paymentOrderId])
+  @@index([projectId])
+  @@index([budgetItemId])
+  @@map("payment_order_lines")
+}
+
+// =============================================================================
+// CAJA — Diaria (sesión abierta/cerrada) + Tesorería (acumula cierres)
+// =============================================================================
+
+enum CashRegisterType {
+  DAILY /// Caja diaria operativa
+  TREASURY /// Caja tesorería / caja fuerte
+}
+
+enum CashSessionStatus {
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+enum CashMovementType {
+  OPENING /// Fondo de apertura (caja diaria)
+  INCOME /// Ingreso en efectivo
+  EXPENSE /// Egreso en efectivo
+  ADJUSTMENT /// Ajuste de arqueo
+  CLOSE_TRANSFER /// Salida de caja diaria al cerrar → tesorería
+  TREASURY_IN /// Ingreso en tesorería por cierre diario
+  TREASURY_DEPOSIT /// Depósito manual en tesorería
+  TREASURY_WITHDRAWAL /// Extracción de tesorería
+}
+
+/// Caja de la organización (diaria o tesorería), por moneda.
+model CashRegister {
+  id             String           @id @default(cuid())
+  organizationId String
+  type           CashRegisterType
+  name           String
+  currency       String           @default("ARS")
+  balance        Decimal          @default(0) @db.Decimal(14, 2) /// Saldo corriente (sobre todo tesorería)
+  isActive       Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sessions     CashSession[]
+  movements    CashMovement[]
+
+  @@unique([organizationId, type, currency])
+  @@index([organizationId, type])
+  @@map("cash_registers")
+}
+
+/// Sesión de caja diaria (un día / turno).
+model CashSession {
+  id                   String            @id @default(cuid())
+  organizationId       String
+  registerId           String /// Caja diaria
+  number               String /// ej. CAJA-2026-0001
+  businessDate         DateTime          @db.Date
+  status               CashSessionStatus @default(OPEN)
+  currency             String            @default("ARS")
+  openingBalance       Decimal           @default(0) @db.Decimal(14, 2)
+  expectedBalance      Decimal?          @db.Decimal(14, 2) /// Calculado al cerrar
+  countedBalance       Decimal?          @db.Decimal(14, 2) /// Arqueo físico
+  difference           Decimal?          @db.Decimal(14, 2) /// counted - expected
+  transferredAmount    Decimal?          @db.Decimal(14, 2) /// Enviado a tesorería
+  notes                String?
+  openedAt             DateTime          @default(now())
+  closedAt             DateTime?
+  openedById           String?
+  closedById           String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  register     CashRegister   @relation(fields: [registerId], references: [id], onDelete: Restrict)
+  openedBy     User?          @relation("CashSessionOpener", fields: [openedById], references: [id], onDelete: SetNull)
+  closedBy     User?          @relation("CashSessionCloser", fields: [closedById], references: [id], onDelete: SetNull)
+  movements    CashMovement[]
+
+  @@unique([organizationId, number])
+  @@index([organizationId, status, businessDate])
+  @@index([registerId])
+  @@map("cash_sessions")
+}
+
+/// Movimiento de efectivo en una caja (diaria vía sesión, o tesorería).
+model CashMovement {
+  id              String           @id @default(cuid())
+  organizationId  String
+  registerId      String
+  sessionId       String? /// Obligatorio en caja diaria operativa
+  type            CashMovementType
+  /// Monto con signo: + ingreso / − egreso
+  amount          Decimal          @db.Decimal(14, 2)
+  balanceAfter    Decimal?         @db.Decimal(14, 2)
+  description     String
+  occurredAt      DateTime         @default(now())
+  receiptId       String?
+  paymentOrderId  String?
+  sourceSessionId String? /// Sesión diaria origen (cierres → tesorería)
+  createdById     String?
+  createdAt       DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  register     CashRegister @relation(fields: [registerId], references: [id], onDelete: Restrict)
+  session      CashSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("CashMovementCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, occurredAt])
+  @@index([registerId, occurredAt])
+  @@index([sessionId])
+  @@index([sourceSessionId])
+  @@map("cash_movements")
+}

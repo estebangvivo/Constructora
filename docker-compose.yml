@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: constructora-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: constructora
+      POSTGRES_PASSWORD: constructora
+      POSTGRES_DB: constructora
+    volumes:
+      - constructora_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U constructora -d constructora"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  constructora_pg:
