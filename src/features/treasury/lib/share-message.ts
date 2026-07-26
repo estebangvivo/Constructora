@@ -67,27 +67,65 @@ export function buildTreasuryShareMessage(input: ShareTreasuryDocInput): string 
   return lines.join("\n");
 }
 
-/** Deja solo dígitos; si parece AR sin código de país, antepone 54. */
+/**
+ * Deja solo dígitos en formato internacional para wa.me.
+ * Argentina móvil: 54 9 + área + número (ej. 11 5555-5555 → 5491155555555).
+ */
 export function normalizeWhatsAppPhone(raw: string): string {
   let digits = raw.replace(/\D/g, "");
   if (!digits) return "";
-  // 15… / 11… locales → 549…
-  if (digits.startsWith("15") && digits.length >= 10) {
-    digits = `549${digits.slice(2)}`;
-  } else if (digits.length === 10 && digits.startsWith("11")) {
-    digits = `54${digits}`;
-  } else if (digits.length === 10) {
-    digits = `54${digits}`;
-  } else if (digits.startsWith("0")) {
-    digits = `54${digits.replace(/^0+/, "")}`;
+
+  // Quitar 00 internacional
+  if (digits.startsWith("00")) digits = digits.slice(2);
+
+  // 549… ya ok (móvil AR)
+  if (digits.startsWith("549") && digits.length >= 12) {
+    return digits;
   }
-  return digits;
+
+  // 54 + área sin el 9 (ej. 5411…) → insertar 9
+  if (digits.startsWith("54") && !digits.startsWith("549") && digits.length >= 12) {
+    return `549${digits.slice(2)}`;
+  }
+
+  // 15… local viejo → 549…
+  if (digits.startsWith("15") && digits.length >= 10) {
+    return `549${digits.slice(2)}`;
+  }
+
+  // 0 + área (011…) → 549…
+  if (digits.startsWith("0") && digits.length >= 10) {
+    return `549${digits.replace(/^0+/, "")}`;
+  }
+
+  // 10 dígitos (11…) → 549…
+  if (digits.length === 10) {
+    return `549${digits}`;
+  }
+
+  // 11 dígitos empezando con 9 (9 11 …) → 54…
+  if (digits.length === 11 && digits.startsWith("9")) {
+    return `54${digits}`;
+  }
+
+  // Otros países / ya internacionales
+  if (digits.length >= 10 && digits.length <= 15) {
+    return digits;
+  }
+
+  return "";
+}
+
+/** true si el número normalizado es usable en wa.me */
+export function isValidWhatsAppPhone(raw: string): boolean {
+  const n = normalizeWhatsAppPhone(raw);
+  return n.length >= 10 && n.length <= 15;
 }
 
 export function buildWhatsAppShareUrl(phone: string, text: string): string {
   const normalized = normalizeWhatsAppPhone(phone);
   const encoded = encodeURIComponent(text);
-  if (normalized) {
+  if (normalized && isValidWhatsAppPhone(normalized)) {
     return `https://wa.me/${normalized}?text=${encoded}`;
   }
   return `https://wa.me/?text=${encoded}`;

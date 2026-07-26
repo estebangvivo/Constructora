@@ -4,7 +4,7 @@ import { getReceiptById } from "@/features/treasury/queries/list-treasury";
 import { getOrganizationProfile } from "@/features/settings/queries/get-organization";
 import { TreasuryPrintReport } from "@/features/treasury/components/treasury-print-report";
 import { PrintReportToolbar } from "@/features/treasury/components/print-report-toolbar";
-import { buildTreasuryShareMessage } from "@/features/treasury/lib/share-message";
+import { isWhatsAppCloudConfigured } from "@/features/treasury/lib/whatsapp-cloud";
 
 export const dynamic = "force-dynamic";
 
@@ -50,31 +50,22 @@ export default async function ReceiptPrintPage({ params }: PageProps) {
     .join(", ");
 
   const safeNumber = doc.number.replace(/[^\w.-]+/g, "_");
-  const shareText = buildTreasuryShareMessage({
-    kind: "receipt",
-    number: doc.number,
-    issueDate: doc.issueDate,
-    partyName,
-    totalAmount: Number(doc.totalAmount),
-    currency: doc.currency,
-    concept: doc.concept,
-    organizationName: org.name,
-    payments,
-  });
+  const cloudEnabled = isWhatsAppCloudConfigured();
 
   return (
     <div className="min-h-screen bg-[#f3f1ec] print:bg-white">
       <PrintReportToolbar
         backHref={`/treasury/receipts/${doc.id}`}
         backLabel="Volver al recibo"
+        kind="receipt"
+        documentId={doc.id}
         pdfUrl={`/api/treasury/receipts/${doc.id}/pdf`}
         filename={`recibo-${safeNumber}.pdf`}
         shareTitle={`Recibo ${doc.number}`}
-        shareText={shareText}
         defaultPhone={doc.client?.phone}
-        defaultEmail={doc.client?.email}
+        cloudEnabled={cloudEnabled}
       />
-      <div className="px-4 py-6 print:px-0 print:py-0">
+      <div className="px-4 py-6 pb-28 print:px-0 print:py-0 sm:pb-6">
         <TreasuryPrintReport
           data={{
             kind: "receipt",

@@ -14,7 +14,6 @@ import {
   TREASURY_STATUS_STYLE,
 } from "@/features/treasury/lib/labels";
 import { formatDateAR, formatDateTimeAR } from "@/lib/format-date";
-import { getOrganizationProfile } from "@/features/settings/queries/get-organization";
 import { prisma } from "@/lib/prisma";
 
 type PageProps = { params: Promise<{ id: string }> };
@@ -27,7 +26,7 @@ export default async function ReceiptDetailPage({ params }: PageProps) {
   const doc = await getReceiptById(id);
   if (!doc) notFound();
 
-  const [hasCashMovement, cashMovements, org] = await Promise.all([
+  const [hasCashMovement, cashMovements] = await Promise.all([
     hasCashMovementForDoc({ receiptId: id }),
     prisma.cashMovement.findMany({
       where: {
@@ -44,27 +43,7 @@ export default async function ReceiptDetailPage({ params }: PageProps) {
         session: { select: { id: true, number: true } },
       },
     }),
-    getOrganizationProfile(),
   ]);
-
-  const paymentLines =
-    doc.payments.length > 0
-      ? doc.payments.map((p) => ({
-          method: p.method,
-          amount: Number(p.amount),
-          checkNumber: p.checkNumber,
-          checkBank: p.checkBank,
-          bankAccountName: p.bankAccount?.name ?? null,
-        }))
-      : [
-          {
-            method: doc.paymentMethod,
-            amount: Number(doc.totalAmount),
-            checkNumber: doc.checkNumber,
-            checkBank: doc.checkBank,
-            bankAccountName: null as string | null,
-          },
-        ];
 
   return (
     <div className="px-4 py-6 lg:px-6">
@@ -103,21 +82,7 @@ export default async function ReceiptDetailPage({ params }: PageProps) {
         <div className="flex flex-wrap gap-2">
           {doc.status !== "CANCELLED" && (
             <ShareTreasuryDocButton
-              pdfUrl={`/api/treasury/receipts/${doc.id}/pdf`}
               printHref={`/treasury/receipts/${doc.id}/print`}
-              doc={{
-                kind: "receipt",
-                number: doc.number,
-                issueDate: doc.issueDate,
-                partyName: doc.client?.name ?? doc.partyName ?? "—",
-                totalAmount: Number(doc.totalAmount),
-                currency: doc.currency,
-                concept: doc.concept,
-                organizationName: org?.name,
-                payments: paymentLines,
-              }}
-              defaultPhone={doc.client?.phone}
-              defaultEmail={doc.client?.email}
             />
           )}
           <TreasuryDocActions

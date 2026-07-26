@@ -6,7 +6,9 @@
     "node": ">=20.16.0"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -H 0.0.0.0",
+    "dev:https": "next dev -H 0.0.0.0 --experimental-https",
+    "tunnel": "node scripts/dev-tunnel.mjs",
     "build": "prisma generate && next build",
     "start": "next start",
     "start:prod": "prisma db push && next start -H 0.0.0.0 -p ${PORT:-3000}",
