@@ -27,7 +27,7 @@ export function MobileNav({
   const items = filterNavByAccess(SIDEBAR_NAV, { role, modules });
 
   return (
-    <div className="border-b border-border bg-sidebar text-sidebar-foreground md:hidden">
+    <div className="border-b border-border bg-sidebar text-sidebar-foreground print:hidden md:hidden">
       <div className="flex h-14 items-center justify-between px-4">
         <a href="/" className="flex min-w-0 items-center gap-2">
           {logoUrl ? (

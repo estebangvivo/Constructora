@@ -1,0 +1,193 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { getOrganizationProfile } from "@/features/settings/queries/get-organization";
+import {
+  getPaymentOrderById,
+  getReceiptById,
+} from "@/features/treasury/queries/list-treasury";
+import {
+  buildTreasuryDocPdf,
+  treasuryPdfFilename,
+  type TreasuryPdfInput,
+} from "@/features/treasury/lib/treasury-pdf";
+
+function orgAddress(org: {
+  address: string | null;
+  city: string | null;
+  province: string | null;
+  postalCode: string | null;
+}): string | null {
+  const parts = [
+    org.address,
+    [org.postalCode, org.city].filter(Boolean).join(" "),
+    org.province,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(", ") : null;
+}
+
+/** Carga el logo local (PNG/JPG). WEBP/SVG no se embebe en pdf-lib. */
+async function loadOrganizationLogo(
+  logoUrl: string | null | undefined,
+): Promise<TreasuryPdfInput["organizationLogo"]> {
+  if (!logoUrl) return null;
+  const pathname = logoUrl.split("?")[0] ?? "";
+  if (!pathname.startsWith("/uploads/")) return null;
+
+  const ext = path.extname(pathname).toLowerCase();
+  const format = ext === ".png" ? "png" : ext === ".jpg" || ext === ".jpeg" ? "jpg" : null;
+  if (!format) return null;
+
+  try {
+    const filePath = path.join(process.cwd(), "public", pathname.replace(/^\//, ""));
+    const bytes = new Uint8Array(await readFile(filePath));
+    return { bytes, format };
+  } catch {
+    return null;
+  }
+}
+
+function baseOrgFields(org: NonNullable<Awaited<ReturnType<typeof getOrganizationProfile>>>) {
+  return {
+    organizationName: org.name,
+    organizationTaxId: org.taxId,
+    organizationAddress: orgAddress(org),
+  };
+}
+
+export async function buildReceiptPdfResponse(id: string): Promise<Response> {
+  const [doc, org] = await Promise.all([
+    getReceiptById(id),
+    getOrganizationProfile(),
+  ]);
+  if (!doc || !org) {
+    return new Response("No encontrado", { status: 404 });
+  }
+
+  const payments =
+    doc.payments.length > 0
+      ? doc.payments.map((p) => ({
+          method: p.method,
+          amount: Number(p.amount),
+          checkNumber: p.checkNumber,
+          checkBank: p.checkBank,
+          bankAccountName: p.bankAccount?.name ?? null,
+        }))
+      : [
+          {
+            method: doc.paymentMethod,
+            amount: Number(doc.totalAmount),
+            checkNumber: doc.checkNumber,
+            checkBank: doc.checkBank,
+            bankAccountName: null,
+          },
+        ];
+
+  const logo = await loadOrganizationLogo(org.logoUrl);
+
+  const input: TreasuryPdfInput = {
+    kind: "receipt",
+    number: doc.number,
+    status: doc.status,
+    issueDate: doc.issueDate,
+    partyName: doc.client?.name ?? doc.partyName ?? "—",
+    partyTaxId: doc.client?.taxId ?? null,
+    totalAmount: Number(doc.totalAmount),
+    currency: doc.currency,
+    concept: doc.concept,
+    notes: doc.notes,
+    ...baseOrgFields(org),
+    organizationLogo: logo,
+    payments,
+    lines: doc.lines.map((line) => ({
+      description: line.description,
+      projectLabel: line.project
+        ? `${line.project.code} · ${line.project.name}`
+        : null,
+      budgetItemLabel: line.budgetItem
+        ? `${line.budgetItem.code} · ${line.budgetItem.description}`
+        : null,
+      amount: Number(line.amount),
+    })),
+  };
+
+  const bytes = await buildTreasuryDocPdf(input);
+  const filename = treasuryPdfFilename("receipt", doc.number);
+  return new Response(Buffer.from(bytes), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
+export async function buildPaymentOrderPdfResponse(
+  id: string,
+): Promise<Response> {
+  const [doc, org] = await Promise.all([
+    getPaymentOrderById(id),
+    getOrganizationProfile(),
+  ]);
+  if (!doc || !org) {
+    return new Response("No encontrado", { status: 404 });
+  }
+
+  const payments =
+    doc.payments.length > 0
+      ? doc.payments.map((p) => ({
+          method: p.method,
+          amount: Number(p.amount),
+          checkNumber: p.checkNumber,
+          checkBank: p.checkBank,
+          bankAccountName: p.bankAccount?.name ?? null,
+        }))
+      : [
+          {
+            method: doc.paymentMethod,
+            amount: Number(doc.totalAmount),
+            checkNumber: doc.checkNumber,
+            checkBank: doc.checkBank,
+            bankAccountName: null,
+          },
+        ];
+
+  const logo = await loadOrganizationLogo(org.logoUrl);
+
+  const input: TreasuryPdfInput = {
+    kind: "payment-order",
+    number: doc.number,
+    status: doc.status,
+    issueDate: doc.issueDate,
+    partyName: doc.supplier?.name ?? doc.partyName ?? "—",
+    partyTaxId: doc.supplier?.taxId ?? null,
+    totalAmount: Number(doc.totalAmount),
+    currency: doc.currency,
+    concept: doc.concept,
+    notes: doc.notes,
+    ...baseOrgFields(org),
+    organizationLogo: logo,
+    payments,
+    lines: doc.lines.map((line) => ({
+      description: line.description,
+      projectLabel: line.project
+        ? `${line.project.code} · ${line.project.name}`
+        : null,
+      budgetItemLabel: line.budgetItem
+        ? `${line.budgetItem.code} · ${line.budgetItem.description}`
+        : null,
+      amount: Number(line.amount),
+    })),
+  };
+
+  const bytes = await buildTreasuryDocPdf(input);
+  const filename = treasuryPdfFilename("payment-order", doc.number);
+  return new Response(Buffer.from(bytes), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Cache-Control": "no-store",
+    },
+  });
+}

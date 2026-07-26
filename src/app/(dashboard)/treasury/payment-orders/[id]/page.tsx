@@ -6,6 +6,7 @@ import {
   hasCashMovementForDoc,
 } from "@/features/treasury/queries/list-treasury";
 import { TreasuryDocActions } from "@/features/treasury/components/treasury-doc-actions";
+import { ShareTreasuryDocButton } from "@/features/treasury/components/share-treasury-doc-button";
 import {
   formatMoney,
   PAYMENT_METHOD_LABEL,
@@ -13,6 +14,7 @@ import {
   TREASURY_STATUS_STYLE,
 } from "@/features/treasury/lib/labels";
 import { formatDateAR, formatDateTimeAR } from "@/lib/format-date";
+import { getOrganizationProfile } from "@/features/settings/queries/get-organization";
 import { prisma } from "@/lib/prisma";
 
 type PageProps = { params: Promise<{ id: string }> };
@@ -25,7 +27,7 @@ export default async function PaymentOrderDetailPage({ params }: PageProps) {
   const doc = await getPaymentOrderById(id);
   if (!doc) notFound();
 
-  const [hasCashMovement, cashMovements] = await Promise.all([
+  const [hasCashMovement, cashMovements, org] = await Promise.all([
     hasCashMovementForDoc({ paymentOrderId: id }),
     prisma.cashMovement.findMany({
       where: {
@@ -42,7 +44,27 @@ export default async function PaymentOrderDetailPage({ params }: PageProps) {
         session: { select: { id: true, number: true } },
       },
     }),
+    getOrganizationProfile(),
   ]);
+
+  const paymentLines =
+    doc.payments.length > 0
+      ? doc.payments.map((p) => ({
+          method: p.method,
+          amount: Number(p.amount),
+          checkNumber: p.checkNumber,
+          checkBank: p.checkBank,
+          bankAccountName: p.bankAccount?.name ?? null,
+        }))
+      : [
+          {
+            method: doc.paymentMethod,
+            amount: Number(doc.totalAmount),
+            checkNumber: doc.checkNumber,
+            checkBank: doc.checkBank,
+            bankAccountName: null as string | null,
+          },
+        ];
 
   return (
     <div className="px-4 py-6 lg:px-6">
@@ -81,13 +103,34 @@ export default async function PaymentOrderDetailPage({ params }: PageProps) {
               </p>
             )}
         </div>
-        <TreasuryDocActions
-          kind="payment-order"
-          id={doc.id}
-          status={doc.status}
-          paymentMethod={doc.paymentMethod}
-          hasCashMovement={hasCashMovement}
-        />
+        <div className="flex flex-wrap gap-2">
+          {doc.status !== "CANCELLED" && (
+            <ShareTreasuryDocButton
+              pdfUrl={`/api/treasury/payment-orders/${doc.id}/pdf`}
+              printHref={`/treasury/payment-orders/${doc.id}/print`}
+              doc={{
+                kind: "payment-order",
+                number: doc.number,
+                issueDate: doc.issueDate,
+                partyName: doc.supplier?.name ?? doc.partyName ?? "—",
+                totalAmount: Number(doc.totalAmount),
+                currency: doc.currency,
+                concept: doc.concept,
+                organizationName: org?.name,
+                payments: paymentLines,
+              }}
+              defaultPhone={doc.supplier?.phone}
+              defaultEmail={doc.supplier?.email}
+            />
+          )}
+          <TreasuryDocActions
+            kind="payment-order"
+            id={doc.id}
+            status={doc.status}
+            paymentMethod={doc.paymentMethod}
+            hasCashMovement={hasCashMovement}
+          />
+        </div>
       </div>
 
       <section className="mb-6 space-y-3">

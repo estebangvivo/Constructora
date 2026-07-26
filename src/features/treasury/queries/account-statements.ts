@@ -167,6 +167,121 @@ export async function listSupplierAccountSummaries(): Promise<
   return rows;
 }
 
+export type PartyBalance = {
+  balance: number;
+  currency: string;
+};
+
+/** Saldos de CT por cliente (certificaciones − recibos), sin aging ni movimientos. */
+export async function mapClientBalances(): Promise<Map<string, PartyBalance>> {
+  const session = await requireSession();
+  const map = new Map<string, PartyBalance>();
+
+  const [certs, receipts] = await Promise.all([
+    prisma.certification.findMany({
+      where: {
+        status: { in: ["APPROVED", "PAID"] },
+        project: {
+          organizationId: session.organizationId,
+          deletedAt: null,
+          clientId: { not: null },
+        },
+      },
+      select: {
+        netAmount: true,
+        project: { select: { clientId: true, currency: true } },
+      },
+    }),
+    prisma.receipt.findMany({
+      where: {
+        organizationId: session.organizationId,
+        status: "POSTED",
+        clientId: { not: null },
+      },
+      select: { clientId: true, totalAmount: true, currency: true },
+    }),
+  ]);
+
+  for (const c of certs) {
+    const clientId = c.project.clientId;
+    if (!clientId) continue;
+    const prev = map.get(clientId) ?? {
+      balance: 0,
+      currency: c.project.currency || "ARS",
+    };
+    prev.balance = round2(prev.balance + toNumber(c.netAmount));
+    prev.currency = c.project.currency || prev.currency;
+    map.set(clientId, prev);
+  }
+  for (const r of receipts) {
+    if (!r.clientId) continue;
+    const prev = map.get(r.clientId) ?? {
+      balance: 0,
+      currency: r.currency || "ARS",
+    };
+    prev.balance = round2(prev.balance - toNumber(r.totalAmount));
+    prev.currency = r.currency || prev.currency;
+    map.set(r.clientId, prev);
+  }
+
+  return map;
+}
+
+/** Saldos de CT por proveedor (facturas − OP), sin aging ni movimientos. */
+export async function mapSupplierBalances(): Promise<Map<string, PartyBalance>> {
+  const session = await requireSession();
+  const map = new Map<string, PartyBalance>();
+
+  const [invoices, orders] = await Promise.all([
+    prisma.purchaseInvoice.findMany({
+      where: {
+        status: "CONFIRMED",
+        supplierId: { not: null },
+        project: {
+          organizationId: session.organizationId,
+          deletedAt: null,
+        },
+      },
+      select: {
+        supplierId: true,
+        totalAmount: true,
+        currency: true,
+      },
+    }),
+    prisma.paymentOrder.findMany({
+      where: {
+        organizationId: session.organizationId,
+        status: "POSTED",
+        supplierId: { not: null },
+      },
+      select: { supplierId: true, totalAmount: true, currency: true },
+    }),
+  ]);
+
+  for (const inv of invoices) {
+    if (!inv.supplierId) continue;
+    const prev = map.get(inv.supplierId) ?? {
+      balance: 0,
+      currency: inv.currency || "ARS",
+    };
+    prev.balance = round2(prev.balance + toNumber(inv.totalAmount));
+    prev.currency = inv.currency || prev.currency;
+    map.set(inv.supplierId, prev);
+  }
+  for (const op of orders) {
+    if (!op.supplierId) continue;
+    const prev = map.get(op.supplierId) ?? {
+      balance: 0,
+      currency: op.currency || "ARS",
+    };
+    prev.balance = round2(prev.balance - toNumber(op.totalAmount));
+    prev.currency = op.currency || prev.currency;
+    map.set(op.supplierId, prev);
+  }
+
+  return map;
+}
+
 export async function getClientAccountStatement(
   clientId: string,
 ): Promise<AccountStatement | null> {

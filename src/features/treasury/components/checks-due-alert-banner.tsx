@@ -28,8 +28,8 @@ export async function ChecksDueAlertBanner() {
       role="status"
       className={
         hasOverdue
-          ? "sticky top-0 z-30 border-b border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-[#7f1d1d] lg:px-6"
-          : "sticky top-0 z-30 border-b border-[#fde68a] bg-[#fffbeb] px-4 py-3 text-[#78350f] lg:px-6"
+          ? "sticky top-0 z-30 border-b border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-[#7f1d1d] print:hidden lg:px-6"
+          : "sticky top-0 z-30 border-b border-[#fde68a] bg-[#fffbeb] px-4 py-3 text-[#78350f] print:hidden lg:px-6"
       }
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
