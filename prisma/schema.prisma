@@ -170,6 +170,8 @@ model Organization {
   currency          String   @default("ARS")
   /// Monedas habilitadas para operar (multimoneda)
   enabledCurrencies String[] @default(["ARS", "USD"])
+  /// Días de anticipación para avisar cheques en cartera por vencer (0 = solo vencidos)
+  checkDueAlertDays Int      @default(7)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -187,6 +189,7 @@ model Organization {
   checks        CheckInstrument[]
   bankAccounts  BankAccount[]
   bankMovements BankMovement[]
+  checkRejectionFees CheckRejectionFee[]
 
   turneroClientes          TurneroCliente[]
   turneroPuestos           TurneroPuesto[]
@@ -333,6 +336,7 @@ model Project {
   projectSuppliers   ProjectSupplier[]
   receiptLines       ReceiptLine[]
   paymentOrderLines  PaymentOrderLine[]
+  checkRejectionFees CheckRejectionFee[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -443,6 +447,7 @@ model BudgetItem {
   inventory         InventoryItem[]
   receiptLines      ReceiptLine[]
   paymentOrderLines PaymentOrderLine[]
+  checkRejectionFees CheckRejectionFee[]
 
   @@unique([budgetId, code])
   @@index([budgetId, parentId])
@@ -1118,8 +1123,10 @@ enum PaymentMethod {
 }
 
 enum CheckStatus {
-  IN_PORTFOLIO /// Recibido y disponible para entregar
+  IN_PORTFOLIO /// Recibido y disponible para entregar o depositar
   DELIVERED /// Entregado en una orden de pago
+  DEPOSITED /// Depositado en cuenta bancaria propia
+  BOUNCED /// Rechazado por el banco tras depósito
   CANCELLED
 }
 
@@ -1138,19 +1145,51 @@ model CheckInstrument {
   status         CheckStatus @default(IN_PORTFOLIO)
   receiptId      String?
   paymentOrderId String?
+  depositedBankAccountId String?
+  depositedAt    DateTime?
+  bouncedAt      DateTime?
+  bounceReason   String?
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   receipt      Receipt?     @relation(fields: [receiptId], references: [id], onDelete: SetNull)
   paymentOrder PaymentOrder? @relation(fields: [paymentOrderId], references: [id], onDelete: SetNull)
+  depositedBankAccount BankAccount? @relation("CheckDeposits", fields: [depositedBankAccountId], references: [id], onDelete: SetNull)
   paymentOrderPayments PaymentOrderPayment[]
+  bankMovements  BankMovement[]
+  rejectionFees  CheckRejectionFee[]
 
   @@unique([organizationId, bank, number])
   @@index([organizationId, status])
   @@index([receiptId])
   @@index([paymentOrderId])
+  @@index([depositedBankAccountId])
   @@map("check_instruments")
+}
+
+/// Gastos asociados al rechazo de un cheque (comisiones, etc.).
+model CheckRejectionFee {
+  id                String   @id @default(cuid())
+  organizationId    String
+  checkInstrumentId String
+  description       String
+  amount            Decimal  @db.Decimal(14, 2)
+  currency          String   @default("ARS")
+  projectId         String?
+  budgetItemId      String?
+  createdAt         DateTime @default(now())
+
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  checkInstrument CheckInstrument @relation(fields: [checkInstrumentId], references: [id], onDelete: Cascade)
+  project         Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  budgetItem      BudgetItem?     @relation(fields: [budgetItemId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([checkInstrumentId])
+  @@index([budgetItemId])
+  @@index([projectId])
+  @@map("check_rejection_fees")
 }
 
 /// Recibo de cobro (ingreso). Puede imputarse a obra/partida → actualIncome.
@@ -1342,6 +1381,8 @@ enum CashMovementType {
   TREASURY_IN /// Ingreso en tesorería por cierre diario
   TREASURY_DEPOSIT /// Depósito manual en tesorería
   TREASURY_WITHDRAWAL /// Extracción de tesorería
+  BANK_DEPOSIT /// Efectivo depositado en cuenta bancaria
+  BANK_WITHDRAWAL /// Efectivo extraído de cuenta bancaria hacia caja
 }
 
 /// Caja de la organización (diaria o tesorería), por moneda.
@@ -1434,6 +1475,9 @@ enum BankMovementType {
   INCOME /// Ingreso (cobro por transferencia)
   EXPENSE /// Egreso (pago por transferencia)
   ADJUSTMENT /// Ajuste / anulación
+  DEPOSIT /// Depósito de efectivo o cheques desde tesorería
+  WITHDRAWAL /// Extracción de efectivo hacia caja
+  BOUNCE /// Reversión / gastos por cheque rechazado
 }
 
 /// Cuenta bancaria propia de la organización.
@@ -1456,6 +1500,7 @@ model BankAccount {
   movements            BankMovement[]
   receiptPayments      ReceiptPayment[]
   paymentOrderPayments PaymentOrderPayment[]
+  depositedChecks      CheckInstrument[]     @relation("CheckDeposits")
 
   @@index([organizationId, isActive])
   @@map("bank_accounts")
@@ -1474,17 +1519,20 @@ model BankMovement {
   occurredAt     DateTime         @default(now())
   receiptId      String?
   paymentOrderId String?
+  checkInstrumentId String?
   createdById    String?
   createdAt      DateTime         @default(now())
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  bankAccount  BankAccount  @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
-  createdBy    User?        @relation("BankMovementCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bankAccount     BankAccount      @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  checkInstrument CheckInstrument? @relation(fields: [checkInstrumentId], references: [id], onDelete: SetNull)
+  createdBy       User?            @relation("BankMovementCreator", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([organizationId, occurredAt])
   @@index([bankAccountId, occurredAt])
   @@index([receiptId])
   @@index([paymentOrderId])
+  @@index([checkInstrumentId])
   @@map("bank_movements")
 }
 

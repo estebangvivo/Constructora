@@ -168,6 +168,9 @@ export default async function TreasuryPage() {
                 ? "Sin cuentas · configurar en Ajustes"
                 : formatMoneyByCurrency(bankTotals)}
             </span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              Depósitos de efectivo y cheques
+            </span>
           </span>
         </Link>
         <Link

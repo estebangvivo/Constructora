@@ -73,7 +73,7 @@ export async function syncBudgetItemsFromTreasury(
 
     const itemCurrency = normalizeCurrency(item.currency);
 
-    const [receiptLines, paymentLines] = await Promise.all([
+    const [receiptLines, paymentLines, rejectionFees] = await Promise.all([
       tx.receiptLine.findMany({
         where: {
           budgetItemId,
@@ -81,7 +81,18 @@ export async function syncBudgetItemsFromTreasury(
         },
         select: {
           amount: true,
-          receipt: { select: { currency: true, issueDate: true } },
+          receipt: {
+            select: {
+              id: true,
+              currency: true,
+              issueDate: true,
+              totalAmount: true,
+              checks: {
+                where: { status: "BOUNCED" },
+                select: { amount: true },
+              },
+            },
+          },
         },
       }),
       tx.paymentOrderLine.findMany({
@@ -96,14 +107,31 @@ export async function syncBudgetItemsFromTreasury(
           },
         },
       }),
+      tx.checkRejectionFee.findMany({
+        where: { budgetItemId, organizationId },
+        select: { amount: true, currency: true, createdAt: true },
+      }),
     ]);
 
     let actualIncome = 0;
     for (const line of receiptLines) {
+      const lineAmount = toNumber(line.amount);
+      const receiptTotal = toNumber(line.receipt.totalAmount);
+      const bouncedSum = line.receipt.checks.reduce(
+        (acc, c) => acc + toNumber(c.amount),
+        0,
+      );
+      // Prorratea cheques rechazados entre las líneas del recibo.
+      const factor =
+        receiptTotal > 0.009
+          ? Math.max(0, (receiptTotal - bouncedSum) / receiptTotal)
+          : 1;
+      const effectiveAmount = lineAmount * factor;
+
       actualIncome += await convertAmountOnDate(
         tx,
         organizationId,
-        toNumber(line.amount),
+        effectiveAmount,
         line.receipt.currency,
         itemCurrency,
         line.receipt.issueDate,
@@ -119,6 +147,16 @@ export async function syncBudgetItemsFromTreasury(
         line.paymentOrder.currency,
         itemCurrency,
         line.paymentOrder.issueDate,
+      );
+    }
+    for (const fee of rejectionFees) {
+      actualCost += await convertAmountOnDate(
+        tx,
+        organizationId,
+        toNumber(fee.amount),
+        fee.currency,
+        itemCurrency,
+        fee.createdAt,
       );
     }
 

@@ -103,6 +103,16 @@ export async function cancelChecksFromReceipt(
         `No se puede anular: el cheque ${check.number} (${check.bank}) ya fue entregado en una orden de pago.`,
       );
     }
+    if (check.status === "DEPOSITED") {
+      throw new Error(
+        `No se puede anular: el cheque ${check.number} (${check.bank}) ya fue depositado en el banco.`,
+      );
+    }
+    if (check.status === "BOUNCED") {
+      throw new Error(
+        `No se puede anular: el cheque ${check.number} (${check.bank}) figura como rechazado.`,
+      );
+    }
     await tx.checkInstrument.update({
       where: { id: check.id },
       data: { status: "CANCELLED" },

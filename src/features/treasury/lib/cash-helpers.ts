@@ -1,13 +1,17 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+
+type Db = Prisma.TransactionClient | typeof prisma;
 
 /** Asegura que existan caja diaria y caja tesorería para la moneda. */
 export async function ensureCashRegisters(
   organizationId: string,
   currency = "ARS",
+  db: Db = prisma,
 ) {
   const code = currency.toUpperCase();
 
-  const daily = await prisma.cashRegister.upsert({
+  const daily = await db.cashRegister.upsert({
     where: {
       organizationId_type_currency: {
         organizationId,
@@ -25,7 +29,7 @@ export async function ensureCashRegisters(
     update: {},
   });
 
-  const treasury = await prisma.cashRegister.upsert({
+  const treasury = await db.cashRegister.upsert({
     where: {
       organizationId_type_currency: {
         organizationId,

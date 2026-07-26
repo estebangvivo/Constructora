@@ -69,7 +69,7 @@ export async function getProjectBudget(
   const budgetCurrency = budget.currency ?? project.currency ?? "ARS";
   const itemIds = budget.items.map((i) => i.id);
 
-  const [receiptLines, paymentLines] = await Promise.all([
+  const [receiptLines, paymentLines, rejectionFees] = await Promise.all([
     itemIds.length === 0
       ? Promise.resolve([])
       : prisma.receiptLine.findMany({
@@ -83,7 +83,17 @@ export async function getProjectBudget(
           select: {
             budgetItemId: true,
             amount: true,
-            receipt: { select: { currency: true, issueDate: true } },
+            receipt: {
+              select: {
+                currency: true,
+                issueDate: true,
+                totalAmount: true,
+                checks: {
+                  where: { status: "BOUNCED" },
+                  select: { amount: true },
+                },
+              },
+            },
           },
         }),
     itemIds.length === 0
@@ -104,6 +114,20 @@ export async function getProjectBudget(
             },
           },
         }),
+    itemIds.length === 0
+      ? Promise.resolve([])
+      : prisma.checkRejectionFee.findMany({
+          where: {
+            budgetItemId: { in: itemIds },
+            organizationId: session.organizationId,
+          },
+          select: {
+            budgetItemId: true,
+            amount: true,
+            currency: true,
+            createdAt: true,
+          },
+        }),
   ]);
 
   const incomeNative = new Map<string, { currency: string; amount: number }[]>();
@@ -111,10 +135,19 @@ export async function getProjectBudget(
 
   for (const line of receiptLines) {
     if (!line.budgetItemId) continue;
+    const receiptTotal = toNumber(line.receipt.totalAmount);
+    const bouncedSum = line.receipt.checks.reduce(
+      (acc, c) => acc + toNumber(c.amount),
+      0,
+    );
+    const factor =
+      receiptTotal > 0.009
+        ? Math.max(0, (receiptTotal - bouncedSum) / receiptTotal)
+        : 1;
     const list = incomeNative.get(line.budgetItemId) ?? [];
     list.push({
       currency: line.receipt.currency,
-      amount: toNumber(line.amount),
+      amount: toNumber(line.amount) * factor,
     });
     incomeNative.set(line.budgetItemId, list);
   }
@@ -127,6 +160,16 @@ export async function getProjectBudget(
       amount: toNumber(line.amount),
     });
     costNative.set(line.budgetItemId, list);
+  }
+
+  for (const fee of rejectionFees) {
+    if (!fee.budgetItemId) continue;
+    const list = costNative.get(fee.budgetItemId) ?? [];
+    list.push({
+      currency: fee.currency,
+      amount: toNumber(fee.amount),
+    });
+    costNative.set(fee.budgetItemId, list);
   }
 
   const items = await Promise.all(
@@ -143,10 +186,19 @@ export async function getProjectBudget(
         (l) => l.budgetItemId === item.id,
       );
       for (const line of postedIncome) {
+        const receiptTotal = toNumber(line.receipt.totalAmount);
+        const bouncedSum = line.receipt.checks.reduce(
+          (acc, c) => acc + toNumber(c.amount),
+          0,
+        );
+        const factor =
+          receiptTotal > 0.009
+            ? Math.max(0, (receiptTotal - bouncedSum) / receiptTotal)
+            : 1;
         const converted = await tryConvertAmountOnDate(
           prisma,
           session.organizationId,
-          toNumber(line.amount),
+          toNumber(line.amount) * factor,
           line.receipt.currency,
           itemCurrency,
           line.receipt.issueDate,
@@ -167,6 +219,25 @@ export async function getProjectBudget(
           line.paymentOrder.currency,
           itemCurrency,
           line.paymentOrder.issueDate,
+        );
+        if (converted == null) {
+          fxIncomplete = true;
+        } else {
+          actualCost += converted;
+        }
+      }
+
+      const feesForItem = rejectionFees.filter(
+        (f) => f.budgetItemId === item.id,
+      );
+      for (const fee of feesForItem) {
+        const converted = await tryConvertAmountOnDate(
+          prisma,
+          session.organizationId,
+          toNumber(fee.amount),
+          fee.currency,
+          itemCurrency,
+          fee.createdAt,
         );
         if (converted == null) {
           fxIncomplete = true;

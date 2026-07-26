@@ -18,11 +18,12 @@ export async function postBankMovement(
     organizationId: string;
     bankAccountId: string;
     amount: number;
-    kind: "INCOME" | "EXPENSE" | "OPENING" | "ADJUSTMENT";
+    kind: "INCOME" | "EXPENSE" | "OPENING" | "ADJUSTMENT" | "DEPOSIT" | "WITHDRAWAL" | "BOUNCE";
     description: string;
     currency?: string;
     receiptId?: string;
     paymentOrderId?: string;
+    checkInstrumentId?: string;
     createdById?: string | null;
     occurredAt?: Date;
   },
@@ -51,9 +52,13 @@ export async function postBankMovement(
   }
 
   const signed =
-    input.kind === "EXPENSE"
+    input.kind === "EXPENSE" ||
+    input.kind === "WITHDRAWAL" ||
+    input.kind === "BOUNCE"
       ? -abs
-      : input.kind === "INCOME" || input.kind === "OPENING"
+      : input.kind === "INCOME" ||
+          input.kind === "OPENING" ||
+          input.kind === "DEPOSIT"
         ? abs
         : round2(input.amount);
 
@@ -69,6 +74,7 @@ export async function postBankMovement(
       description: input.description,
       receiptId: input.receiptId ?? null,
       paymentOrderId: input.paymentOrderId ?? null,
+      checkInstrumentId: input.checkInstrumentId ?? null,
       createdById: input.createdById ?? null,
       occurredAt: input.occurredAt ?? new Date(),
     },

@@ -29,6 +29,7 @@ export type OrganizationProfile = {
   themeId: string;
   currency: string;
   enabledCurrencies: string[];
+  checkDueAlertDays: number;
 };
 
 export async function getOrganizationProfile(): Promise<OrganizationProfile | null> {
@@ -59,6 +60,7 @@ export async function getOrganizationProfile(): Promise<OrganizationProfile | nu
       themeId: true,
       currency: true,
       enabledCurrencies: true,
+      checkDueAlertDays: true,
     },
   });
 
@@ -71,6 +73,7 @@ export async function getOrganizationProfile(): Promise<OrganizationProfile | nu
       org.enabledCurrencies,
       org.currency,
     ),
+    checkDueAlertDays: Math.max(0, org.checkDueAlertDays ?? 7),
   };
 }
 

@@ -108,6 +108,17 @@ export async function updateOrganizationProfile(
       currency,
     );
 
+    const rawAlertDays = emptyToNull(formData.get("checkDueAlertDays"));
+    const checkDueAlertDays = rawAlertDays
+      ? Math.min(365, Math.max(0, Math.round(Number(rawAlertDays))))
+      : 7;
+    if (!Number.isFinite(checkDueAlertDays)) {
+      return {
+        ok: false,
+        error: "Los días de aviso de cheques deben ser un número válido.",
+      };
+    }
+
     await prisma.organization.update({
       where: { id: session.organizationId },
       data: {
@@ -130,12 +141,14 @@ export async function updateOrganizationProfile(
         themeId,
         currency,
         enabledCurrencies,
+        checkDueAlertDays,
         ...(logoUrl ? { logoUrl } : clearLogo ? { logoUrl: null } : {}),
       },
     });
 
     revalidatePath("/", "layout");
     revalidatePath("/settings");
+    revalidatePath("/treasury/checks");
     return { ok: true };
   } catch (error) {
     console.error("updateOrganizationProfile", error);

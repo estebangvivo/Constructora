@@ -16,12 +16,15 @@ import {
 import { projectHref } from "@/config/navigation";
 import { getProjectById } from "@/features/projects/queries/get-projects";
 import { getProjectFinancialSummary } from "@/features/projects/queries/get-project-financials";
+import { listProjectClientPaidDocuments } from "@/features/projects/queries/list-project-client-paid";
+import { listProjectCostDocuments } from "@/features/projects/queries/list-project-cost-documents";
 import { getProjectDeleteBlockers } from "@/features/projects/actions/delete-project";
 import { DeleteProjectButton } from "@/features/projects/components/delete-project-button";
+import { ClientPaidBreakdown } from "@/features/projects/components/client-paid-breakdown";
+import { ActualCostBreakdown } from "@/features/projects/components/actual-cost-breakdown";
 import { ProjectOverviewCharts } from "@/features/projects/components/project-overview-charts";
 import { listProjectSuppliers } from "@/features/suppliers/queries/list-suppliers";
 import { formatBudgetMoney } from "@/features/budget/lib/labels";
-import { formatMoneyByCurrency } from "@/config/currencies";
 import { getSession } from "@/lib/auth";
 import type { ProjectRouteParams } from "@/types";
 import { notFound, redirect } from "next/navigation";
@@ -116,17 +119,20 @@ export default async function ProjectOverviewPage({
     session.organizationRole,
   );
 
-  const [suppliers, financials, deleteBlockers] = await Promise.all([
-    listProjectSuppliers(id),
-    getProjectFinancialSummary(id),
-    canDeleteRole ? getProjectDeleteBlockers(id) : Promise.resolve([]),
-  ]);
+  const [suppliers, financials, clientPaidDocuments, costDocuments, deleteBlockers] =
+    await Promise.all([
+      listProjectSuppliers(id),
+      getProjectFinancialSummary(id),
+      listProjectClientPaidDocuments(id),
+      listProjectCostDocuments(id),
+      canDeleteRole ? getProjectDeleteBlockers(id) : Promise.resolve([]),
+    ]);
 
   const currency = financials?.currency ?? project.currency ?? "ARS";
   const clientPaidByCurrency = financials?.clientPaidByCurrency ?? {};
   const clientPendingByCurrency = financials?.clientPendingByCurrency ?? {};
+  const paidOutByCurrency = financials?.paidOutByCurrency ?? {};
   const budgetEstimated = financials?.budgetEstimated ?? 0;
-  const hasPending = Object.values(clientPendingByCurrency).some((v) => v > 0);
   const cobrado = financials?.clientPaidConverted ?? 0;
   const pagado = financials?.paidOutConverted ?? 0;
   const fxIncomplete = financials?.fxIncomplete ?? false;
@@ -160,19 +166,24 @@ export default async function ProjectOverviewPage({
             </dd>
             <p className="text-xs text-muted-foreground">Mandante</p>
           </div>
-          <div className="border-l-2 border-success pl-3">
-            <dt className="text-xs uppercase tracking-wider text-muted-foreground">
-              Cobrado del cliente
-            </dt>
-            <dd className="mt-1 font-display text-2xl tracking-tight">
-              {formatMoneyByCurrency(clientPaidByCurrency)}
-            </dd>
-            <p className="text-xs text-muted-foreground">
-              {hasPending
-                ? `Pendiente: ${formatMoneyByCurrency(clientPendingByCurrency)}`
-                : "Recibos imputados"}
-            </p>
-          </div>
+          <ClientPaidBreakdown
+            totalByCurrency={clientPaidByCurrency}
+            documents={clientPaidDocuments}
+            pendingByCurrency={clientPendingByCurrency}
+            size="lg"
+          />
+          <ActualCostBreakdown
+            totalByCurrency={
+              Object.keys(paidOutByCurrency).length > 0
+                ? paidOutByCurrency
+                : financials?.budgetActualCost != null
+                  ? { [currency]: financials.budgetActualCost }
+                  : {}
+            }
+            documents={costDocuments}
+            size="lg"
+            title="Pagado / costo"
+          />
           <div className="border-l-2 border-accent/40 pl-3">
             <dt className="text-xs uppercase tracking-wider text-muted-foreground">
               Presupuesto

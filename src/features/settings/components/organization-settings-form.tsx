@@ -191,6 +191,25 @@ export function OrganizationSettingsForm({
               necesitás.
             </p>
           </fieldset>
+          <label className="block text-sm sm:col-span-2">
+            <span className="mb-1 block text-muted-foreground">
+              Aviso de cheques por vencer (días)
+            </span>
+            <input
+              name="checkDueAlertDays"
+              type="number"
+              min={0}
+              max={365}
+              step={1}
+              required
+              defaultValue={organization.checkDueAlertDays ?? 7}
+              className={cn(fieldClass, "max-w-[8rem]")}
+            />
+            <span className="mt-1 block text-xs text-muted-foreground">
+              Se muestra un aviso en toda la app cuando un cheque en cartera
+              vence dentro de esta cantidad de días (0 = solo vencidos).
+            </span>
+          </label>
         </div>
 
         <div className="space-y-3">

@@ -31,6 +31,8 @@ export const CASH_MOVEMENT_LABEL: Record<CashMovementType, string> = {
   TREASURY_IN: "Cierre de caja diaria",
   TREASURY_DEPOSIT: "Depósito",
   TREASURY_WITHDRAWAL: "Extracción",
+  BANK_DEPOSIT: "Depósito a banco",
+  BANK_WITHDRAWAL: "Extracción de banco",
 };
 
 export function formatCashMoney(value: number, currency = "ARS") {

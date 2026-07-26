@@ -47,13 +47,21 @@ export default async function BankAccountDetailPage({ params }: PageProps) {
         {!account.isActive ? " · Inactiva" : ""}
       </p>
 
-      <div className="mt-6 border-l-2 border-success pl-3">
-        <p className="text-xs uppercase tracking-wider text-muted-foreground">
-          Saldo actual
-        </p>
-        <p className="font-display text-3xl">
-          {formatMoney(account.balance, account.currency)}
-        </p>
+      <div className="mt-6 flex flex-wrap items-end justify-between gap-4">
+        <div className="border-l-2 border-success pl-3">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground">
+            Saldo actual
+          </p>
+          <p className="font-display text-3xl">
+            {formatMoney(account.balance, account.currency)}
+          </p>
+        </div>
+        <Link
+          href={`/treasury/banks/deposit?bankId=${account.id}`}
+          className="rounded-md border border-border bg-background px-4 py-2.5 text-sm font-medium hover:bg-muted"
+        >
+          Depositar / extraer
+        </Link>
       </div>
 
       <section className="mt-8 space-y-3">

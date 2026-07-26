@@ -4,16 +4,19 @@ import type { ProjectRouteParams } from "@/types";
 import { getSession } from "@/lib/auth";
 import { getProjectById } from "@/features/projects/queries/get-projects";
 import { getProjectFinancialSummary } from "@/features/projects/queries/get-project-financials";
+import { listProjectClientPaidDocuments } from "@/features/projects/queries/list-project-client-paid";
+import { listProjectCostDocuments } from "@/features/projects/queries/list-project-cost-documents";
 import { getProjectBudget } from "@/features/budget/queries/get-project-budget";
 import { getEnabledCurrencies } from "@/features/settings/queries/get-organization";
 import { CreateBudgetForm } from "@/features/budget/components/create-budget-form";
 import { BudgetItemsEditor } from "@/features/budget/components/budget-items-editor";
+import { ClientPaidBreakdown } from "@/features/projects/components/client-paid-breakdown";
+import { ActualCostBreakdown } from "@/features/projects/components/actual-cost-breakdown";
 import {
   BUDGET_STATUS_LABEL,
   BUDGET_STATUS_STYLE,
   formatBudgetMoney,
 } from "@/features/budget/lib/labels";
-import { formatMoneyByCurrency } from "@/config/currencies";
 
 export default async function BudgetPage({ params }: ProjectRouteParams) {
   const session = await getSession();
@@ -23,11 +26,14 @@ export default async function BudgetPage({ params }: ProjectRouteParams) {
   const project = await getProjectById(id);
   if (!project) notFound();
 
-  const [budget, financials, enabledCurrencies] = await Promise.all([
-    getProjectBudget(id),
-    getProjectFinancialSummary(id),
-    getEnabledCurrencies(),
-  ]);
+  const [budget, financials, clientPaidDocuments, costDocuments, enabledCurrencies] =
+    await Promise.all([
+      getProjectBudget(id),
+      getProjectFinancialSummary(id),
+      listProjectClientPaidDocuments(id),
+      listProjectCostDocuments(id),
+      getEnabledCurrencies(),
+    ]);
   const canManage = ["ADMIN", "DIRECTOR", "RESIDENT"].includes(
     session.organizationRole,
   );
@@ -121,33 +127,17 @@ export default async function BudgetPage({ params }: ProjectRouteParams) {
             )}
           </dd>
         </div>
-        <div className="border-l-2 border-success pl-3">
-          <dt className="text-xs uppercase tracking-wider text-muted-foreground">
-            Cobrado del cliente
-          </dt>
-          <dd className="mt-1 font-display text-xl">
-            {formatMoneyByCurrency(clientPaidByCurrency)}
-          </dd>
-          {Object.values(clientPendingByCurrency).some((v) => v > 0) && (
-            <dd className="mt-0.5 text-xs text-muted-foreground">
-              Pendiente: {formatMoneyByCurrency(clientPendingByCurrency)}
-            </dd>
-          )}
-        </div>
-        <div className="border-l-2 border-danger pl-3">
-          <dt className="text-xs uppercase tracking-wider text-muted-foreground">
-            Costo real (OP)
-          </dt>
-          <dd className="mt-1 space-y-0.5 font-display text-xl">
-            {Object.keys(actualCostByCurrency).length === 0 ? (
-              "—"
-            ) : (
-              Object.entries(actualCostByCurrency).map(([cur, amount]) => (
-                <div key={cur}>{formatBudgetMoney(amount, cur)}</div>
-              ))
-            )}
-          </dd>
-        </div>
+        <ClientPaidBreakdown
+          totalByCurrency={clientPaidByCurrency}
+          documents={clientPaidDocuments}
+          pendingByCurrency={clientPendingByCurrency}
+          size="md"
+        />
+        <ActualCostBreakdown
+          totalByCurrency={actualCostByCurrency}
+          documents={costDocuments}
+          size="md"
+        />
         <div className="border-l-2 border-accent pl-3">
           <dt className="text-xs uppercase tracking-wider text-muted-foreground">
             Variación costo ({primaryCurrency})

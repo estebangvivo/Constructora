@@ -22,19 +22,29 @@ export default async function BanksPage() {
 
   return (
     <div className="px-4 py-6 lg:px-6">
-      <p className="text-sm text-muted-foreground">
-        <Link href="/treasury" className="hover:text-foreground">
-          Tesorería
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-sm text-muted-foreground">
+            <Link href="/treasury" className="hover:text-foreground">
+              Tesorería
+            </Link>
+          </p>
+          <h1 className="font-display text-3xl tracking-tight">Bancos</h1>
+          <p className="mt-1 text-muted-foreground">
+            Saldos de cuentas propias. Los movimientos se generan al imputar
+            transferencias o al depositar efectivo/cheques.{" "}
+            <Link href="/settings" className="text-accent hover:underline">
+              Administrar cuentas
+            </Link>
+          </p>
+        </div>
+        <Link
+          href="/treasury/banks/deposit"
+          className="inline-flex items-center rounded-md border border-border bg-background px-4 py-2.5 text-sm font-medium hover:bg-muted"
+        >
+          Nuevo movimiento
         </Link>
-      </p>
-      <h1 className="font-display text-3xl tracking-tight">Bancos</h1>
-      <p className="mt-1 text-muted-foreground">
-        Saldos de cuentas propias. Los movimientos se generan al imputar
-        transferencias.{" "}
-        <Link href="/settings" className="text-accent hover:underline">
-          Administrar cuentas
-        </Link>
-      </p>
+      </div>
 
       <div className="mt-6 border-l-2 border-accent pl-3">
         <p className="text-xs uppercase tracking-wider text-muted-foreground">

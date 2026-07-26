@@ -53,6 +53,7 @@ export async function getProjectFinancialSummary(
     postedReceiptLines,
     pendingReceiptLines,
     postedPaymentLines,
+    rejectionFees,
     budget,
     tasks,
   ] = await Promise.all([
@@ -66,7 +67,17 @@ export async function getProjectFinancialSummary(
       },
       select: {
         amount: true,
-        receipt: { select: { currency: true, issueDate: true } },
+        receipt: {
+          select: {
+            currency: true,
+            issueDate: true,
+            totalAmount: true,
+            checks: {
+              where: { status: "BOUNCED" },
+              select: { amount: true },
+            },
+          },
+        },
       },
     }),
     prisma.receiptLine.findMany({
@@ -95,6 +106,17 @@ export async function getProjectFinancialSummary(
         paymentOrder: {
           select: { currency: true, issueDate: true },
         },
+      },
+    }),
+    prisma.checkRejectionFee.findMany({
+      where: {
+        projectId,
+        organizationId: session.organizationId,
+      },
+      select: {
+        amount: true,
+        currency: true,
+        createdAt: true,
       },
     }),
     prisma.budget.findFirst({
@@ -162,10 +184,21 @@ export async function getProjectFinancialSummary(
 
   let clientPaidConverted = 0;
   for (const line of postedReceiptLines) {
+    const receiptTotal = toNumber(line.receipt.totalAmount);
+    const bouncedSum = line.receipt.checks.reduce(
+      (acc, c) => acc + toNumber(c.amount),
+      0,
+    );
+    const factor =
+      receiptTotal > 0.009
+        ? Math.max(0, (receiptTotal - bouncedSum) / receiptTotal)
+        : 1;
+    const effectiveAmount = toNumber(line.amount) * factor;
+
     const converted = await tryConvertAmountOnDate(
       prisma,
       session.organizationId,
-      toNumber(line.amount),
+      effectiveAmount,
       line.receipt.currency,
       chartCurrency,
       line.receipt.issueDate,
@@ -194,6 +227,21 @@ export async function getProjectFinancialSummary(
       paidOutConverted += converted;
     }
   }
+  for (const fee of rejectionFees) {
+    const converted = await tryConvertAmountOnDate(
+      prisma,
+      session.organizationId,
+      toNumber(fee.amount),
+      fee.currency,
+      chartCurrency,
+      fee.createdAt,
+    );
+    if (converted == null) {
+      fxIncomplete = true;
+    } else {
+      paidOutConverted += converted;
+    }
+  }
   paidOutConverted = Math.round(paidOutConverted * 100) / 100;
 
   const scheduleProgressPct =
@@ -207,10 +255,21 @@ export async function getProjectFinancialSummary(
   return {
     currency: chartCurrency,
     clientPaidByCurrency: sumByCurrency(
-      postedReceiptLines.map((l) => ({
-        currency: l.receipt.currency,
-        amount: toNumber(l.amount),
-      })),
+      postedReceiptLines.map((l) => {
+        const receiptTotal = toNumber(l.receipt.totalAmount);
+        const bouncedSum = l.receipt.checks.reduce(
+          (acc, c) => acc + toNumber(c.amount),
+          0,
+        );
+        const factor =
+          receiptTotal > 0.009
+            ? Math.max(0, (receiptTotal - bouncedSum) / receiptTotal)
+            : 1;
+        return {
+          currency: l.receipt.currency,
+          amount: toNumber(l.amount) * factor,
+        };
+      }),
     ),
     clientPendingByCurrency: sumByCurrency(
       pendingReceiptLines.map((l) => ({
@@ -218,12 +277,16 @@ export async function getProjectFinancialSummary(
         amount: toNumber(l.amount),
       })),
     ),
-    paidOutByCurrency: sumByCurrency(
-      postedPaymentLines.map((l) => ({
+    paidOutByCurrency: sumByCurrency([
+      ...postedPaymentLines.map((l) => ({
         currency: l.paymentOrder.currency,
         amount: toNumber(l.amount),
       })),
-    ),
+      ...rejectionFees.map((f) => ({
+        currency: f.currency,
+        amount: toNumber(f.amount),
+      })),
+    ]),
     clientPaidConverted,
     paidOutConverted,
     budgetEstimated,
