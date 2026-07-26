@@ -26,6 +26,14 @@ import {
   returnChecksFromPaymentOrder,
 } from "@/features/treasury/lib/check-portfolio";
 import {
+  applyPaymentOrderInvoiceBalances,
+  applyReceiptCertificationBalances,
+  replacePaymentOrderInvoiceApps,
+  replaceReceiptCertificationApps,
+  validateApplicationsSum,
+  type DocumentApplicationInput,
+} from "@/features/treasury/lib/document-applications";
+import {
   cashAmountFromPayments,
   paymentCreateData,
   primaryPaymentMethod,
@@ -63,6 +71,8 @@ export type CreateReceiptInput = {
   check?: CheckDetailsInput;
   lines: TreasuryLineInput[];
   payments?: TreasuryPaymentInput[];
+  /** Aplicaciones a certificaciones (cobro parcial). */
+  certificationApps?: DocumentApplicationInput[];
 };
 
 export type CreatePaymentOrderInput = {
@@ -78,6 +88,8 @@ export type CreatePaymentOrderInput = {
   check?: CheckDetailsInput;
   lines: TreasuryLineInput[];
   payments?: TreasuryPaymentInput[];
+  /** Aplicaciones a facturas de compra (pago parcial). */
+  invoiceApps?: DocumentApplicationInput[];
 };
 
 export type ActionResult =
@@ -201,6 +213,19 @@ export async function createReceipt(
     const paymentError = validatePaymentsAgainstTotal(payments, totalAmount);
     if (paymentError) return { ok: false, error: paymentError };
 
+    const certApps = (input.certificationApps ?? [])
+      .map((a) => ({
+        documentId: a.documentId,
+        amount: Number(a.amount) || 0,
+      }))
+      .filter((a) => a.amount > 0);
+    const appsError = validateApplicationsSum(
+      certApps,
+      totalAmount,
+      "certificaciones",
+    );
+    if (appsError) return { ok: false, error: appsError };
+
     const currency =
       input.currency?.trim() || (await getOrganizationCurrency());
     const primaryMethod = primaryPaymentMethod(payments);
@@ -212,7 +237,7 @@ export async function createReceipt(
         "REC",
         tx,
       );
-      return tx.receipt.create({
+      const created = await tx.receipt.create({
         data: {
           organizationId: session.organizationId,
           createdById: session.user.id,
@@ -241,6 +266,8 @@ export async function createReceipt(
           },
         },
       });
+      await replaceReceiptCertificationApps(tx, created.id, certApps);
+      return created;
     });
 
     revalidateTreasury(lines.map((l) => l.projectId ?? ""), {
@@ -289,6 +316,19 @@ export async function createPaymentOrder(
     });
     if (paymentError) return { ok: false, error: paymentError };
 
+    const invoiceApps = (input.invoiceApps ?? [])
+      .map((a) => ({
+        documentId: a.documentId,
+        amount: Number(a.amount) || 0,
+      }))
+      .filter((a) => a.amount > 0);
+    const appsError = validateApplicationsSum(
+      invoiceApps,
+      totalAmount,
+      "facturas",
+    );
+    if (appsError) return { ok: false, error: appsError };
+
     const currency =
       input.currency?.trim() || (await getOrganizationCurrency());
     const primaryMethod = primaryPaymentMethod(payments);
@@ -302,12 +342,14 @@ export async function createPaymentOrder(
         forPaymentOrder: true,
       });
       for (const row of paymentRows) {
-        if (row.method !== "CHECK" || !row.checkInstrumentId) continue;
+        if (row.method !== "CHECK" || row.isOwnCheck || !row.checkInstrumentId)
+          continue;
         const check = await tx.checkInstrument.findFirst({
           where: {
             id: row.checkInstrumentId,
             organizationId: session.organizationId,
             status: "IN_PORTFOLIO",
+            kind: "THIRD_PARTY",
           },
         });
         if (!check) {
@@ -347,7 +389,7 @@ export async function createPaymentOrder(
         );
       }
 
-      return tx.paymentOrder.create({
+      const created = await tx.paymentOrder.create({
         data: {
           organizationId: session.organizationId,
           createdById: session.user.id,
@@ -376,6 +418,8 @@ export async function createPaymentOrder(
           },
         },
       });
+      await replacePaymentOrderInvoiceApps(tx, created.id, invoiceApps);
+      return created;
     });
 
     revalidateTreasury(lines.map((l) => l.projectId ?? ""), {
@@ -513,6 +557,13 @@ export async function postReceipt(id: string): Promise<ActionResult> {
         payments: doc.payments,
       });
 
+      await applyReceiptCertificationBalances(
+        tx,
+        session.organizationId,
+        doc.id,
+        1,
+      );
+
       await tx.receipt.update({
         where: { id },
         data: { status: "POSTED", postedAt: new Date() },
@@ -560,6 +611,12 @@ export async function cancelReceipt(id: string): Promise<ActionResult> {
       }
 
       if (doc.status === "POSTED") {
+        await applyReceiptCertificationBalances(
+          tx,
+          session.organizationId,
+          doc.id,
+          -1,
+        );
         await cancelChecksFromReceipt(
           tx,
           session.organizationId,
@@ -689,10 +746,19 @@ export async function postPaymentOrder(id: string): Promise<ActionResult> {
       await deliverChecksFromPostedPaymentOrder(tx, {
         organizationId: session.organizationId,
         paymentOrderId: doc.id,
+        currency: doc.currency,
         payments: doc.payments.map((p) => ({
+          id: p.id,
           method: p.method,
           amount: p.amount,
           checkInstrumentId: p.checkInstrumentId,
+          isOwnCheck: p.isOwnCheck,
+          bankAccountId: p.bankAccountId,
+          checkNumber: p.checkNumber,
+          checkBank: p.checkBank,
+          checkIssueDate: p.checkIssueDate,
+          checkDueDate: p.checkDueDate,
+          checkAccount: p.checkAccount,
         })),
       });
 
@@ -705,6 +771,13 @@ export async function postPaymentOrder(id: string): Promise<ActionResult> {
         createdById: session.user.id,
         payments: doc.payments,
       });
+
+      await applyPaymentOrderInvoiceBalances(
+        tx,
+        session.organizationId,
+        doc.id,
+        1,
+      );
 
       await tx.paymentOrder.update({
         where: { id },
@@ -755,6 +828,12 @@ export async function cancelPaymentOrder(id: string): Promise<ActionResult> {
       }
 
       if (doc.status === "POSTED") {
+        await applyPaymentOrderInvoiceBalances(
+          tx,
+          session.organizationId,
+          doc.id,
+          -1,
+        );
         await returnChecksFromPaymentOrder(
           tx,
           session.organizationId,

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   Banknote,
+  BookUser,
   FileInput,
   FileOutput,
   Landmark,
@@ -181,9 +182,23 @@ export default async function TreasuryPage() {
             <ScrollText className="size-5" aria-hidden />
           </span>
           <span>
-            <span className="block font-medium">Cheques en cartera</span>
+            <span className="block font-medium">Cheques</span>
             <span className="text-sm text-muted-foreground">
-              Disponibles para pagar
+              Cartera y propios
+            </span>
+          </span>
+        </Link>
+        <Link
+          href="/treasury/accounts"
+          className="flex items-center gap-3 rounded-md border border-border bg-surface p-4 hover:border-accent/40"
+        >
+          <span className="flex size-10 items-center justify-center rounded-md bg-background text-accent">
+            <BookUser className="size-5" aria-hidden />
+          </span>
+          <span>
+            <span className="block font-medium">Cuentas corrientes</span>
+            <span className="text-sm text-muted-foreground">
+              Clientes y proveedores · aging
             </span>
           </span>
         </Link>

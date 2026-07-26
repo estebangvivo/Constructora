@@ -369,13 +369,17 @@ export type CheckRejectionFeeInput = {
   amount: number;
   projectId?: string | null;
   budgetItemId?: string | null;
+  /** Trasladar el gasto al librador (no suma al costo de obra). */
+  passedToDrawer?: boolean;
 };
 
-/** Registra el rechazo de un cheque ya depositado (y gastos asociados). */
+/** Registra el rechazo de un cheque depositado o entregado (y gastos asociados). */
 export async function bounceDepositedCheck(input: {
   checkId: string;
   reason?: string;
   fees?: CheckRejectionFeeInput[];
+  /** Cuenta para debitar gastos cuando el cheque estaba entregado (no depositado). */
+  feeBankAccountId?: string;
 }): Promise<ActionResult> {
   try {
     const session = await requireSession();
@@ -390,6 +394,7 @@ export async function bounceDepositedCheck(input: {
         amount: round2(Math.abs(Number(f.amount) || 0)),
         projectId: f.projectId?.trim() || null,
         budgetItemId: f.budgetItemId?.trim() || null,
+        passedToDrawer: Boolean(f.passedToDrawer),
       }))
       .filter((f) => f.amount > 0);
 
@@ -421,25 +426,40 @@ export async function bounceDepositedCheck(input: {
               },
             },
           },
+          paymentOrder: {
+            select: {
+              id: true,
+              number: true,
+              lines: {
+                select: {
+                  budgetItemId: true,
+                  projectId: true,
+                },
+              },
+            },
+          },
         },
       });
       if (!check) throw new Error("Cheque no encontrado.");
-      if (check.status !== "DEPOSITED") {
+      if (check.status !== "DEPOSITED" && check.status !== "DELIVERED") {
         throw new Error(
-          "Solo se pueden rechazar cheques que ya fueron depositados.",
+          "Solo se pueden rechazar cheques depositados o entregados.",
         );
       }
-      if (!check.depositedBankAccountId) {
+
+      const isDeposited = check.status === "DEPOSITED";
+      if (isDeposited && !check.depositedBankAccountId) {
         throw new Error(
           "El cheque no tiene cuenta de depósito asociada.",
         );
       }
 
       const amount = toNumber(check.amount);
-      const receiptLineKeys = new Set(
-        (check.receipt?.lines ?? []).map(
-          (l) => `${l.projectId ?? ""}:${l.budgetItemId ?? ""}`,
-        ),
+      const allocationKeys = new Set(
+        [
+          ...(check.receipt?.lines ?? []),
+          ...(check.paymentOrder?.lines ?? []),
+        ].map((l) => `${l.projectId ?? ""}:${l.budgetItemId ?? ""}`),
       );
 
       for (const fee of fees) {
@@ -450,9 +470,9 @@ export async function bounceDepositedCheck(input: {
           );
         }
         const key = `${fee.projectId}:${fee.budgetItemId}`;
-        if (receiptLineKeys.size > 0 && !receiptLineKeys.has(key)) {
+        if (allocationKeys.size > 0 && !allocationKeys.has(key)) {
           throw new Error(
-            "La partida del gasto debe coincidir con una imputación del recibo.",
+            "La partida del gasto debe coincidir con una imputación del recibo u orden de pago.",
           );
         }
         const item = await tx.budgetItem.findFirst({
@@ -470,32 +490,62 @@ export async function bounceDepositedCheck(input: {
         }
       }
 
-      await postBankMovement(tx, {
-        organizationId: session.organizationId,
-        bankAccountId: check.depositedBankAccountId,
-        amount,
-        kind: "BOUNCE",
-        description: `Rechazo cheque ${check.number} · ${check.bank}${
-          reason ? ` · ${reason}` : ""
-        }${check.receipt ? ` · ${check.receipt.number}` : ""}`,
-        currency: check.currency,
-        checkInstrumentId: check.id,
-        receiptId: check.receiptId ?? undefined,
-        createdById: session.user.id,
-      });
-
-      for (const fee of fees) {
+      let feeBankAccountId: string | null = null;
+      if (isDeposited) {
+        feeBankAccountId = check.depositedBankAccountId;
         await postBankMovement(tx, {
           organizationId: session.organizationId,
           bankAccountId: check.depositedBankAccountId!,
-          amount: fee.amount,
-          kind: "EXPENSE",
-          description: `Gasto rechazo cheque ${check.number} · ${fee.description}`,
+          amount,
+          kind: "BOUNCE",
+          description: `Rechazo cheque ${check.number} · ${check.bank}${
+            reason ? ` · ${reason}` : ""
+          }${check.receipt ? ` · ${check.receipt.number}` : ""}`,
           currency: check.currency,
           checkInstrumentId: check.id,
           receiptId: check.receiptId ?? undefined,
           createdById: session.user.id,
         });
+      } else if (fees.length > 0) {
+        const requested = input.feeBankAccountId?.trim() || null;
+        if (!requested) {
+          throw new Error(
+            "Para gastos de un cheque entregado elegí la cuenta bancaria a debitar.",
+          );
+        }
+        const bank = await tx.bankAccount.findFirst({
+          where: {
+            id: requested,
+            organizationId: session.organizationId,
+            isActive: true,
+          },
+        });
+        if (!bank) throw new Error("Cuenta bancaria no encontrada.");
+        if (bank.currency.toUpperCase() !== check.currency.toUpperCase()) {
+          throw new Error(
+            `La cuenta opera en ${bank.currency}, el cheque está en ${check.currency}.`,
+          );
+        }
+        feeBankAccountId = bank.id;
+      }
+
+      for (const fee of fees) {
+        if (feeBankAccountId) {
+          await postBankMovement(tx, {
+            organizationId: session.organizationId,
+            bankAccountId: feeBankAccountId,
+            amount: fee.amount,
+            kind: "EXPENSE",
+            description: `Gasto rechazo cheque ${check.number} · ${fee.description}${
+              fee.passedToDrawer ? " · a cargo del librador" : ""
+            }`,
+            currency: check.currency,
+            checkInstrumentId: check.id,
+            receiptId: check.receiptId ?? undefined,
+            paymentOrderId: check.paymentOrderId ?? undefined,
+            createdById: session.user.id,
+          });
+        }
 
         await tx.checkRejectionFee.create({
           data: {
@@ -506,6 +556,7 @@ export async function bounceDepositedCheck(input: {
             currency: check.currency,
             projectId: fee.projectId,
             budgetItemId: fee.budgetItemId,
+            passedToDrawer: fee.passedToDrawer,
           },
         });
       }
@@ -521,6 +572,7 @@ export async function bounceDepositedCheck(input: {
 
       const budgetItemIds = [
         ...(check.receipt?.lines.map((l) => l.budgetItemId) ?? []),
+        ...(check.paymentOrder?.lines.map((l) => l.budgetItemId) ?? []),
         ...fees.map((f) => f.budgetItemId),
       ];
       await syncBudgetItemsFromTreasury(
@@ -530,15 +582,21 @@ export async function bounceDepositedCheck(input: {
       );
 
       return {
-        bankAccountId: check.depositedBankAccountId,
+        bankAccountId: feeBankAccountId ?? check.depositedBankAccountId,
         projectIds: [
           ...(check.receipt?.lines.map((l) => l.projectId) ?? []),
+          ...(check.paymentOrder?.lines.map((l) => l.projectId) ?? []),
           ...fees.map((f) => f.projectId),
         ].filter((id): id is string => Boolean(id)),
       };
     });
 
-    revalidateDeposit(result.bankAccountId);
+    if (result.bankAccountId) {
+      revalidateDeposit(result.bankAccountId);
+    } else {
+      revalidatePath("/treasury/checks");
+      revalidatePath("/", "layout");
+    }
     for (const projectId of [...new Set(result.projectIds)]) {
       revalidatePath(`/projects/${projectId}`);
       revalidatePath(`/projects/${projectId}/budget`);

@@ -9,6 +9,7 @@ import {
 } from "@/features/settings/queries/get-organization";
 import { listPortfolioChecksForPayment } from "@/features/treasury/queries/list-checks";
 import { listActiveBankAccountsForPayment } from "@/features/treasury/queries/bank-queries";
+import { listOpenPurchaseInvoices } from "@/features/treasury/queries/account-statements";
 import { TreasuryDocumentForm } from "@/features/treasury/components/treasury-document-form";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +31,7 @@ export default async function NewPaymentOrderPage({ searchParams }: PageProps) {
     enabledCurrencies,
     portfolioChecks,
     bankAccounts,
+    openInvoices,
   ] = await Promise.all([
     listProjectsForTreasury(),
     listActiveSuppliers(),
@@ -37,6 +39,9 @@ export default async function NewPaymentOrderPage({ searchParams }: PageProps) {
     getEnabledCurrencies(),
     listPortfolioChecksForPayment(),
     listActiveBankAccountsForPayment(),
+    listOpenPurchaseInvoices(
+      projectId ? { projectId } : undefined,
+    ),
   ]);
 
   const defaultProjectId =
@@ -64,6 +69,12 @@ export default async function NewPaymentOrderPage({ searchParams }: PageProps) {
         defaultProjectId={defaultProjectId}
         portfolioChecks={portfolioChecks}
         bankAccounts={bankAccounts}
+        openDocuments={openInvoices.map((i) => ({
+          id: i.id,
+          label: i.label,
+          balance: i.balance,
+          currency: i.currency,
+        }))}
       />
     </div>
   );

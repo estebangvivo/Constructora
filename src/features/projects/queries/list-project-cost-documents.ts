@@ -31,6 +31,8 @@ export type ProjectCostDocument =
       receiptId: string | null;
       receiptNumber: string | null;
       budgetItemLabel: string | null;
+      passedToDrawer: boolean;
+      drawerName: string | null;
     };
 
 /** Documentos que conforman el costo real / pagado de la obra. */
@@ -85,11 +87,13 @@ export async function listProjectCostDocuments(
         amount: true,
         currency: true,
         createdAt: true,
+        passedToDrawer: true,
         budgetItem: { select: { code: true, description: true } },
         checkInstrument: {
           select: {
             number: true,
             bank: true,
+            drawerName: true,
             receipt: { select: { id: true, number: true } },
           },
         },
@@ -161,6 +165,8 @@ export async function listProjectCostDocuments(
         budgetItemLabel: fee.budgetItem
           ? `${fee.budgetItem.code} · ${fee.budgetItem.description}`
           : null,
+        passedToDrawer: fee.passedToDrawer,
+        drawerName: fee.checkInstrument.drawerName,
       }),
     ),
   ];

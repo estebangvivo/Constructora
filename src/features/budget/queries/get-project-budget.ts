@@ -110,7 +110,15 @@ export async function getProjectBudget(
             budgetItemId: true,
             amount: true,
             paymentOrder: {
-              select: { currency: true, issueDate: true },
+              select: {
+                currency: true,
+                issueDate: true,
+                totalAmount: true,
+                checksDelivered: {
+                  where: { status: "BOUNCED" },
+                  select: { amount: true },
+                },
+              },
             },
           },
         }),
@@ -120,6 +128,7 @@ export async function getProjectBudget(
           where: {
             budgetItemId: { in: itemIds },
             organizationId: session.organizationId,
+            passedToDrawer: false,
           },
           select: {
             budgetItemId: true,
@@ -154,10 +163,19 @@ export async function getProjectBudget(
 
   for (const line of paymentLines) {
     if (!line.budgetItemId) continue;
+    const orderTotal = toNumber(line.paymentOrder.totalAmount);
+    const bouncedSum = line.paymentOrder.checksDelivered.reduce(
+      (acc, c) => acc + toNumber(c.amount),
+      0,
+    );
+    const factor =
+      orderTotal > 0.009
+        ? Math.max(0, (orderTotal - bouncedSum) / orderTotal)
+        : 1;
     const list = costNative.get(line.budgetItemId) ?? [];
     list.push({
       currency: line.paymentOrder.currency,
-      amount: toNumber(line.amount),
+      amount: toNumber(line.amount) * factor,
     });
     costNative.set(line.budgetItemId, list);
   }
@@ -212,10 +230,19 @@ export async function getProjectBudget(
 
       const postedCost = paymentLines.filter((l) => l.budgetItemId === item.id);
       for (const line of postedCost) {
+        const orderTotal = toNumber(line.paymentOrder.totalAmount);
+        const bouncedSum = line.paymentOrder.checksDelivered.reduce(
+          (acc, c) => acc + toNumber(c.amount),
+          0,
+        );
+        const factor =
+          orderTotal > 0.009
+            ? Math.max(0, (orderTotal - bouncedSum) / orderTotal)
+            : 1;
         const converted = await tryConvertAmountOnDate(
           prisma,
           session.organizationId,
-          toNumber(line.amount),
+          toNumber(line.amount) * factor,
           line.paymentOrder.currency,
           itemCurrency,
           line.paymentOrder.issueDate,

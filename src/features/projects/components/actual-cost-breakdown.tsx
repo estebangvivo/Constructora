@@ -148,6 +148,13 @@ export function ActualCostBreakdown({
                                 Partida: {doc.budgetItemLabel}
                               </p>
                             ) : null}
+                            {doc.passedToDrawer ? (
+                              <p className="mt-1 text-xs text-accent">
+                                Trasladado al librador
+                                {doc.drawerName ? ` (${doc.drawerName})` : ""} ·
+                                no suma al costo de obra
+                              </p>
+                            ) : null}
                             {doc.receiptId && doc.receiptNumber ? (
                               <Link
                                 href={`/treasury/receipts/${doc.receiptId}`}

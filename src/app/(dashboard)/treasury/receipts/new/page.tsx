@@ -8,6 +8,7 @@ import {
   getOrganizationCurrency,
 } from "@/features/settings/queries/get-organization";
 import { listActiveBankAccountsForPayment } from "@/features/treasury/queries/bank-queries";
+import { listOpenCertifications } from "@/features/treasury/queries/account-statements";
 import { TreasuryDocumentForm } from "@/features/treasury/components/treasury-document-form";
 
 export const dynamic = "force-dynamic";
@@ -22,14 +23,23 @@ export default async function NewReceiptPage({ searchParams }: PageProps) {
 
   const { projectId } = await searchParams;
 
-  const [projects, clients, currency, enabledCurrencies, bankAccounts] =
-    await Promise.all([
-      listProjectsForTreasury(),
-      listActiveClients(),
-      getOrganizationCurrency(),
-      getEnabledCurrencies(),
-      listActiveBankAccountsForPayment(),
-    ]);
+  const [
+    projects,
+    clients,
+    currency,
+    enabledCurrencies,
+    bankAccounts,
+    openCerts,
+  ] = await Promise.all([
+    listProjectsForTreasury(),
+    listActiveClients(),
+    getOrganizationCurrency(),
+    getEnabledCurrencies(),
+    listActiveBankAccountsForPayment(),
+    listOpenCertifications(
+      projectId ? { projectId } : undefined,
+    ),
+  ]);
 
   const defaultProjectId =
     projectId && projects.some((p) => p.id === projectId) ? projectId : "";
@@ -50,6 +60,12 @@ export default async function NewReceiptPage({ searchParams }: PageProps) {
         enabledCurrencies={enabledCurrencies}
         defaultProjectId={defaultProjectId}
         bankAccounts={bankAccounts}
+        openDocuments={openCerts.map((c) => ({
+          id: c.id,
+          label: c.label,
+          balance: c.balance,
+          currency: c.currency,
+        }))}
       />
     </div>
   );

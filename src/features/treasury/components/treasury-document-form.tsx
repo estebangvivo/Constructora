@@ -55,6 +55,13 @@ type TreasuryDocumentFormProps = {
   portfolioChecks?: PortfolioCheckOption[];
   /** Cuentas bancarias activas para transferencias. */
   bankAccounts?: BankAccountFormOption[];
+  /** Facturas abiertas (OP) o certificaciones abiertas (recibo). */
+  openDocuments?: {
+    id: string;
+    label: string;
+    balance: number;
+    currency: string;
+  }[];
 };
 
 const METHOD_OPTIONS: PaymentMethod[] = [
@@ -81,6 +88,7 @@ function emptyPayment(amount = 0): PaymentState {
     amount,
     bankAccountId: "",
     checkInstrumentId: "",
+    isOwnCheck: false,
     checkNumber: "",
     checkBank: "",
     checkIssueDate: "",
@@ -110,6 +118,7 @@ export function TreasuryDocumentForm({
   defaultProjectId = "",
   portfolioChecks = [],
   bankAccounts = [],
+  openDocuments = [],
 }: TreasuryDocumentFormProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -130,6 +139,9 @@ export function TreasuryDocumentForm({
   const [payments, setPayments] = useState<PaymentState[]>(() => [
     emptyPayment(),
   ]);
+  const [apps, setApps] = useState<
+    { key: string; documentId: string; amount: string }[]
+  >([]);
   const [budgetItemsByProject, setBudgetItemsByProject] = useState<
     Record<string, BudgetItemOption[]>
   >({});
@@ -251,7 +263,10 @@ export function TreasuryDocumentForm({
             method: p.method,
             amount: Number(p.amount) || 0,
             bankAccountId: p.bankAccountId || undefined,
-            checkInstrumentId: p.checkInstrumentId || undefined,
+            checkInstrumentId: p.isOwnCheck
+              ? undefined
+              : p.checkInstrumentId || undefined,
+            isOwnCheck: kind === "payment-order" ? Boolean(p.isOwnCheck) : undefined,
             checkNumber: p.checkNumber || undefined,
             checkBank: p.checkBank || undefined,
             checkIssueDate: p.checkIssueDate || undefined,
@@ -260,17 +275,26 @@ export function TreasuryDocumentForm({
           })),
       };
 
+      const parsedApps = apps
+        .map((a) => ({
+          documentId: a.documentId,
+          amount: Number(String(a.amount).replace(",", ".")) || 0,
+        }))
+        .filter((a) => a.documentId && a.amount > 0);
+
       const result =
         kind === "receipt"
           ? await createReceipt({
               ...payload,
               clientId: partyId || undefined,
               partyName: partyName || undefined,
+              certificationApps: parsedApps,
             })
           : await createPaymentOrder({
               ...payload,
               supplierId: partyId || undefined,
               partyName: partyName || undefined,
+              invoiceApps: parsedApps,
             });
 
       if (!result.ok) {
@@ -580,7 +604,9 @@ export function TreasuryDocumentForm({
                     step="0.01"
                     required
                     readOnly={
-                      kind === "payment-order" && payment.method === "CHECK"
+                      kind === "payment-order" &&
+                      payment.method === "CHECK" &&
+                      !payment.isOwnCheck
                     }
                     value={payment.amount || ""}
                     onChange={(e) =>
@@ -658,73 +684,197 @@ export function TreasuryDocumentForm({
 
               {payment.method === "CHECK" && kind === "payment-order" && (
                 <div className="space-y-2">
-                  <label className="block text-sm">
-                    <span className="mb-1 block text-muted-foreground">
-                      Cheque de cartera
-                    </span>
-                    <select
-                      required
-                      value={payment.checkInstrumentId ?? ""}
-                      onChange={(e) => {
-                        const check = portfolioChecks.find(
-                          (c) => c.id === e.target.value,
-                        );
-                        if (!check) {
+                  <div className="flex flex-wrap gap-3 text-sm">
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name={`check-mode-${payment.key}`}
+                        checked={!payment.isOwnCheck}
+                        onChange={() =>
                           updatePayment(payment.key, {
+                            isOwnCheck: false,
+                            bankAccountId: "",
                             checkInstrumentId: "",
-                            amount: 0,
                             checkNumber: "",
                             checkBank: "",
-                            checkIssueDate: "",
                             checkDueDate: "",
-                            checkAccount: "",
-                          });
-                          return;
+                            amount: 0,
+                          })
                         }
-                        updatePayment(payment.key, {
-                          checkInstrumentId: check.id,
-                          amount: check.amount,
-                          checkNumber: check.number,
-                          checkBank: check.bank,
-                          checkDueDate: check.dueDate ?? "",
-                          checkIssueDate: "",
-                          checkAccount: "",
-                        });
-                      }}
-                      className="w-full rounded-md border border-border bg-background px-3 py-2 outline-none ring-accent focus:ring-2"
-                    >
-                      <option value="">
-                        {portfolioChecks.length === 0
-                          ? "No hay cheques en cartera"
-                          : "Elegí un cheque…"}
-                      </option>
-                      {portfolioChecks
-                        .filter(
-                          (c) =>
-                            c.id === payment.checkInstrumentId ||
-                            !payments.some(
-                              (p) =>
-                                p.key !== payment.key &&
-                                p.checkInstrumentId === c.id,
-                            ),
-                        )
-                        .map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.label}
+                      />
+                      De cartera
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name={`check-mode-${payment.key}`}
+                        checked={Boolean(payment.isOwnCheck)}
+                        onChange={() =>
+                          updatePayment(payment.key, {
+                            isOwnCheck: true,
+                            checkInstrumentId: "",
+                            checkNumber: "",
+                            checkBank: "",
+                            checkDueDate: "",
+                            bankAccountId: "",
+                          })
+                        }
+                      />
+                      Cheque propio
+                    </label>
+                  </div>
+
+                  {!payment.isOwnCheck ? (
+                    <>
+                      <label className="block text-sm">
+                        <span className="mb-1 block text-muted-foreground">
+                          Cheque de cartera
+                        </span>
+                        <select
+                          required
+                          value={payment.checkInstrumentId ?? ""}
+                          onChange={(e) => {
+                            const check = portfolioChecks.find(
+                              (c) => c.id === e.target.value,
+                            );
+                            if (!check) {
+                              updatePayment(payment.key, {
+                                checkInstrumentId: "",
+                                amount: 0,
+                                checkNumber: "",
+                                checkBank: "",
+                                checkIssueDate: "",
+                                checkDueDate: "",
+                                checkAccount: "",
+                              });
+                              return;
+                            }
+                            updatePayment(payment.key, {
+                              checkInstrumentId: check.id,
+                              amount: check.amount,
+                              checkNumber: check.number,
+                              checkBank: check.bank,
+                              checkDueDate: check.dueDate ?? "",
+                              checkIssueDate: "",
+                              checkAccount: "",
+                            });
+                          }}
+                          className="w-full rounded-md border border-border bg-background px-3 py-2 outline-none ring-accent focus:ring-2"
+                        >
+                          <option value="">
+                            {portfolioChecks.length === 0
+                              ? "No hay cheques en cartera"
+                              : "Elegí un cheque…"}
                           </option>
-                        ))}
-                    </select>
-                  </label>
-                  {portfolioChecks.length === 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      Imputá un recibo con cheque para que entre a cartera.{" "}
-                      <a
-                        href="/treasury/checks"
-                        className="text-accent hover:underline"
-                      >
-                        Ver cartera
-                      </a>
-                    </p>
+                          {portfolioChecks
+                            .filter(
+                              (c) =>
+                                c.id === payment.checkInstrumentId ||
+                                !payments.some(
+                                  (p) =>
+                                    p.key !== payment.key &&
+                                    p.checkInstrumentId === c.id,
+                                ),
+                            )
+                            .map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.label}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+                      {portfolioChecks.length === 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          Imputá un recibo con cheque para que entre a cartera.{" "}
+                          <a
+                            href="/treasury/checks"
+                            className="text-accent hover:underline"
+                          >
+                            Ver cartera
+                          </a>
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <label className="block text-sm sm:col-span-2">
+                        <span className="mb-1 block text-muted-foreground">
+                          Cuenta emisora
+                        </span>
+                        <select
+                          required
+                          value={payment.bankAccountId ?? ""}
+                          onChange={(e) =>
+                            updatePayment(payment.key, {
+                              bankAccountId: e.target.value,
+                              checkBank:
+                                bankAccounts.find((b) => b.id === e.target.value)
+                                  ?.bankName ?? payment.checkBank,
+                            })
+                          }
+                          className="w-full rounded-md border border-border bg-background px-3 py-2 outline-none ring-accent focus:ring-2"
+                        >
+                          <option value="">Elegí cuenta…</option>
+                          {bankAccounts
+                            .filter((b) => b.currency === currency)
+                            .map((b) => (
+                              <option key={b.id} value={b.id}>
+                                {b.label}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+                      <label className="block text-sm">
+                        <span className="mb-1 block text-muted-foreground">
+                          N° cheque
+                        </span>
+                        <input
+                          required
+                          value={payment.checkNumber ?? ""}
+                          onChange={(e) =>
+                            updatePayment(payment.key, {
+                              checkNumber: e.target.value,
+                            })
+                          }
+                          className="w-full rounded-md border border-border bg-background px-3 py-2 outline-none ring-accent focus:ring-2"
+                        />
+                      </label>
+                      <label className="block text-sm">
+                        <span className="mb-1 block text-muted-foreground">
+                          Banco
+                        </span>
+                        <input
+                          required
+                          value={payment.checkBank ?? ""}
+                          onChange={(e) =>
+                            updatePayment(payment.key, {
+                              checkBank: e.target.value,
+                            })
+                          }
+                          className="w-full rounded-md border border-border bg-background px-3 py-2 outline-none ring-accent focus:ring-2"
+                        />
+                      </label>
+                      <label className="block text-sm">
+                        <span className="mb-1 block text-muted-foreground">
+                          Vencimiento
+                        </span>
+                        <input
+                          required
+                          type="date"
+                          value={payment.checkDueDate ?? ""}
+                          onChange={(e) =>
+                            updatePayment(payment.key, {
+                              checkDueDate: e.target.value,
+                            })
+                          }
+                          className="w-full rounded-md border border-border bg-background px-3 py-2 outline-none ring-accent focus:ring-2"
+                        />
+                      </label>
+                      <p className="text-xs text-muted-foreground sm:col-span-2">
+                        El banco se debita cuando se cumpla el vencimiento
+                        (acción en cartera de cheques propios).
+                      </p>
+                    </div>
                   )}
                 </div>
               )}
@@ -817,6 +967,85 @@ export function TreasuryDocumentForm({
           </p>
         </div>
       </section>
+
+      {openDocuments.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-display text-lg tracking-tight">
+              {kind === "receipt"
+                ? "Aplicar a certificaciones"
+                : "Aplicar a facturas"}
+            </h2>
+            <button
+              type="button"
+              onClick={() =>
+                setApps((prev) => [
+                  ...prev,
+                  {
+                    key: Math.random().toString(36).slice(2),
+                    documentId: openDocuments[0]?.id ?? "",
+                    amount: "",
+                  },
+                ])
+              }
+              className="text-sm text-accent hover:underline"
+            >
+              + Agregar
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Opcional. Si no aplicás, el movimiento queda a cuenta en la CT.
+          </p>
+          {apps.map((app) => (
+            <div
+              key={app.key}
+              className="grid gap-2 rounded-md border border-border p-3 sm:grid-cols-[1fr_8rem_auto]"
+            >
+              <select
+                value={app.documentId}
+                onChange={(e) =>
+                  setApps((prev) =>
+                    prev.map((a) =>
+                      a.key === app.key
+                        ? { ...a, documentId: e.target.value }
+                        : a,
+                    ),
+                  )
+                }
+                className="rounded-md border border-border bg-background px-3 py-2 text-sm outline-none ring-accent focus:ring-2"
+              >
+                {openDocuments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                inputMode="decimal"
+                value={app.amount}
+                onChange={(e) =>
+                  setApps((prev) =>
+                    prev.map((a) =>
+                      a.key === app.key ? { ...a, amount: e.target.value } : a,
+                    ),
+                  )
+                }
+                placeholder="Monto"
+                className="rounded-md border border-border bg-background px-3 py-2 text-sm outline-none ring-accent focus:ring-2"
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  setApps((prev) => prev.filter((a) => a.key !== app.key))
+                }
+                className="text-sm text-muted-foreground hover:text-danger"
+              >
+                Quitar
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
 
       <label className="block text-sm">
         <span className="mb-1 block text-muted-foreground">Notas</span>

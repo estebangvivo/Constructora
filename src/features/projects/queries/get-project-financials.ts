@@ -104,7 +104,15 @@ export async function getProjectFinancialSummary(
       select: {
         amount: true,
         paymentOrder: {
-          select: { currency: true, issueDate: true },
+          select: {
+            currency: true,
+            issueDate: true,
+            totalAmount: true,
+            checksDelivered: {
+              where: { status: "BOUNCED" },
+              select: { amount: true },
+            },
+          },
         },
       },
     }),
@@ -112,6 +120,7 @@ export async function getProjectFinancialSummary(
       where: {
         projectId,
         organizationId: session.organizationId,
+        passedToDrawer: false,
       },
       select: {
         amount: true,
@@ -213,10 +222,19 @@ export async function getProjectFinancialSummary(
 
   let paidOutConverted = 0;
   for (const line of postedPaymentLines) {
+    const orderTotal = toNumber(line.paymentOrder.totalAmount);
+    const bouncedSum = line.paymentOrder.checksDelivered.reduce(
+      (acc, c) => acc + toNumber(c.amount),
+      0,
+    );
+    const factor =
+      orderTotal > 0.009
+        ? Math.max(0, (orderTotal - bouncedSum) / orderTotal)
+        : 1;
     const converted = await tryConvertAmountOnDate(
       prisma,
       session.organizationId,
-      toNumber(line.amount),
+      toNumber(line.amount) * factor,
       line.paymentOrder.currency,
       chartCurrency,
       line.paymentOrder.issueDate,
@@ -278,10 +296,21 @@ export async function getProjectFinancialSummary(
       })),
     ),
     paidOutByCurrency: sumByCurrency([
-      ...postedPaymentLines.map((l) => ({
-        currency: l.paymentOrder.currency,
-        amount: toNumber(l.amount),
-      })),
+      ...postedPaymentLines.map((l) => {
+        const orderTotal = toNumber(l.paymentOrder.totalAmount);
+        const bouncedSum = l.paymentOrder.checksDelivered.reduce(
+          (acc, c) => acc + toNumber(c.amount),
+          0,
+        );
+        const factor =
+          orderTotal > 0.009
+            ? Math.max(0, (orderTotal - bouncedSum) / orderTotal)
+            : 1;
+        return {
+          currency: l.paymentOrder.currency,
+          amount: toNumber(l.amount) * factor,
+        };
+      }),
       ...rejectionFees.map((f) => ({
         currency: f.currency,
         amount: toNumber(f.amount),

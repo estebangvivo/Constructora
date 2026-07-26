@@ -73,6 +73,7 @@ export async function ingestChecksFromPostedReceipt(
     await tx.checkInstrument.create({
       data: {
         organizationId: input.organizationId,
+        kind: "THIRD_PARTY",
         number,
         bank,
         amount: payment.amount,
@@ -121,26 +122,126 @@ export async function cancelChecksFromReceipt(
 }
 
 /**
- * Al imputar una OP, marca como entregados los cheques vinculados.
- * Valida que estén en cartera y que el monto coincida.
+ * Al imputar una OP, marca como entregados los cheques de cartera
+ * o emite cheques propios (sin debitar banco aún).
  */
 export async function deliverChecksFromPostedPaymentOrder(
   tx: Tx,
   input: {
     organizationId: string;
     paymentOrderId: string;
+    currency: string;
     payments: {
+      id?: string;
       method: PaymentMethod;
       amount: Prisma.Decimal | number;
       checkInstrumentId: string | null;
+      isOwnCheck?: boolean;
+      bankAccountId?: string | null;
+      checkNumber?: string | null;
+      checkBank?: string | null;
+      checkIssueDate?: Date | null;
+      checkDueDate?: Date | null;
+      checkAccount?: string | null;
     }[];
   },
 ) {
   for (const payment of input.payments) {
     if (payment.method !== "CHECK") continue;
+
+    if (payment.isOwnCheck) {
+      const number = payment.checkNumber?.trim();
+      const bank = payment.checkBank?.trim();
+      const issuedFromBankAccountId = payment.bankAccountId;
+      if (!number || !bank) {
+        throw new Error("Cheque propio sin número o banco.");
+      }
+      if (!issuedFromBankAccountId) {
+        throw new Error("Cheque propio sin cuenta emisora.");
+      }
+      if (!payment.checkDueDate) {
+        throw new Error("Cheque propio sin fecha de vencimiento.");
+      }
+
+      const account = await tx.bankAccount.findFirst({
+        where: {
+          id: issuedFromBankAccountId,
+          organizationId: input.organizationId,
+          isActive: true,
+        },
+      });
+      if (!account) throw new Error("Cuenta emisora no encontrada.");
+      if (
+        account.currency.toUpperCase() !== input.currency.toUpperCase()
+      ) {
+        throw new Error(
+          `La cuenta emisora opera en ${account.currency}, la OP está en ${input.currency}.`,
+        );
+      }
+
+      const existing = await tx.checkInstrument.findUnique({
+        where: {
+          organizationId_bank_number: {
+            organizationId: input.organizationId,
+            bank,
+            number,
+          },
+        },
+      });
+      if (existing && existing.status !== "CANCELLED") {
+        throw new Error(
+          `Ya existe el cheque ${number} del banco ${bank}.`,
+        );
+      }
+
+      const created = existing
+        ? await tx.checkInstrument.update({
+            where: { id: existing.id },
+            data: {
+              kind: "OWN",
+              amount: payment.amount,
+              currency: input.currency,
+              issueDate: payment.checkIssueDate,
+              dueDate: payment.checkDueDate,
+              account: payment.checkAccount,
+              status: "DELIVERED",
+              paymentOrderId: input.paymentOrderId,
+              issuedFromBankAccountId,
+              receiptId: null,
+              drawerName: null,
+              depositedBankAccountId: null,
+              depositedAt: null,
+            },
+          })
+        : await tx.checkInstrument.create({
+            data: {
+              organizationId: input.organizationId,
+              kind: "OWN",
+              number,
+              bank,
+              amount: payment.amount,
+              currency: input.currency,
+              issueDate: payment.checkIssueDate,
+              dueDate: payment.checkDueDate,
+              account: payment.checkAccount,
+              status: "DELIVERED",
+              paymentOrderId: input.paymentOrderId,
+              issuedFromBankAccountId,
+            },
+          });
+
+      if (payment.id) {
+        await tx.paymentOrderPayment.update({
+          where: { id: payment.id },
+          data: { checkInstrumentId: created.id },
+        });
+      }
+      continue;
+    }
+
     if (!payment.checkInstrumentId) {
       throw new Error(
-        "En órdenes de pago, los cheques deben elegirse de la cartera.",
+        "En órdenes de pago, los cheques deben elegirse de la cartera o emitirse como propios.",
       );
     }
 
@@ -148,6 +249,7 @@ export async function deliverChecksFromPostedPaymentOrder(
       where: {
         id: payment.checkInstrumentId,
         organizationId: input.organizationId,
+        kind: "THIRD_PARTY",
       },
     });
     if (!check) throw new Error("Cheque de cartera no encontrado.");
@@ -175,23 +277,43 @@ export async function deliverChecksFromPostedPaymentOrder(
   }
 }
 
-/** Al anular una OP, devuelve los cheques a cartera. */
+/** Al anular una OP, devuelve cheques de terceros a cartera y anula propios no debitados. */
 export async function returnChecksFromPaymentOrder(
   tx: Tx,
   organizationId: string,
   paymentOrderId: string,
 ) {
-  await tx.checkInstrument.updateMany({
-    where: {
-      organizationId,
-      paymentOrderId,
-      status: "DELIVERED",
-    },
-    data: {
-      status: "IN_PORTFOLIO",
-      paymentOrderId: null,
-    },
+  const checks = await tx.checkInstrument.findMany({
+    where: { organizationId, paymentOrderId },
   });
+
+  for (const check of checks) {
+    if (check.kind === "OWN") {
+      if (check.status === "DEPOSITED") {
+        throw new Error(
+          `No se puede anular: el cheque propio ${check.number} ya fue debitado del banco.`,
+        );
+      }
+      await tx.checkInstrument.update({
+        where: { id: check.id },
+        data: {
+          status: "CANCELLED",
+          paymentOrderId: null,
+        },
+      });
+      continue;
+    }
+
+    if (check.status === "DELIVERED") {
+      await tx.checkInstrument.update({
+        where: { id: check.id },
+        data: {
+          status: "IN_PORTFOLIO",
+          paymentOrderId: null,
+        },
+      });
+    }
+  }
 }
 
 /**

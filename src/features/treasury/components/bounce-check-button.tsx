@@ -4,19 +4,29 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { bounceDepositedCheck } from "@/features/treasury/actions/bank-deposit-actions";
 import type { CheckAllocationTarget } from "@/features/treasury/queries/list-checks";
+import type { CheckStatus } from "@prisma/client";
 
 type FeeRow = {
   key: string;
   description: string;
   amount: string;
   targetKey: string;
+  passedToDrawer: boolean;
+};
+
+type BankOption = {
+  id: string;
+  label: string;
 };
 
 type BounceCheckButtonProps = {
   checkId: string;
   checkLabel: string;
   currency: string;
+  status: Extract<CheckStatus, "DEPOSITED" | "DELIVERED">;
+  drawerName: string | null;
   allocationTargets: CheckAllocationTarget[];
+  bankAccounts?: BankOption[];
 };
 
 function targetKeyOf(t: CheckAllocationTarget) {
@@ -29,6 +39,7 @@ function emptyFee(defaultTargetKey: string): FeeRow {
     description: "",
     amount: "",
     targetKey: defaultTargetKey,
+    passedToDrawer: false,
   };
 }
 
@@ -36,20 +47,29 @@ export function BounceCheckButton({
   checkId,
   checkLabel,
   currency,
+  status,
+  drawerName,
   allocationTargets,
+  bankAccounts = [],
 }: BounceCheckButtonProps) {
   const router = useRouter();
   const defaultTargetKey =
     allocationTargets.length > 0 ? targetKeyOf(allocationTargets[0]) : "";
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
+  const [feeBankAccountId, setFeeBankAccountId] = useState(
+    bankAccounts[0]?.id ?? "",
+  );
   const [fees, setFees] = useState<FeeRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  const isDelivered = status === "DELIVERED";
+
   function resetForm() {
     setReason("");
     setFees([]);
+    setFeeBankAccountId(bankAccounts[0]?.id ?? "");
     setError(null);
   }
 
@@ -66,6 +86,7 @@ export function BounceCheckButton({
             amount: Number(String(f.amount).replace(",", ".")),
             projectId: target?.projectId ?? null,
             budgetItemId: target?.budgetItemId ?? null,
+            passedToDrawer: f.passedToDrawer,
           };
         })
         .filter((f) => f.amount > 0 || f.description);
@@ -79,16 +100,28 @@ export function BounceCheckButton({
           setError("Cada gasto necesita una descripción.");
           return;
         }
-        if (allocationTargets.length > 0 && (!fee.projectId || !fee.budgetItemId)) {
+        if (
+          allocationTargets.length > 0 &&
+          (!fee.projectId || !fee.budgetItemId)
+        ) {
           setError("Elegí la partida a la que imputar cada gasto.");
           return;
         }
+      }
+
+      if (isDelivered && parsedFees.length > 0 && !feeBankAccountId) {
+        setError("Elegí la cuenta bancaria para debitar los gastos.");
+        return;
       }
 
       const result = await bounceDepositedCheck({
         checkId,
         reason: reason || undefined,
         fees: parsedFees,
+        feeBankAccountId:
+          isDelivered && parsedFees.length > 0
+            ? feeBankAccountId
+            : undefined,
       });
       if (!result.ok) {
         setError(result.error);
@@ -127,10 +160,17 @@ export function BounceCheckButton({
               Registrar rechazo
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              {checkLabel}. Se descontará del banco y del ingreso imputado en
-              presupuesto. Podés cargar gastos del rechazo (comisiones, etc.)
-              para sumarlos al costo de la obra.
+              {checkLabel}.{" "}
+              {isDelivered
+                ? "Se descontará el pago de la orden y el ingreso del recibo origen. Podés cargar gastos bancarios a favor del proveedor y, si corresponde, trasladarlos al librador."
+                : "Se descontará del banco y del ingreso imputado en presupuesto. Podés cargar gastos del rechazo para sumarlos al costo de la obra."}
             </p>
+            {drawerName ? (
+              <p className="mt-1 text-sm text-muted-foreground">
+                Librador: <span className="text-foreground">{drawerName}</span>
+              </p>
+            ) : null}
+
             <label className="mt-4 block text-sm">
               <span className="mb-1 block text-muted-foreground">
                 Motivo (opcional)
@@ -158,7 +198,7 @@ export function BounceCheckButton({
               </div>
               {fees.length === 0 ? (
                 <p className="mt-2 text-xs text-muted-foreground">
-                  Opcional. Ej. comisión bancaria por rechazo.
+                  Opcional. Ej. comisión bancaria a favor del proveedor.
                 </p>
               ) : (
                 <ul className="mt-3 space-y-3">
@@ -197,23 +237,21 @@ export function BounceCheckButton({
                         placeholder="Descripción"
                         className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none ring-accent focus:ring-2"
                       />
-                      <div className="flex gap-2">
-                        <input
-                          value={fee.amount}
-                          onChange={(e) =>
-                            setFees((prev) =>
-                              prev.map((f) =>
-                                f.key === fee.key
-                                  ? { ...f, amount: e.target.value }
-                                  : f,
-                              ),
-                            )
-                          }
-                          inputMode="decimal"
-                          placeholder={`Monto (${currency})`}
-                          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none ring-accent focus:ring-2"
-                        />
-                      </div>
+                      <input
+                        value={fee.amount}
+                        onChange={(e) =>
+                          setFees((prev) =>
+                            prev.map((f) =>
+                              f.key === fee.key
+                                ? { ...f, amount: e.target.value }
+                                : f,
+                            ),
+                          )
+                        }
+                        inputMode="decimal"
+                        placeholder={`Monto (${currency})`}
+                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none ring-accent focus:ring-2"
+                      />
                       {allocationTargets.length > 0 ? (
                         <select
                           value={fee.targetKey}
@@ -236,14 +274,61 @@ export function BounceCheckButton({
                         </select>
                       ) : (
                         <p className="text-xs text-muted-foreground">
-                          Sin partida del recibo: el gasto se debita del banco
+                          Sin partida vinculada: el gasto se debita del banco
                           pero no se imputa al presupuesto.
                         </p>
                       )}
+                      <label className="flex items-start gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={fee.passedToDrawer}
+                          onChange={(e) =>
+                            setFees((prev) =>
+                              prev.map((f) =>
+                                f.key === fee.key
+                                  ? { ...f, passedToDrawer: e.target.checked }
+                                  : f,
+                              ),
+                            )
+                          }
+                          className="mt-0.5"
+                        />
+                        <span>
+                          Trasladar al librador
+                          {drawerName ? ` (${drawerName})` : ""}
+                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                            No suma al costo de la obra; queda a cargo de quien
+                            entregó el cheque.
+                          </span>
+                        </span>
+                      </label>
                     </li>
                   ))}
                 </ul>
               )}
+
+              {isDelivered && fees.length > 0 ? (
+                <label className="mt-3 block text-sm">
+                  <span className="mb-1 block text-muted-foreground">
+                    Cuenta bancaria para los gastos
+                  </span>
+                  <select
+                    value={feeBankAccountId}
+                    onChange={(e) => setFeeBankAccountId(e.target.value)}
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 outline-none ring-accent focus:ring-2"
+                  >
+                    {bankAccounts.length === 0 ? (
+                      <option value="">Sin cuentas disponibles</option>
+                    ) : (
+                      bankAccounts.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.label}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </label>
+              ) : null}
             </div>
 
             {error && (

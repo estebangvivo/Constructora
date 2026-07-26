@@ -103,12 +103,24 @@ export async function syncBudgetItemsFromTreasury(
         select: {
           amount: true,
           paymentOrder: {
-            select: { currency: true, issueDate: true },
+            select: {
+              currency: true,
+              issueDate: true,
+              totalAmount: true,
+              checksDelivered: {
+                where: { status: "BOUNCED" },
+                select: { amount: true },
+              },
+            },
           },
         },
       }),
       tx.checkRejectionFee.findMany({
-        where: { budgetItemId, organizationId },
+        where: {
+          budgetItemId,
+          organizationId,
+          passedToDrawer: false,
+        },
         select: { amount: true, currency: true, createdAt: true },
       }),
     ]);
@@ -140,10 +152,23 @@ export async function syncBudgetItemsFromTreasury(
 
     let actualCost = 0;
     for (const line of paymentLines) {
+      const lineAmount = toNumber(line.amount);
+      const orderTotal = toNumber(line.paymentOrder.totalAmount);
+      const bouncedSum = line.paymentOrder.checksDelivered.reduce(
+        (acc, c) => acc + toNumber(c.amount),
+        0,
+      );
+      // Prorratea cheques entregados y luego rechazados entre líneas de la OP.
+      const factor =
+        orderTotal > 0.009
+          ? Math.max(0, (orderTotal - bouncedSum) / orderTotal)
+          : 1;
+      const effectiveAmount = lineAmount * factor;
+
       actualCost += await convertAmountOnDate(
         tx,
         organizationId,
-        toNumber(line.amount),
+        effectiveAmount,
         line.paymentOrder.currency,
         itemCurrency,
         line.paymentOrder.issueDate,

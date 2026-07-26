@@ -29,6 +29,9 @@ export type CheckListItem = {
   paymentOrderNumber: string | null;
   depositedBankAccountId: string | null;
   depositedBankAccountName: string | null;
+  issuedFromBankAccountId: string | null;
+  issuedFromBankAccountName: string | null;
+  kind: "THIRD_PARTY" | "OWN";
   allocationTargets: CheckAllocationTarget[];
   createdAt: Date;
 };
@@ -39,9 +42,11 @@ function toNumber(value: { toNumber(): number } | number): number {
 
 export async function listChecks(opts?: {
   status?: CheckStatus | "ALL";
+  kind?: "THIRD_PARTY" | "OWN" | "ALL";
 }): Promise<CheckListItem[]> {
   const session = await requireSession();
   const status = opts?.status ?? "IN_PORTFOLIO";
+  const kind = opts?.kind ?? "THIRD_PARTY";
 
   // Repara cheques de recibos imputados antes de existir la cartera.
   await prisma.$transaction((tx) =>
@@ -52,6 +57,7 @@ export async function listChecks(opts?: {
     where: {
       organizationId: session.organizationId,
       ...(status !== "ALL" ? { status } : {}),
+      ...(kind !== "ALL" ? { kind } : {}),
     },
     orderBy: [{ dueDate: "asc" }, { number: "asc" }],
     include: {
@@ -69,15 +75,33 @@ export async function listChecks(opts?: {
           },
         },
       },
-      paymentOrder: { select: { id: true, number: true } },
+      paymentOrder: {
+        select: {
+          id: true,
+          number: true,
+          lines: {
+            select: {
+              projectId: true,
+              budgetItemId: true,
+              project: { select: { name: true, code: true } },
+              budgetItem: { select: { code: true, description: true } },
+            },
+          },
+        },
+      },
       depositedBankAccount: { select: { id: true, name: true } },
+      issuedFromBankAccount: { select: { id: true, name: true } },
     },
   });
 
   return rows.map((c) => {
     const seen = new Set<string>();
     const allocationTargets: CheckAllocationTarget[] = [];
-    for (const line of c.receipt?.lines ?? []) {
+    const sourceLines = [
+      ...(c.receipt?.lines ?? []),
+      ...(c.paymentOrder?.lines ?? []),
+    ];
+    for (const line of sourceLines) {
       if (!line.projectId || !line.budgetItemId || !line.budgetItem) continue;
       const key = `${line.projectId}:${line.budgetItemId}`;
       if (seen.has(key)) continue;
@@ -111,6 +135,9 @@ export async function listChecks(opts?: {
       paymentOrderNumber: c.paymentOrder?.number ?? null,
       depositedBankAccountId: c.depositedBankAccountId,
       depositedBankAccountName: c.depositedBankAccount?.name ?? null,
+      issuedFromBankAccountId: c.issuedFromBankAccountId,
+      issuedFromBankAccountName: c.issuedFromBankAccount?.name ?? null,
+      kind: c.kind === "OWN" ? "OWN" : "THIRD_PARTY",
       allocationTargets,
       createdAt: c.createdAt,
     };
@@ -170,6 +197,7 @@ export type CheckDueAlertItem = {
   dueDate: Date;
   drawerName: string | null;
   daysUntilDue: number; // negativo = vencido
+  kind: "THIRD_PARTY" | "OWN";
 };
 
 export type ChecksDueAlert = {
@@ -195,7 +223,10 @@ export async function getChecksDueAlert(): Promise<ChecksDueAlert> {
   const rows = await prisma.checkInstrument.findMany({
     where: {
       organizationId: session.organizationId,
-      status: "IN_PORTFOLIO",
+      OR: [
+        { kind: "THIRD_PARTY", status: "IN_PORTFOLIO" },
+        { kind: "OWN", status: "DELIVERED" },
+      ],
       dueDate: {
         not: null,
         lte: new Date(
@@ -229,6 +260,7 @@ export async function getChecksDueAlert(): Promise<ChecksDueAlert> {
       dueDate: row.dueDate,
       drawerName: row.drawerName,
       daysUntilDue,
+      kind: row.kind === "OWN" ? "OWN" : "THIRD_PARTY",
     };
     if (daysUntilDue < 0) overdue.push(item);
     else dueSoon.push(item);

@@ -511,6 +511,8 @@ model Certification {
   retentionPct    Decimal             @default(0) @db.Decimal(5, 2) /// % retención de garantía
   retentionAmount Decimal             @default(0) @db.Decimal(14, 2)
   netAmount       Decimal             @default(0) @db.Decimal(14, 2)
+  /// Monto cobrado vía recibos imputados
+  collectedAmount Decimal             @default(0) @db.Decimal(14, 2)
   notes           String?
   submittedAt     DateTime?
   approvedAt      DateTime?
@@ -518,8 +520,9 @@ model Certification {
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
-  project Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  items   CertificationItem[]
+  project       Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  items         CertificationItem[]
+  receiptApps   ReceiptCertificationApplication[]
 
   @@unique([projectId, number])
   @@index([projectId, status])
@@ -938,6 +941,8 @@ model PurchaseInvoice {
   taxAmount       Decimal               @default(0) @db.Decimal(14, 2) /// IVA
   otherTaxes      Decimal               @default(0) @db.Decimal(14, 2)
   totalAmount     Decimal               @default(0) @db.Decimal(14, 2)
+  /// Monto pagado vía órdenes de pago imputadas
+  paidAmount      Decimal               @default(0) @db.Decimal(14, 2)
   supplierTaxId   String? /// CUIT emisor
   supplierName    String?
   cae             String?
@@ -953,9 +958,10 @@ model PurchaseInvoice {
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
 
-  project  Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  supplier Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  items    PurchaseInvoiceItem[]
+  project             Project                           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  supplier            Supplier?                         @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  items               PurchaseInvoiceItem[]
+  paymentOrderApps    PaymentOrderInvoiceApplication[]
 
   @@unique([projectId, number])
   @@index([projectId, status])
@@ -1125,15 +1131,21 @@ enum PaymentMethod {
 enum CheckStatus {
   IN_PORTFOLIO /// Recibido y disponible para entregar o depositar
   DELIVERED /// Entregado en una orden de pago
-  DEPOSITED /// Depositado en cuenta bancaria propia
+  DEPOSITED /// Depositado (terceros) o debitado del banco (propios al vencer)
   BOUNCED /// Rechazado por el banco tras depósito
   CANCELLED
 }
 
-/// Cheque en cartera (entra por recibo, sale por orden de pago).
+enum CheckKind {
+  THIRD_PARTY /// Recibido de un cliente (cartera)
+  OWN /// Emitido por la empresa contra cuenta propia
+}
+
+/// Cheque: de terceros (cartera) o propio (emitido en OP).
 model CheckInstrument {
   id             String      @id @default(cuid())
   organizationId String
+  kind           CheckKind   @default(THIRD_PARTY)
   number         String
   bank           String
   amount         Decimal     @db.Decimal(14, 2)
@@ -1141,11 +1153,13 @@ model CheckInstrument {
   issueDate      DateTime?   @db.Date
   dueDate        DateTime?   @db.Date
   account        String?
-  drawerName     String? /// Quien entregó el cheque (cliente)
+  drawerName     String? /// Quien entregó el cheque (cliente) — solo terceros
   status         CheckStatus @default(IN_PORTFOLIO)
   receiptId      String?
   paymentOrderId String?
   depositedBankAccountId String?
+  /// Cuenta emisora (solo cheques propios)
+  issuedFromBankAccountId String?
   depositedAt    DateTime?
   bouncedAt      DateTime?
   bounceReason   String?
@@ -1156,15 +1170,18 @@ model CheckInstrument {
   receipt      Receipt?     @relation(fields: [receiptId], references: [id], onDelete: SetNull)
   paymentOrder PaymentOrder? @relation(fields: [paymentOrderId], references: [id], onDelete: SetNull)
   depositedBankAccount BankAccount? @relation("CheckDeposits", fields: [depositedBankAccountId], references: [id], onDelete: SetNull)
+  issuedFromBankAccount BankAccount? @relation("CheckIssues", fields: [issuedFromBankAccountId], references: [id], onDelete: SetNull)
   paymentOrderPayments PaymentOrderPayment[]
   bankMovements  BankMovement[]
   rejectionFees  CheckRejectionFee[]
 
   @@unique([organizationId, bank, number])
   @@index([organizationId, status])
+  @@index([organizationId, kind])
   @@index([receiptId])
   @@index([paymentOrderId])
   @@index([depositedBankAccountId])
+  @@index([issuedFromBankAccountId])
   @@map("check_instruments")
 }
 
@@ -1178,6 +1195,8 @@ model CheckRejectionFee {
   currency          String   @default("ARS")
   projectId         String?
   budgetItemId      String?
+  /// Si true, el gasto se traslada al librador (no suma al costo de obra).
+  passedToDrawer    Boolean  @default(false)
   createdAt         DateTime @default(now())
 
   organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -1224,6 +1243,7 @@ model Receipt {
   lines        ReceiptLine[]
   payments     ReceiptPayment[]
   checks       CheckInstrument[]
+  certificationApps ReceiptCertificationApplication[]
 
   @@unique([organizationId, number])
   @@index([organizationId, status])
@@ -1305,6 +1325,7 @@ model PaymentOrder {
   lines        PaymentOrderLine[]
   payments     PaymentOrderPayment[]
   checksDelivered CheckInstrument[]
+  invoiceApps  PaymentOrderInvoiceApplication[]
 
   @@unique([organizationId, number])
   @@index([organizationId, status])
@@ -1318,8 +1339,10 @@ model PaymentOrderPayment {
   paymentOrderId    String
   method            PaymentMethod
   amount            Decimal       @db.Decimal(14, 2)
-  bankAccountId     String? /// Cuenta propia cuando method = TRANSFER
+  bankAccountId     String? /// Cuenta propia cuando method = TRANSFER o cheque propio (cuenta emisora)
   checkInstrumentId String?
+  /// true = emitir cheque propio (no usar cartera)
+  isOwnCheck        Boolean       @default(false)
   checkNumber       String?
   checkBank         String?
   checkIssueDate    DateTime?     @db.Date
@@ -1355,6 +1378,38 @@ model PaymentOrderLine {
   @@index([projectId])
   @@index([budgetItemId])
   @@map("payment_order_lines")
+}
+
+/// Aplicación de un recibo a una o más certificaciones (cobro parcial).
+model ReceiptCertificationApplication {
+  id              String   @id @default(cuid())
+  receiptId       String
+  certificationId String
+  amount          Decimal  @db.Decimal(14, 2)
+  createdAt       DateTime @default(now())
+
+  receipt       Receipt       @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  certification Certification @relation(fields: [certificationId], references: [id], onDelete: Restrict)
+
+  @@unique([receiptId, certificationId])
+  @@index([certificationId])
+  @@map("receipt_certification_applications")
+}
+
+/// Aplicación de una OP a una o más facturas de compra (pago parcial).
+model PaymentOrderInvoiceApplication {
+  id                String   @id @default(cuid())
+  paymentOrderId    String
+  purchaseInvoiceId String
+  amount            Decimal  @db.Decimal(14, 2)
+  createdAt         DateTime @default(now())
+
+  paymentOrder    PaymentOrder    @relation(fields: [paymentOrderId], references: [id], onDelete: Cascade)
+  purchaseInvoice PurchaseInvoice @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Restrict)
+
+  @@unique([paymentOrderId, purchaseInvoiceId])
+  @@index([purchaseInvoiceId])
+  @@map("payment_order_invoice_applications")
 }
 
 // =============================================================================
@@ -1501,6 +1556,7 @@ model BankAccount {
   receiptPayments      ReceiptPayment[]
   paymentOrderPayments PaymentOrderPayment[]
   depositedChecks      CheckInstrument[]     @relation("CheckDeposits")
+  issuedChecks         CheckInstrument[]     @relation("CheckIssues")
 
   @@index([organizationId, isActive])
   @@map("bank_accounts")

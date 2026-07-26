@@ -6,8 +6,10 @@ export type TreasuryPaymentInput = {
   amount: number;
   /** Obligatorio cuando method = TRANSFER. */
   bankAccountId?: string;
-  /** Obligatorio en OP cuando method = CHECK (cheque de cartera). */
+  /** Obligatorio en OP cuando method = CHECK de cartera. */
   checkInstrumentId?: string;
+  /** true = emitir cheque propio (OP). */
+  isOwnCheck?: boolean;
   checkNumber?: string;
   checkBank?: string;
   checkIssueDate?: string;
@@ -95,8 +97,18 @@ export function validatePaymentsAgainstTotal(
     }
     if (p.method === "CHECK") {
       if (opts?.requirePortfolioChecks) {
-        if (!p.checkInstrumentId) {
-          return "Elegí un cheque de la cartera para cada pago con cheque.";
+        if (p.isOwnCheck) {
+          if (!p.checkNumber?.trim() || !p.checkBank?.trim()) {
+            return "Completá número y banco del cheque propio.";
+          }
+          if (!p.bankAccountId) {
+            return "Elegí la cuenta emisora del cheque propio.";
+          }
+          if (!p.checkDueDate) {
+            return "Indicá el vencimiento del cheque propio.";
+          }
+        } else if (!p.checkInstrumentId) {
+          return "Elegí un cheque de la cartera o marcá emisión de cheque propio.";
         }
       } else if (!p.checkNumber?.trim() || !p.checkBank?.trim()) {
         return "Completá número y banco en cada pago con cheque.";
@@ -129,12 +141,18 @@ export function paymentCreateData(
 
       if (p.method === "CHECK") {
         if (opts?.forPaymentOrder) {
+          const isOwn = Boolean(p.isOwnCheck);
           return {
             method: p.method,
             amount: Number(p.amount),
             sortOrder: index,
-            bankAccountId,
-            checkInstrumentId: p.checkInstrumentId || null,
+            bankAccountId: isOwn
+              ? p.bankAccountId || null
+              : p.method === "TRANSFER"
+                ? p.bankAccountId || null
+                : null,
+            checkInstrumentId: isOwn ? null : p.checkInstrumentId || null,
+            isOwnCheck: isOwn,
             checkNumber: p.checkNumber?.trim() || null,
             checkBank: p.checkBank?.trim() || null,
             checkIssueDate: p.checkIssueDate
