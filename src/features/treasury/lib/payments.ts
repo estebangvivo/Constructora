@@ -146,11 +146,7 @@ export function paymentCreateData(
             method: p.method,
             amount: Number(p.amount),
             sortOrder: index,
-            bankAccountId: isOwn
-              ? p.bankAccountId || null
-              : p.method === "TRANSFER"
-                ? p.bankAccountId || null
-                : null,
+            bankAccountId: isOwn ? p.bankAccountId || null : null,
             checkInstrumentId: isOwn ? null : p.checkInstrumentId || null,
             isOwnCheck: isOwn,
             checkNumber: p.checkNumber?.trim() || null,
