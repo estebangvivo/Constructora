@@ -5,6 +5,7 @@ import {
   SESSION_COOKIE,
   verifyLocalSession,
 } from "@/features/auth/lib/session-crypto";
+import { publicUrl } from "@/lib/request-origin";
 
 const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
@@ -48,7 +49,7 @@ export default async function middleware(
     return withClerk(request, event);
   }
 
-  const signIn = new URL("/sign-in", request.url);
+  const signIn = publicUrl(request, "/sign-in");
   signIn.searchParams.set("next", request.nextUrl.pathname);
   return NextResponse.redirect(signIn);
 }

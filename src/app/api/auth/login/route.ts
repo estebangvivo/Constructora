@@ -5,6 +5,7 @@ import {
   SESSION_COOKIE,
   signLocalSession,
 } from "@/features/auth/lib/session-crypto";
+import { publicUrl } from "@/lib/request-origin";
 
 export const dynamic = "force-dynamic";
 
@@ -99,7 +100,7 @@ export async function POST(request: Request) {
           { status: 401 },
         );
       }
-      const url = new URL("/sign-in", request.url);
+      const url = publicUrl(request, "/sign-in");
       url.searchParams.set("error", result.error);
       return NextResponse.redirect(url, 303);
     }
@@ -114,7 +115,7 @@ export async function POST(request: Request) {
       return res;
     }
 
-    const res = NextResponse.redirect(new URL("/", request.url), 303);
+    const res = NextResponse.redirect(publicUrl(request, "/"), 303);
     res.cookies.set(
       SESSION_COOKIE,
       result.token,
@@ -129,7 +130,7 @@ export async function POST(request: Request) {
         { status: 500 },
       );
     }
-    const url = new URL("/sign-in", request.url);
+    const url = publicUrl(request, "/sign-in");
     url.searchParams.set("error", "No se pudo iniciar sesión.");
     return NextResponse.redirect(url, 303);
   }
