@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { isDevAuthBypass } from "@/lib/auth-config";
 import { SIDEBAR_NAV, filterNavByAccess } from "@/config/navigation";
 import { getOrganizationProfile } from "@/features/settings/queries/get-organization";
-import { isDisplayableLogoUrl, organizationLogoSrc } from "@/features/settings/lib/organization-logo";
+import { organizationLogoSrc } from "@/features/settings/lib/organization-logo";
 
 export const dynamic = "force-dynamic";
 
