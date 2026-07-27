@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { OrganizationTheme } from "@/features/settings/components/organization-theme";
 import { ChecksDueAlertBanner } from "@/features/treasury/components/checks-due-alert-banner";
+import { isDisplayableLogoUrl } from "@/features/settings/lib/organization-logo";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_THEME_ID, themeToCssText } from "@/config/themes";
@@ -24,6 +25,9 @@ export default async function DashboardLayout({
   });
 
   const themeId = organization?.themeId ?? DEFAULT_THEME_ID;
+  const logoUrl = isDisplayableLogoUrl(organization?.logoUrl)
+    ? organization?.logoUrl
+    : null;
 
   return (
     <>
@@ -37,7 +41,7 @@ export default async function DashboardLayout({
         role={session.role}
         modules={session.allowedModules}
         organizationName={organization?.name}
-        logoUrl={organization?.logoUrl}
+        logoUrl={logoUrl}
       >
         <ChecksDueAlertBanner />
         {children}

@@ -5,8 +5,7 @@ import {
   type TreasuryPdfInput,
 } from "@/features/treasury/lib/treasury-pdf";
 import type { PdfSharePayload } from "@/features/treasury/lib/pdf-share-token";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
+import { loadOrganizationLogoBytes } from "@/features/settings/lib/organization-logo";
 
 function orgAddress(org: {
   address: string | null;
@@ -25,26 +24,7 @@ function orgAddress(org: {
 async function loadOrganizationLogo(
   logoUrl: string | null | undefined,
 ): Promise<TreasuryPdfInput["organizationLogo"]> {
-  if (!logoUrl) return null;
-  const pathname = logoUrl.split("?")[0] ?? "";
-  if (!pathname.startsWith("/uploads/")) return null;
-
-  const ext = path.extname(pathname).toLowerCase();
-  const format =
-    ext === ".png" ? "png" : ext === ".jpg" || ext === ".jpeg" ? "jpg" : null;
-  if (!format) return null;
-
-  try {
-    const filePath = path.join(
-      process.cwd(),
-      "public",
-      pathname.replace(/^\//, ""),
-    );
-    const bytes = new Uint8Array(await readFile(filePath));
-    return { bytes, format };
-  } catch {
-    return null;
-  }
+  return loadOrganizationLogoBytes(logoUrl);
 }
 
 /** PDF público temporal (token firmado). Sin sesión de usuario. */

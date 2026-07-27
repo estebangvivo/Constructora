@@ -1,7 +1,5 @@
 "use server";
 
-import { mkdir, writeFile } from "fs/promises";
-import path from "path";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
@@ -35,10 +33,11 @@ const LOGO_TYPES = new Set([
   "image/svg+xml",
 ]);
 
-async function saveLogoFile(
-  organizationId: string,
-  file: File,
-): Promise<string> {
+/**
+ * Guarda el logo como data URL en DB (no en disco).
+ * En Railway el filesystem es efímero y /uploads/logos se pierde al redeploy.
+ */
+async function saveLogoFile(_organizationId: string, file: File): Promise<string> {
   if (!LOGO_TYPES.has(file.type)) {
     throw new Error("El logo debe ser PNG, JPG, WEBP o SVG.");
   }
@@ -46,23 +45,9 @@ async function saveLogoFile(
     throw new Error("El logo no puede superar 2 MB.");
   }
 
-  const ext =
-    file.type === "image/png"
-      ? "png"
-      : file.type === "image/webp"
-        ? "webp"
-        : file.type === "image/svg+xml"
-          ? "svg"
-          : "jpg";
-
-  const dir = path.join(process.cwd(), "public", "uploads", "logos");
-  await mkdir(dir, { recursive: true });
-
-  const filename = `${organizationId}.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
-  await writeFile(path.join(dir, filename), buffer);
-
-  return `/uploads/logos/${filename}?v=${Date.now()}`;
+  const base64 = buffer.toString("base64");
+  return `data:${file.type};base64,${base64}`;
 }
 
 export async function updateOrganizationProfile(

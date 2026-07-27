@@ -3,12 +3,16 @@ import { getSession } from "@/lib/auth";
 import { isDevAuthBypass } from "@/lib/auth-config";
 import { SIDEBAR_NAV, filterNavByAccess } from "@/config/navigation";
 import { getOrganizationProfile } from "@/features/settings/queries/get-organization";
+import { isDisplayableLogoUrl } from "@/features/settings/lib/organization-logo";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const session = await getSession();
   const organization = session ? await getOrganizationProfile() : null;
+  const logoUrl = isDisplayableLogoUrl(organization?.logoUrl)
+    ? organization?.logoUrl
+    : null;
 
   const modules = filterNavByAccess(
     SIDEBAR_NAV.filter((item) => item.href !== "/"),
@@ -21,10 +25,10 @@ export default async function HomePage() {
   return (
     <div className="px-4 py-8 lg:px-6">
       <div className="mb-8 flex flex-wrap items-end gap-4">
-        {organization?.logoUrl && (
+        {logoUrl && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={organization.logoUrl}
+            src={logoUrl}
             alt=""
             className="size-14 rounded-md border border-border object-contain bg-surface p-1"
           />

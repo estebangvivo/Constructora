@@ -29,7 +29,15 @@ export function OrganizationSettingsForm({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [clearLogo, setClearLogo] = useState(false);
-  const [preview, setPreview] = useState<string | null>(organization.logoUrl);
+  const [preview, setPreview] = useState<string | null>(() =>
+    organization.logoUrl?.startsWith("data:") ||
+    (organization.logoUrl?.startsWith("/uploads/") &&
+      process.env.NODE_ENV !== "production")
+      ? organization.logoUrl
+      : organization.logoUrl?.startsWith("http")
+        ? organization.logoUrl
+        : null,
+  );
   const [taxId, setTaxId] = useState(() =>
     formatCuitInput(organization.taxId ?? ""),
   );
