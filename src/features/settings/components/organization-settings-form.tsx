@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 import { updateOrganizationProfile } from "@/features/settings/actions/update-organization";
+import { isDisplayableLogoUrl, organizationLogoSrc } from "@/features/settings/lib/organization-logo";
 import type { OrganizationProfile } from "@/features/settings/queries/get-organization";
 import { formatCuitInput } from "@/lib/arca/tax-id";
 import {
@@ -29,14 +30,8 @@ export function OrganizationSettingsForm({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [clearLogo, setClearLogo] = useState(false);
-  const [preview, setPreview] = useState<string | null>(() =>
-    organization.logoUrl?.startsWith("data:") ||
-    (organization.logoUrl?.startsWith("/uploads/") &&
-      process.env.NODE_ENV !== "production")
-      ? organization.logoUrl
-      : organization.logoUrl?.startsWith("http")
-        ? organization.logoUrl
-        : null,
+  const [preview, setPreview] = useState<string | null>(
+    () => organizationLogoSrc(organization.logoUrl),
   );
   const [taxId, setTaxId] = useState(() =>
     formatCuitInput(organization.taxId ?? ""),
@@ -248,7 +243,7 @@ export function OrganizationSettingsForm({
                 }}
                 className="block w-full max-w-xs text-sm file:mr-3 file:rounded-md file:border-0 file:bg-surface file:px-3 file:py-1.5 file:text-sm"
               />
-              {organization.logoUrl && (
+              {isDisplayableLogoUrl(organization.logoUrl) ? (
                 <label className="flex items-center gap-2 text-sm text-muted-foreground">
                   <input
                     type="checkbox"
@@ -256,12 +251,16 @@ export function OrganizationSettingsForm({
                     onChange={(e) => {
                       setClearLogo(e.target.checked);
                       if (e.target.checked) setPreview(null);
-                      else setPreview(organization.logoUrl);
+                      else
+                        setPreview(
+                          organizationLogoSrc(organization.logoUrl) ??
+                            organization.logoUrl,
+                        );
                     }}
                   />
                   Quitar logo actual
                 </label>
-              )}
+              ) : null}
             </div>
           </div>
         </div>

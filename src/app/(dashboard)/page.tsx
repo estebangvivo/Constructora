@@ -3,16 +3,14 @@ import { getSession } from "@/lib/auth";
 import { isDevAuthBypass } from "@/lib/auth-config";
 import { SIDEBAR_NAV, filterNavByAccess } from "@/config/navigation";
 import { getOrganizationProfile } from "@/features/settings/queries/get-organization";
-import { isDisplayableLogoUrl } from "@/features/settings/lib/organization-logo";
+import { isDisplayableLogoUrl, organizationLogoSrc } from "@/features/settings/lib/organization-logo";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const session = await getSession();
   const organization = session ? await getOrganizationProfile() : null;
-  const logoUrl = isDisplayableLogoUrl(organization?.logoUrl)
-    ? organization?.logoUrl
-    : null;
+  const logoUrl = organizationLogoSrc(organization?.logoUrl);
 
   const modules = filterNavByAccess(
     SIDEBAR_NAV.filter((item) => item.href !== "/"),
