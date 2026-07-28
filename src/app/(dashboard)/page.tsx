@@ -9,13 +9,33 @@ import { HomeDashboard } from "@/features/dashboard/components/home-dashboard";
 
 export const dynamic = "force-dynamic";
 
-export default async function HomePage() {
+type PageProps = {
+  searchParams: Promise<{
+    from?: string;
+    to?: string;
+  }>;
+};
+
+function parseDateParam(value?: string): Date | undefined {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+  const parsed = new Date(`${value}T12:00:00`);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+}
+
+export default async function HomePage({ searchParams }: PageProps) {
   const session = await getSession();
+  const { from, to } = await searchParams;
   const modules = session?.allowedModules ?? [];
+  const fromDate = parseDateParam(from);
+  const toDate = parseDateParam(to);
+  const validRange =
+    fromDate && toDate && fromDate.getTime() > toDate.getTime()
+      ? { from: toDate, to: fromDate }
+      : { from: fromDate, to: toDate };
 
   const [organization, dashboard] = await Promise.all([
     session ? getOrganizationProfile() : Promise.resolve(null),
-    session ? getHomeDashboardData(modules) : Promise.resolve(null),
+    session ? getHomeDashboardData(modules, validRange) : Promise.resolve(null),
   ]);
   const logoUrl = organizationLogoSrc(organization?.logoUrl);
 

@@ -13,6 +13,8 @@ import { countProjectsByScope } from "@/features/projects/queries/get-projects";
 export type HomeDashboardData = {
   periodLabel: string;
   prevPeriodLabel: string;
+  dateFrom: string;
+  dateTo: string;
   showTreasury: boolean;
   showProjects: boolean;
   incomePosted: Record<string, number>;
@@ -42,6 +44,14 @@ function endOfMonth(d: Date) {
   return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
 }
 
+function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+}
+
+function endOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+}
+
 function inRange(date: Date | string, start: Date, end: Date) {
   const t = new Date(date).getTime();
   return t >= start.getTime() && t <= end.getTime();
@@ -53,6 +63,27 @@ function monthLabel(d: Date) {
     year: "numeric",
   }).format(d);
   return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+function dateInputValue(d: Date) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function rangeLabel(start: Date, end: Date) {
+  if (
+    start.getDate() === 1 &&
+    end.getFullYear() === start.getFullYear() &&
+    end.getMonth() === start.getMonth() &&
+    end.getDate() === new Date(end.getFullYear(), end.getMonth() + 1, 0).getDate()
+  ) {
+    return monthLabel(start);
+  }
+
+  const fmt = new Intl.DateTimeFormat("es-AR");
+  return `${fmt.format(start)} al ${fmt.format(end)}`;
 }
 
 function netByCurrency(
@@ -78,10 +109,10 @@ function deltaLabel(
   const cur = totalAmount(current);
   const prev = totalAmount(previous);
   if (prev === 0 && cur === 0) return null;
-  if (prev === 0) return "vs mes ant.: nuevo";
+  if (prev === 0) return "vs período ant.: nuevo";
   const pct = ((cur - prev) / Math.abs(prev)) * 100;
   const sign = pct > 0 ? "+" : "";
-  return `vs mes ant.: ${sign}${pct.toFixed(0)}%`;
+  return `vs período ant.: ${sign}${pct.toFixed(0)}%`;
 }
 
 /**
@@ -89,6 +120,10 @@ function deltaLabel(
  */
 export async function getHomeDashboardData(
   modules: AppModuleKey[] | string[],
+  range?: {
+    from?: Date;
+    to?: Date;
+  },
 ): Promise<HomeDashboardData | null> {
   const session = await getSession();
   if (!session) return null;
@@ -97,11 +132,16 @@ export async function getHomeDashboardData(
   const showProjects = hasModule(modules, "projects");
 
   if (!showTreasury && !showProjects) {
+    const now = new Date();
+    const defaultStart = startOfMonth(now);
+    const defaultEnd = endOfMonth(now);
     return {
-      periodLabel: monthLabel(new Date()),
+      periodLabel: rangeLabel(defaultStart, defaultEnd),
       prevPeriodLabel: monthLabel(
         new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1),
       ),
+      dateFrom: dateInputValue(defaultStart),
+      dateTo: dateInputValue(defaultEnd),
       showTreasury: false,
       showProjects: false,
       incomePosted: {},
@@ -125,11 +165,11 @@ export async function getHomeDashboardData(
   }
 
   const now = new Date();
-  const curStart = startOfMonth(now);
-  const curEnd = endOfMonth(now);
-  const prevRef = new Date(now.getFullYear(), now.getMonth() - 1, 15);
-  const prevStart = startOfMonth(prevRef);
-  const prevEnd = endOfMonth(prevRef);
+  const curStart = startOfDay(range?.from ?? startOfMonth(now));
+  const curEnd = endOfDay(range?.to ?? endOfMonth(now));
+  const spanMs = curEnd.getTime() - curStart.getTime();
+  const prevEnd = new Date(curStart.getTime() - 1);
+  const prevStart = new Date(prevEnd.getTime() - spanMs);
 
   const [receipts, orders, cash, bankAccounts, checks, projectCounts] =
     await Promise.all([
@@ -141,7 +181,7 @@ export async function getHomeDashboardData(
         : Promise.resolve([]),
       showTreasury ? getChecksDueAlert() : Promise.resolve(null),
       showProjects
-        ? countProjectsByScope()
+        ? countProjectsByScope({ from: curStart, to: curEnd })
         : Promise.resolve(null),
     ]);
 
@@ -178,8 +218,10 @@ export async function getHomeDashboardData(
     : [];
 
   return {
-    periodLabel: monthLabel(now),
-    prevPeriodLabel: monthLabel(prevRef),
+    periodLabel: rangeLabel(curStart, curEnd),
+    prevPeriodLabel: rangeLabel(prevStart, prevEnd),
+    dateFrom: dateInputValue(curStart),
+    dateTo: dateInputValue(curEnd),
     showTreasury,
     showProjects,
     incomePosted,
@@ -190,10 +232,14 @@ export async function getHomeDashboardData(
     incomeDeltaLabel: deltaLabel(incomePosted, incomePrev),
     expenseDeltaLabel: deltaLabel(expensePosted, expensePrev),
     pendingReceipts: receipts.filter(
-      (r) => r.status === "DRAFT" || r.status === "ISSUED",
+      (r) =>
+        (r.status === "DRAFT" || r.status === "ISSUED") &&
+        inRange(r.issueDate, curStart, curEnd),
     ).length,
     pendingOrders: orders.filter(
-      (o) => o.status === "DRAFT" || o.status === "ISSUED",
+      (o) =>
+        (o.status === "DRAFT" || o.status === "ISSUED") &&
+        inRange(o.issueDate, curStart, curEnd),
     ).length,
     cashDailyBalance: cash?.daily?.balance ?? null,
     cashTreasuryBalance: cash?.treasury?.balance ?? null,

@@ -67,15 +67,28 @@ export async function listProjects(
 }
 
 /** Conteos para pestañas del listado. */
-export async function countProjectsByScope(): Promise<{
+export async function countProjectsByScope(range?: {
+  from?: Date;
+  to?: Date;
+}): Promise<{
   open: number;
   closed: number;
 }> {
   const session = await requireSession();
-  const base = {
+  const base: {
+    organizationId: string;
+    deletedAt: null;
+    createdAt?: { gte?: Date; lte?: Date };
+  } = {
     organizationId: session.organizationId,
     deletedAt: null,
-  } as const;
+  };
+
+  if (range?.from || range?.to) {
+    base.createdAt = {};
+    if (range.from) base.createdAt.gte = range.from;
+    if (range.to) base.createdAt.lte = range.to;
+  }
 
   const [open, closed] = await Promise.all([
     prisma.project.count({

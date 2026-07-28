@@ -14,6 +14,49 @@ export function HomeDashboard({ data }: HomeDashboardProps) {
 
   return (
     <section className="mb-10 space-y-8" aria-label="Resumen del negocio">
+      <form className="flex flex-wrap items-end gap-3 rounded-md border border-border bg-surface p-4">
+        <div>
+          <p className="text-sm font-medium">Rango del dashboard</p>
+          <p className="text-xs text-muted-foreground">
+            Aplica a cobros, gastos, pendientes y obras del período.
+          </p>
+        </div>
+        <label className="min-w-36 space-y-1">
+          <span className="block text-xs uppercase tracking-wider text-muted-foreground">
+            Desde
+          </span>
+          <input
+            type="date"
+            name="from"
+            defaultValue={data.dateFrom}
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none ring-accent focus:ring-2"
+          />
+        </label>
+        <label className="min-w-36 space-y-1">
+          <span className="block text-xs uppercase tracking-wider text-muted-foreground">
+            Hasta
+          </span>
+          <input
+            type="date"
+            name="to"
+            defaultValue={data.dateTo}
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none ring-accent focus:ring-2"
+          />
+        </label>
+        <button
+          type="submit"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90"
+        >
+          Aplicar
+        </button>
+        <Link
+          href="/"
+          className="rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
+        >
+          Mes actual
+        </Link>
+      </form>
+
       {data.showTreasury ? (
         <>
           <div>
@@ -54,7 +97,7 @@ export function HomeDashboard({ data }: HomeDashboardProps) {
               </div>
               <div className="border-l-2 border-accent pl-3">
                 <dt className="text-xs uppercase tracking-wider text-muted-foreground">
-                  Neto del mes
+                  Neto del período
                 </dt>
                 <dd className="mt-1 font-display text-xl">
                   {formatMoneyByCurrency(data.netPosted)}
@@ -222,6 +265,9 @@ export function HomeDashboard({ data }: HomeDashboardProps) {
                   </Link>
                 ) : null}
               </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Filtrado por fecha de emisión dentro de {data.periodLabel}.
+              </p>
             </div>
           )}
         </>
@@ -256,6 +302,9 @@ export function HomeDashboard({ data }: HomeDashboardProps) {
               </dd>
             </div>
           </dl>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Conteo por fecha de alta dentro de {data.periodLabel}.
+          </p>
         </div>
       ) : null}
     </section>
