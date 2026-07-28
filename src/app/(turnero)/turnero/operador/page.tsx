@@ -4,10 +4,18 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   CATEGORIAS,
   ETIQUETAS_CATEGORIA,
+  esCategoria,
   type Categoria,
   type TurnoDTO,
 } from "@/features/turnero/lib/turnos";
 import { TurneroLogo } from "@/features/turnero/components/turnero-brand";
+import { getMyAssignedTurneroPuesto } from "@/features/auth/actions/user-actions";
+import {
+  clearTurneroPuestoSession,
+  readTurneroPuestoSession,
+  writeTurneroPuestoSession,
+  type TurneroSesionPuesto,
+} from "@/features/turnero/lib/puesto-session";
 
 type Puesto = {
   id: string;
@@ -16,9 +24,7 @@ type Puesto = {
   activo: boolean;
 };
 
-type SesionPuesto = { id: string; nombre: string; categoria: Categoria };
-
-const STORAGE_KEY = "constructora-turnero-puesto";
+type SesionPuesto = TurneroSesionPuesto;
 
 async function leerTurno(respuesta: Response) {
   const data = await respuesta.json();
@@ -62,33 +68,47 @@ export default function OperadorPage() {
   useEffect(() => {
     async function iniciar() {
       try {
-        const lista = (await fetch(`/api/turnero/puestos?t=${Date.now()}`, {
-          cache: "no-store",
-        }).then((r) => r.json())) as Puesto[];
+        const [lista, asignado] = await Promise.all([
+          fetch(`/api/turnero/puestos?t=${Date.now()}`, {
+            cache: "no-store",
+          }).then((r) => r.json()) as Promise<Puesto[]>,
+          getMyAssignedTurneroPuesto().catch(() => null),
+        ]);
         setPuestos(lista);
 
-        const guardado = window.localStorage.getItem(STORAGE_KEY);
+        const activos = lista.filter((item) => item.activo);
+
+        // Preferencia de este equipo (puede cambiarse en la pantalla de selección)
+        const guardado = readTurneroPuestoSession();
         if (guardado) {
-          try {
-            const valor = JSON.parse(guardado) as SesionPuesto;
-            const valido = lista.find(
-              (item) =>
-                item.activo &&
-                item.id === valor.id &&
-                item.nombre === valor.nombre &&
-                item.categoria === valor.categoria,
-            );
-            if (valido) {
-              setPuesto({
-                id: valido.id,
-                nombre: valido.nombre,
-                categoria: valido.categoria,
-              });
-            } else {
-              window.localStorage.removeItem(STORAGE_KEY);
-            }
-          } catch {
-            window.localStorage.removeItem(STORAGE_KEY);
+          const valido = activos.find(
+            (item) =>
+              item.id === guardado.id &&
+              item.nombre === guardado.nombre &&
+              item.categoria === guardado.categoria,
+          );
+          if (valido) {
+            setPuesto({
+              id: valido.id,
+              nombre: valido.nombre,
+              categoria: valido.categoria,
+            });
+            return;
+          }
+          clearTurneroPuestoSession();
+        }
+
+        // Si no hay preferencia de equipo, usar el puesto asignado al usuario
+        if (asignado && esCategoria(asignado.categoria)) {
+          const delUsuario = activos.find((item) => item.id === asignado.id);
+          if (delUsuario) {
+            const sesion: SesionPuesto = {
+              id: delUsuario.id,
+              nombre: delUsuario.nombre,
+              categoria: delUsuario.categoria,
+            };
+            setPuesto(sesion);
+            writeTurneroPuestoSession(sesion);
           }
         }
       } catch {
@@ -137,7 +157,7 @@ export default function OperadorPage() {
     setPuesto(sesion);
     setError("");
     setModoAbm(false);
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sesion));
+    writeTurneroPuestoSession(sesion);
   }
 
   function limpiarFormulario() {
@@ -432,7 +452,7 @@ export default function OperadorPage() {
             onClick={() => {
               setPuesto(null);
               setTurnos([]);
-              window.localStorage.removeItem(STORAGE_KEY);
+              clearTurneroPuestoSession();
             }}
             className="rounded-xl bg-[#f97316] px-4 py-3 font-extrabold text-black appearance-none hover:bg-[#fb923c] [-webkit-tap-highlight-color:transparent]"
           >

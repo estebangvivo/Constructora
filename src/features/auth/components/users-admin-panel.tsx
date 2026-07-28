@@ -7,12 +7,17 @@ import {
   createOrganizationUser,
   removeOrganizationUser,
   updateOrganizationUser,
+  type TurneroPuestoOption,
 } from "@/features/auth/actions/user-actions";
 import {
   APP_MODULES,
   ROLE_DEFAULT_MODULES,
   type AppModuleKey,
 } from "@/features/auth/lib/modules";
+import {
+  ETIQUETAS_CATEGORIA,
+  type Categoria,
+} from "@/features/turnero/lib/turnos";
 
 type UserRow = {
   membershipId: string;
@@ -25,6 +30,8 @@ type UserRow = {
   hasPassword: boolean;
   role: OrganizationRole;
   allowedModules: string[];
+  turneroPuestoId: string | null;
+  turneroPuestoNombre: string | null;
 };
 
 const fieldClass =
@@ -38,14 +45,20 @@ const ROLE_OPTIONS: { value: OrganizationRole; label: string }[] = [
   { value: "VIEWER", label: "Solo lectura" },
 ];
 
+function etiquetaCategoria(categoria: string) {
+  return ETIQUETAS_CATEGORIA[categoria as Categoria] ?? categoria;
+}
+
 type UsersAdminPanelProps = {
   users: UserRow[];
+  puestos: TurneroPuestoOption[];
   currentUserId: string;
   canAssignAdmin: boolean;
 };
 
 export function UsersAdminPanel({
   users,
+  puestos,
   currentUserId,
   canAssignAdmin,
 }: UsersAdminPanelProps) {
@@ -73,8 +86,7 @@ export function UsersAdminPanel({
         <div>
           <h2 className="font-display text-xl tracking-tight">Usuarios</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Alta, baja y permisos por módulo. El rol define un punto de partida;
-            los checkboxes ajustan el acceso real.
+            Alta, baja, permisos por módulo y puesto de operador del turnero.
           </p>
         </div>
         <button
@@ -94,6 +106,7 @@ export function UsersAdminPanel({
           mode="create"
           canAssignAdmin={canAssignAdmin}
           pending={pending}
+          puestos={puestos}
           onCancel={() => setShowCreate(false)}
           onSubmit={(data) =>
             run(() =>
@@ -105,6 +118,7 @@ export function UsersAdminPanel({
                 password: data.password!,
                 role: data.role,
                 allowedModules: data.allowedModules,
+                turneroPuestoId: data.turneroPuestoId,
               }),
             )
           }
@@ -126,11 +140,15 @@ export function UsersAdminPanel({
                     )}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    {u.email} · {ROLE_OPTIONS.find((r) => r.value === u.role)?.label}
+                    {u.email} ·{" "}
+                    {ROLE_OPTIONS.find((r) => r.value === u.role)?.label}
                     {!u.hasPassword ? " · sin contraseña local" : ""}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {u.allowedModules.length} módulos habilitados
+                    {u.turneroPuestoNombre
+                      ? ` · Turnero: ${u.turneroPuestoNombre}`
+                      : " · Sin puesto de turnero"}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -174,6 +192,7 @@ export function UsersAdminPanel({
                     mode="edit"
                     canAssignAdmin={canAssignAdmin}
                     pending={pending}
+                    puestos={puestos}
                     initial={{
                       email: u.email,
                       firstName: u.firstName ?? "",
@@ -182,6 +201,7 @@ export function UsersAdminPanel({
                       role: u.role,
                       isActive: u.isActive,
                       allowedModules: u.allowedModules as AppModuleKey[],
+                      turneroPuestoId: u.turneroPuestoId,
                     }}
                     onCancel={() => setEditingId(null)}
                     onSubmit={(data) =>
@@ -195,6 +215,7 @@ export function UsersAdminPanel({
                           isActive: data.isActive ?? true,
                           allowedModules: data.allowedModules,
                           password: data.password || undefined,
+                          turneroPuestoId: data.turneroPuestoId,
                         }),
                       )
                     }
@@ -218,12 +239,14 @@ type FormData = {
   role: OrganizationRole;
   isActive?: boolean;
   allowedModules: AppModuleKey[];
+  turneroPuestoId: string | null;
 };
 
 function UserForm({
   mode,
   canAssignAdmin,
   pending,
+  puestos,
   initial,
   onCancel,
   onSubmit,
@@ -231,6 +254,7 @@ function UserForm({
   mode: "create" | "edit";
   canAssignAdmin: boolean;
   pending: boolean;
+  puestos: TurneroPuestoOption[];
   initial?: FormData;
   onCancel: () => void;
   onSubmit: (data: FormData) => void;
@@ -246,6 +270,9 @@ function UserForm({
   const [isActive, setIsActive] = useState(initial?.isActive ?? true);
   const [modules, setModules] = useState<AppModuleKey[]>(
     initial?.allowedModules ?? [...ROLE_DEFAULT_MODULES.RESIDENT],
+  );
+  const [turneroPuestoId, setTurneroPuestoId] = useState(
+    initial?.turneroPuestoId ?? "",
   );
 
   const globalMods = useMemo(
@@ -282,7 +309,9 @@ function UserForm({
           password: password || undefined,
           role,
           isActive,
-          allowedModules: role === "ADMIN" ? [...ROLE_DEFAULT_MODULES.ADMIN] : modules,
+          allowedModules:
+            role === "ADMIN" ? [...ROLE_DEFAULT_MODULES.ADMIN] : modules,
+          turneroPuestoId: turneroPuestoId || null,
         });
       }}
     >
@@ -338,6 +367,27 @@ function UserForm({
               </option>
             ))}
           </select>
+        </label>
+        <label className="block space-y-1.5 sm:col-span-2">
+          <span className="text-sm font-medium">
+            Puesto de operador (turnero)
+          </span>
+          <select
+            className={fieldClass}
+            value={turneroPuestoId}
+            onChange={(e) => setTurneroPuestoId(e.target.value)}
+          >
+            <option value="">Sin puesto asignado</option>
+            {puestos.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nombre} · {etiquetaCategoria(p.categoria)}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-xs text-muted-foreground">
+            Si está asignado, el panel de operador puede preseleccionar este
+            puesto.
+          </span>
         </label>
         <label className="block space-y-1.5 sm:col-span-2">
           <span className="text-sm font-medium">

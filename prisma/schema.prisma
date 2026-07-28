@@ -195,6 +195,7 @@ model Organization {
   turneroPuestos           TurneroPuesto[]
   turneroTurnos            TurneroTurno[]
   turneroContadoresDiarios TurneroContadorDiario[]
+  notifications            AppNotification[]
 
   @@map("organizations")
 }
@@ -250,26 +251,31 @@ model User {
   cashSessionsClosed   CashSession[]        @relation("CashSessionCloser")
   cashMovementsCreated CashMovement[]       @relation("CashMovementCreator")
   bankMovementsCreated BankMovement[]       @relation("BankMovementCreator")
+  notifications        AppNotification[]
 
   @@map("users")
 }
 
 /// Membresía del usuario en una organización + rol global en esa org.
 model OrganizationMember {
-  id             String           @id @default(cuid())
-  organizationId String
-  userId         String
-  role           OrganizationRole @default(VIEWER)
+  id              String           @id @default(cuid())
+  organizationId  String
+  userId          String
+  role            OrganizationRole @default(VIEWER)
   /// Módulos habilitados (keys de APP_MODULES). Vacío = defaults del rol.
-  allowedModules String[]         @default([])
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  allowedModules  String[]         @default([])
+  /// Puesto de operador del turnero (opcional).
+  turneroPuestoId String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  turneroPuesto TurneroPuesto? @relation(fields: [turneroPuestoId], references: [id], onDelete: SetNull)
 
   @@unique([organizationId, userId])
   @@index([userId])
+  @@index([turneroPuestoId])
   @@map("organization_members")
 }
 
@@ -1593,6 +1599,31 @@ model BankMovement {
 }
 
 // =============================================================================
+// =============================================================================
+// NOTIFICACIONES IN-APP
+// =============================================================================
+
+/// Aviso para un usuario dentro de una organización (p. ej. turno nuevo).
+model AppNotification {
+  id             String    @id @default(cuid())
+  organizationId String
+  userId         String
+  type           String
+  title          String
+  body           String
+  href           String?
+  readAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, organizationId, readAt, createdAt])
+  @@index([organizationId, createdAt])
+  @@map("app_notifications")
+}
+
+// =============================================================================
 // MÓDULO TURNERO — Cola de atención (tótem, operador, pantalla)
 // =============================================================================
 
@@ -1620,7 +1651,8 @@ model TurneroPuesto {
   activo         Boolean  @default(true)
   createdAt      DateTime @default(now())
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization    Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignedMembers OrganizationMember[]
 
   @@unique([organizationId, nombre])
   @@index([organizationId, categoria, activo])

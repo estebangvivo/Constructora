@@ -4,15 +4,22 @@ import { isDevAuthBypass } from "@/lib/auth-config";
 import { SIDEBAR_NAV, filterNavByAccess } from "@/config/navigation";
 import { getOrganizationProfile } from "@/features/settings/queries/get-organization";
 import { organizationLogoSrc } from "@/features/settings/lib/organization-logo";
+import { getHomeDashboardData } from "@/features/dashboard/queries/get-home-dashboard";
+import { HomeDashboard } from "@/features/dashboard/components/home-dashboard";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const session = await getSession();
-  const organization = session ? await getOrganizationProfile() : null;
+  const modules = session?.allowedModules ?? [];
+
+  const [organization, dashboard] = await Promise.all([
+    session ? getOrganizationProfile() : Promise.resolve(null),
+    session ? getHomeDashboardData(modules) : Promise.resolve(null),
+  ]);
   const logoUrl = organizationLogoSrc(organization?.logoUrl);
 
-  const modules = filterNavByAccess(
+  const navModules = filterNavByAccess(
     SIDEBAR_NAV.filter((item) => item.href !== "/"),
     {
       role: session?.role ?? null,
@@ -37,7 +44,7 @@ export default async function HomePage() {
           </h1>
           <p className="mt-2 max-w-xl text-muted-foreground">
             {session
-              ? `Hola${session.user.firstName ? `, ${session.user.firstName}` : ""}. Accedé a cada módulo desde aquí.`
+              ? `Hola${session.user.firstName ? `, ${session.user.firstName}` : ""}. Resumen del negocio y acceso a cada módulo.`
               : "Gestión de obras, presupuesto, campo y logística."}
           </p>
         </div>
@@ -50,35 +57,40 @@ export default async function HomePage() {
         </p>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {modules.map((item) => {
-          const Icon = item.icon;
-          return (
-            <a
-              key={item.href}
-              href={item.href}
-              className="group flex items-start gap-3 rounded-md border border-border bg-surface px-4 py-4 transition-colors hover:border-accent/40 hover:bg-surface-elevated"
-            >
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-background text-accent">
-                <Icon className="size-5" aria-hidden />
-              </span>
-              <span className="min-w-0 flex-1 text-left">
-                <span className="flex items-center justify-between gap-2">
-                  <span className="block font-medium">{item.title}</span>
-                  <ArrowRight
-                    className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
-                    aria-hidden
-                  />
+      {dashboard ? <HomeDashboard data={dashboard} /> : null}
+
+      <div>
+        <h2 className="mb-3 font-display text-lg tracking-tight">Módulos</h2>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {navModules.map((item) => {
+            const Icon = item.icon;
+            return (
+              <a
+                key={item.href}
+                href={item.href}
+                className="group flex items-start gap-3 rounded-md border border-border bg-surface px-4 py-4 transition-colors hover:border-accent/40 hover:bg-surface-elevated"
+              >
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-background text-accent">
+                  <Icon className="size-5" aria-hidden />
                 </span>
-                {item.description && (
-                  <span className="mt-0.5 block text-sm text-muted-foreground">
-                    {item.description}
+                <span className="min-w-0 flex-1 text-left">
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="block font-medium">{item.title}</span>
+                    <ArrowRight
+                      className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                      aria-hidden
+                    />
                   </span>
-                )}
-              </span>
-            </a>
-          );
-        })}
+                  {item.description && (
+                    <span className="mt-0.5 block text-sm text-muted-foreground">
+                      {item.description}
+                    </span>
+                  )}
+                </span>
+              </a>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

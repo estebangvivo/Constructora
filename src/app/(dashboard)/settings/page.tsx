@@ -10,7 +10,7 @@ import { ensureTodayBnaRate } from "@/features/settings/lib/sync-bna-rate";
 import { OrganizationSettingsForm } from "@/features/settings/components/organization-settings-form";
 import { ExchangeRateForm } from "@/features/settings/components/exchange-rate-form";
 import { BanksSettingsPanel } from "@/features/settings/components/banks-settings-panel";
-import { listOrganizationUsers } from "@/features/auth/actions/user-actions";
+import { listOrganizationUsers, listTurneroPuestosForUsers } from "@/features/auth/actions/user-actions";
 import { UsersAdminPanel } from "@/features/auth/components/users-admin-panel";
 import { hasModule } from "@/features/auth/lib/modules";
 import { listBankAccounts } from "@/features/treasury/queries/bank-queries";
@@ -45,12 +45,14 @@ export default async function SettingsPage() {
     session.organizationRole,
   );
 
-  const [latestUsdArs, recentRates, users, bankAccounts] = await Promise.all([
-    getLatestExchangeRate("USD", "ARS"),
-    listRecentExchangeRates(14),
-    canManageUsers ? listOrganizationUsers() : Promise.resolve([]),
-    listBankAccounts(),
-  ]);
+  const [latestUsdArs, recentRates, users, puestos, bankAccounts] =
+    await Promise.all([
+      getLatestExchangeRate("USD", "ARS"),
+      listRecentExchangeRates(14),
+      canManageUsers ? listOrganizationUsers() : Promise.resolve([]),
+      canManageUsers ? listTurneroPuestosForUsers() : Promise.resolve([]),
+      listBankAccounts(),
+    ]);
 
   return (
     <div className="px-4 py-6 lg:px-6">
@@ -81,6 +83,7 @@ export default async function SettingsPage() {
         {canManageUsers && (
           <UsersAdminPanel
             users={users}
+            puestos={puestos}
             currentUserId={session.user.id}
             canAssignAdmin={session.organizationRole === "ADMIN"}
           />

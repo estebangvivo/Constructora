@@ -24,7 +24,7 @@ export function DashboardShell({
   const pathname = usePathname();
 
   return (
-    <div className="flex min-h-dvh min-h-screen bg-background text-foreground">
+    <div className="flex h-dvh overflow-hidden bg-background text-foreground">
       <Sidebar
         pathname={pathname}
         role={role}
@@ -32,14 +32,16 @@ export function DashboardShell({
         organizationName={organizationName}
         logoUrl={logoUrl}
       />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <MobileNav
           role={role}
           modules={modules}
           organizationName={organizationName}
           logoUrl={logoUrl}
         />
-        <main className="flex-1 overflow-x-hidden px-0">{children}</main>
+        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-0">
+          {children}
+        </main>
       </div>
     </div>
   );

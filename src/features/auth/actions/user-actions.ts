@@ -15,6 +15,13 @@ export type ActionResult =
   | { ok: true; id?: string }
   | { ok: false; error: string };
 
+export type TurneroPuestoOption = {
+  id: string;
+  nombre: string;
+  categoria: string;
+  activo: boolean;
+};
+
 function canManageUsers(role: string) {
   return role === "ADMIN" || role === "DIRECTOR";
 }
@@ -26,6 +33,68 @@ function sanitizeModules(
   if (role === "ADMIN") return [...APP_MODULE_KEYS];
   const set = new Set(modules);
   return APP_MODULE_KEYS.filter((k) => set.has(k));
+}
+
+async function resolveTurneroPuestoId(
+  organizationId: string,
+  raw: string | null | undefined,
+): Promise<{ ok: true; id: string | null } | { ok: false; error: string }> {
+  if (raw == null || raw === "") return { ok: true, id: null };
+  const puesto = await prisma.turneroPuesto.findFirst({
+    where: {
+      id: raw,
+      organizationId,
+      activo: true,
+    },
+    select: { id: true },
+  });
+  if (!puesto) {
+    return { ok: false, error: "El puesto de turnero no existe o está inactivo." };
+  }
+  return { ok: true, id: puesto.id };
+}
+
+/** Puestos activos para el select de usuarios. */
+export async function listTurneroPuestosForUsers(): Promise<
+  TurneroPuestoOption[]
+> {
+  const session = await requireSession();
+  if (!canManageUsers(session.organizationRole)) return [];
+
+  return prisma.turneroPuesto.findMany({
+    where: { organizationId: session.organizationId, activo: true },
+    select: { id: true, nombre: true, categoria: true, activo: true },
+    orderBy: [{ categoria: "asc" }, { nombre: "asc" }],
+  });
+}
+
+/** Puesto asignado al usuario actual (para el panel operador). */
+export async function getMyAssignedTurneroPuesto(): Promise<{
+  id: string;
+  nombre: string;
+  categoria: string;
+} | null> {
+  const session = await requireSession();
+  const membership = await prisma.organizationMember.findUnique({
+    where: {
+      organizationId_userId: {
+        organizationId: session.organizationId,
+        userId: session.user.id,
+      },
+    },
+    select: {
+      turneroPuesto: {
+        select: { id: true, nombre: true, categoria: true, activo: true },
+      },
+    },
+  });
+  const puesto = membership?.turneroPuesto;
+  if (!puesto || !puesto.activo) return null;
+  return {
+    id: puesto.id,
+    nombre: puesto.nombre,
+    categoria: puesto.categoria,
+  };
 }
 
 export async function listOrganizationUsers() {
@@ -49,6 +118,9 @@ export async function listOrganizationUsers() {
           createdAt: true,
         },
       },
+      turneroPuesto: {
+        select: { id: true, nombre: true, categoria: true, activo: true },
+      },
     },
     orderBy: { createdAt: "asc" },
   });
@@ -67,6 +139,10 @@ export async function listOrganizationUsers() {
       m.allowedModules.length > 0
         ? m.allowedModules
         : [...ROLE_DEFAULT_MODULES[m.role]],
+    turneroPuestoId: m.turneroPuestoId,
+    turneroPuestoNombre: m.turneroPuesto?.activo
+      ? m.turneroPuesto.nombre
+      : null,
     createdAt: m.user.createdAt,
   }));
 }
@@ -79,6 +155,7 @@ export async function createOrganizationUser(input: {
   password: string;
   role: OrganizationRole;
   allowedModules: string[];
+  turneroPuestoId?: string | null;
 }): Promise<ActionResult> {
   try {
     const session = await requireSession();
@@ -97,6 +174,12 @@ export async function createOrganizationUser(input: {
     if (password.length < 6) {
       return { ok: false, error: "La contraseña debe tener al menos 6 caracteres." };
     }
+
+    const puestoResult = await resolveTurneroPuestoId(
+      session.organizationId,
+      input.turneroPuestoId,
+    );
+    if (!puestoResult.ok) return puestoResult;
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
@@ -149,6 +232,7 @@ export async function createOrganizationUser(input: {
         userId: user.id,
         role: input.role,
         allowedModules: modules,
+        turneroPuestoId: puestoResult.id,
       },
     });
 
@@ -170,6 +254,7 @@ export async function updateOrganizationUser(input: {
   allowedModules: string[];
   isActive: boolean;
   password?: string;
+  turneroPuestoId?: string | null;
 }): Promise<ActionResult> {
   try {
     const session = await requireSession();
@@ -199,7 +284,6 @@ export async function updateOrganizationUser(input: {
       input.role !== "ADMIN" &&
       session.organizationRole === "ADMIN"
     ) {
-      // evitar auto-degradarse dejando la org sin admin
       const otherAdmins = await prisma.organizationMember.count({
         where: {
           organizationId: session.organizationId,
@@ -218,6 +302,12 @@ export async function updateOrganizationUser(input: {
     if (input.password && input.password.length < 6) {
       return { ok: false, error: "La contraseña debe tener al menos 6 caracteres." };
     }
+
+    const puestoResult = await resolveTurneroPuestoId(
+      session.organizationId,
+      input.turneroPuestoId,
+    );
+    if (!puestoResult.ok) return puestoResult;
 
     const modules = sanitizeModules(input.role, input.allowedModules);
     const passwordHash = input.password
@@ -240,6 +330,7 @@ export async function updateOrganizationUser(input: {
         data: {
           role: input.role,
           allowedModules: modules,
+          turneroPuestoId: puestoResult.id,
         },
       }),
     ]);

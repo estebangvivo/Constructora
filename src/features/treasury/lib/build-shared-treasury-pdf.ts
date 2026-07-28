@@ -5,7 +5,7 @@ import {
   type TreasuryPdfInput,
 } from "@/features/treasury/lib/treasury-pdf";
 import type { PdfSharePayload } from "@/features/treasury/lib/pdf-share-token";
-import { loadOrganizationLogoBytes } from "@/features/settings/lib/organization-logo";
+import { loadOrganizationLogoBytes } from "@/features/settings/lib/organization-logo-server";
 
 function orgAddress(org: {
   address: string | null;

@@ -3,6 +3,8 @@
 import { HardHat, LogOut } from "lucide-react";
 import { SIDEBAR_NAV, filterNavByAccess } from "@/config/navigation";
 import { logoutLocal } from "@/features/auth/actions/auth-actions";
+import { NotificationsBell } from "@/features/notifications/components/notifications-bell";
+import { OperadorSidebarWidget } from "@/features/turnero/components/operador-sidebar-widget";
 import type { AppModuleKey } from "@/features/auth/lib/modules";
 import type { AppRole } from "@/types";
 import { cn } from "@/lib/utils";
@@ -27,8 +29,8 @@ export function Sidebar({
   const items = filterNavByAccess(SIDEBAR_NAV, { role, modules });
 
   return (
-    <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-sidebar text-sidebar-foreground print:hidden md:flex">
-      <div className="flex h-14 items-center gap-2 border-b border-border px-4">
+    <aside className="hidden h-full w-60 shrink-0 flex-col overflow-hidden border-r border-border bg-sidebar text-sidebar-foreground print:hidden md:flex">
+      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
         {logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -44,7 +46,10 @@ export function Sidebar({
         </span>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1 p-3" aria-label="Principal">
+      <nav
+        className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3"
+        aria-label="Principal"
+      >
         {items.map((item) => {
           const Icon = item.icon;
           const active =
@@ -68,10 +73,17 @@ export function Sidebar({
             </a>
           );
         })}
+        <div className="pt-3">
+          <OperadorSidebarWidget />
+        </div>
       </nav>
 
       {showLogout && (
-        <div className="border-t border-border p-3">
+        <div className="shrink-0 border-t border-border p-3">
+          <div className="mb-1 flex items-center justify-between px-1">
+            <span className="text-xs text-sidebar-foreground/50">Avisos</span>
+            <NotificationsBell variant="sidebar" />
+          </div>
           <form action={logoutLocal}>
             <button
               type="submit"

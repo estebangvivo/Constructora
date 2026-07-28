@@ -7,6 +7,7 @@ import {
   limitesDelDia,
   codigoTurno,
 } from "@/features/turnero/lib/turnos";
+import { notifyTurneroOperators } from "@/features/notifications/lib/notify-turnero-operators";
 
 export const dynamic = "force-dynamic";
 
@@ -102,6 +103,17 @@ export async function POST(request: NextRequest) {
         },
       });
     });
+
+    try {
+      await notifyTurneroOperators({
+        organizationId,
+        categoria,
+        codigo: turno.codigo,
+        clienteNombre: cliente.nombre,
+      });
+    } catch (error) {
+      console.error("No se pudieron enviar notificaciones de turno:", error);
+    }
 
     return NextResponse.json(turno, { status: 201, headers: noStore });
   } catch (error) {

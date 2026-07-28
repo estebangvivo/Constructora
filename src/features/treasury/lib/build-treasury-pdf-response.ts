@@ -1,5 +1,5 @@
 import { getOrganizationProfile } from "@/features/settings/queries/get-organization";
-import { loadOrganizationLogoBytes } from "@/features/settings/lib/organization-logo";
+import { loadOrganizationLogoBytes } from "@/features/settings/lib/organization-logo-server";
 import {
   getPaymentOrderById,
   getReceiptById,

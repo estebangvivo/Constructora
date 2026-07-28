@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { HardHat, LogOut, Menu } from "lucide-react";
 import { SIDEBAR_NAV, filterNavByAccess } from "@/config/navigation";
 import { logoutLocal } from "@/features/auth/actions/auth-actions";
+import { NotificationsBell } from "@/features/notifications/components/notifications-bell";
 import type { AppModuleKey } from "@/features/auth/lib/modules";
 import type { AppRole } from "@/types";
 import { cn } from "@/lib/utils";
@@ -44,15 +45,18 @@ export function MobileNav({
             {organizationName ?? "Constructora"}
           </span>
         </a>
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="rounded-md p-2 text-sidebar-foreground/80 hover:bg-sidebar-hover hover:text-sidebar-foreground"
-          aria-expanded={open}
-          aria-label="Abrir menú"
-        >
-          <Menu className="size-5" />
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          <NotificationsBell variant="mobile" />
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="rounded-md p-2 text-sidebar-foreground/80 hover:bg-sidebar-hover hover:text-sidebar-foreground"
+            aria-expanded={open}
+            aria-label="Abrir menú"
+          >
+            <Menu className="size-5" />
+          </button>
+        </div>
       </div>
 
       {open && (
