@@ -302,11 +302,18 @@ export function TreasuryDocumentForm({
         return;
       }
 
-      router.push(
+      const detailHref =
         kind === "receipt"
           ? `/treasury/receipts/${result.id}`
-          : `/treasury/payment-orders/${result.id}`,
+          : `/treasury/payment-orders/${result.id}`;
+      const printHref = `${detailHref}/print?autoPrint=1`;
+      const wantsPrint = window.confirm(
+        kind === "receipt"
+          ? "Recibo creado. ¿Querés imprimir el reporte?"
+          : "Orden de pago creada. ¿Querés imprimir el reporte?",
       );
+
+      router.push(wantsPrint ? printHref : detailHref);
       router.refresh();
     });
   }

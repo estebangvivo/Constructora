@@ -23,8 +23,10 @@ import { DeleteProjectButton } from "@/features/projects/components/delete-proje
 import { ClientPaidBreakdown } from "@/features/projects/components/client-paid-breakdown";
 import { ActualCostBreakdown } from "@/features/projects/components/actual-cost-breakdown";
 import { ProjectOverviewCharts } from "@/features/projects/components/project-overview-charts";
+import { ProjectClientAccount } from "@/features/projects/components/project-client-account";
 import { listProjectSuppliers } from "@/features/suppliers/queries/list-suppliers";
 import { formatBudgetMoney } from "@/features/budget/lib/labels";
+import { getProjectClientAccountStatement } from "@/features/treasury/queries/account-statements";
 import { getSession } from "@/lib/auth";
 import type { ProjectRouteParams } from "@/types";
 import { notFound, redirect } from "next/navigation";
@@ -119,13 +121,16 @@ export default async function ProjectOverviewPage({
     session.organizationRole,
   );
 
-  const [suppliers, financials, clientPaidDocuments, costDocuments, deleteBlockers] =
+  const [suppliers, financials, clientPaidDocuments, costDocuments, deleteBlockers, clientAccount] =
     await Promise.all([
       listProjectSuppliers(id),
       getProjectFinancialSummary(id),
       listProjectClientPaidDocuments(id),
       listProjectCostDocuments(id),
       canDeleteRole ? getProjectDeleteBlockers(id) : Promise.resolve([]),
+      project.clientId
+        ? getProjectClientAccountStatement(id)
+        : Promise.resolve(null),
     ]);
 
   const currency = financials?.currency ?? project.currency ?? "ARS";
@@ -214,6 +219,12 @@ export default async function ProjectOverviewPage({
         cobrado={cobrado}
         pagado={pagado}
         fxIncomplete={fxIncomplete}
+      />
+
+      <ProjectClientAccount
+        projectId={id}
+        clientId={project.clientId}
+        statement={clientAccount}
       />
 
       <section>

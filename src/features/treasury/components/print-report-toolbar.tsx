@@ -15,6 +15,8 @@ type PrintReportToolbarProps = {
   shareTitle?: string;
   defaultPhone?: string | null;
   cloudEnabled: boolean;
+  /** Si true, abre el diálogo de impresión al cargar. */
+  autoPrint?: boolean;
 };
 
 function isAppleTouchDevice() {
@@ -118,6 +120,7 @@ export function PrintReportToolbar({
   shareTitle,
   defaultPhone,
   cloudEnabled,
+  autoPrint = false,
 }: PrintReportToolbarProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -129,10 +132,26 @@ export function PrintReportToolbar({
   const [waSheetOpen, setWaSheetOpen] = useState(false);
   const [filesShareOk, setFilesShareOk] = useState(false);
   const fileRef = useRef<File | null>(null);
+  const autoPrintDone = useRef(false);
 
   useEffect(() => {
     setFilesShareOk(canShareFiles());
   }, []);
+
+  useEffect(() => {
+    if (!autoPrint || autoPrintDone.current) return;
+    autoPrintDone.current = true;
+    // Esperar a que el reporte HTML pinte antes del diálogo del sistema.
+    const id = window.setTimeout(() => {
+      window.print();
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("autoPrint")) {
+        url.searchParams.delete("autoPrint");
+        window.history.replaceState({}, "", url.pathname + url.search);
+      }
+    }, 500);
+    return () => window.clearTimeout(id);
+  }, [autoPrint]);
 
   useEffect(() => {
     let cancelled = false;

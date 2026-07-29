@@ -8,13 +8,17 @@ import { isWhatsAppCloudConfigured } from "@/features/treasury/lib/whatsapp-clou
 
 export const dynamic = "force-dynamic";
 
-type PageProps = { params: Promise<{ id: string }> };
+type PageProps = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ autoPrint?: string }>;
+};
 
-export default async function ReceiptPrintPage({ params }: PageProps) {
+export default async function ReceiptPrintPage({ params, searchParams }: PageProps) {
   const session = await getSession();
   if (!session) redirect("/sign-in");
 
   const { id } = await params;
+  const { autoPrint } = await searchParams;
   const [doc, org] = await Promise.all([
     getReceiptById(id),
     getOrganizationProfile(),
@@ -64,6 +68,7 @@ export default async function ReceiptPrintPage({ params }: PageProps) {
         shareTitle={`Recibo ${doc.number}`}
         defaultPhone={doc.client?.phone}
         cloudEnabled={cloudEnabled}
+        autoPrint={autoPrint === "1"}
       />
       <div className="px-4 py-6 pb-28 print:px-0 print:py-0 sm:pb-6">
         <TreasuryPrintReport

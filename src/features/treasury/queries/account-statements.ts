@@ -386,6 +386,180 @@ export async function getClientAccountStatement(
   };
 }
 
+/**
+ * Cuenta corriente del cliente limitada a una obra:
+ * Debe = certificaciones de la obra; Haber = recibos imputados a esa obra.
+ */
+export async function getProjectClientAccountStatement(
+  projectId: string,
+): Promise<AccountStatement | null> {
+  const session = await requireSession();
+  const project = await prisma.project.findFirst({
+    where: {
+      id: projectId,
+      organizationId: session.organizationId,
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      currency: true,
+      clientId: true,
+      client: { select: { id: true, name: true } },
+    },
+  });
+  if (!project?.clientId || !project.client) return null;
+
+  const [certs, receiptLines] = await Promise.all([
+    prisma.certification.findMany({
+      where: {
+        projectId: project.id,
+        status: { in: ["APPROVED", "PAID"] },
+      },
+      orderBy: { periodEnd: "asc" },
+      select: {
+        id: true,
+        number: true,
+        netAmount: true,
+        periodEnd: true,
+        approvedAt: true,
+      },
+    }),
+    prisma.receiptLine.findMany({
+      where: {
+        projectId: project.id,
+        receipt: {
+          organizationId: session.organizationId,
+          status: "POSTED",
+        },
+      },
+      select: {
+        amount: true,
+        receipt: {
+          select: {
+            id: true,
+            number: true,
+            issueDate: true,
+            currency: true,
+            totalAmount: true,
+            concept: true,
+            checks: {
+              where: { status: "BOUNCED" },
+              select: { amount: true },
+            },
+          },
+        },
+      },
+      orderBy: { receipt: { issueDate: "asc" } },
+    }),
+  ]);
+
+  const movements: AccountStatementMovement[] = [];
+  const asOf = new Date(
+    new Date().getFullYear(),
+    new Date().getMonth(),
+    new Date().getDate(),
+  );
+  let currency = project.currency || "ARS";
+  const agingDebits: AgingItem[] = [];
+  const agingCredits: AgingItem[] = [];
+
+  for (const c of certs) {
+    const net = toNumber(c.netAmount);
+    const due = parseDbDate(c.approvedAt ?? c.periodEnd);
+    movements.push({
+      id: `cert-${c.id}`,
+      date: isoDay(c.periodEnd),
+      kind: "CERTIFICATION",
+      number: c.number,
+      description: "Certificación de avance",
+      debit: net,
+      credit: 0,
+      currency,
+      href: `/projects/${project.id}/certifications/${c.id}`,
+      projectName: `${project.code} · ${project.name}`,
+    });
+    if (net > 0.009) {
+      agingDebits.push({ amount: net, date: due });
+    }
+  }
+
+  // Agrupar líneas de recibo por documento (monto neto a esta obra)
+  const byReceipt = new Map<
+    string,
+    {
+      id: string;
+      number: string;
+      issueDate: Date;
+      currency: string;
+      concept: string | null;
+      factor: number;
+      credit: number;
+    }
+  >();
+
+  for (const line of receiptLines) {
+    const r = line.receipt;
+    let entry = byReceipt.get(r.id);
+    if (!entry) {
+      const receiptTotal = toNumber(r.totalAmount);
+      const bounced = r.checks.reduce((acc, c) => acc + toNumber(c.amount), 0);
+      const factor =
+        receiptTotal > 0.009
+          ? Math.max(0, (receiptTotal - bounced) / receiptTotal)
+          : 1;
+      entry = {
+        id: r.id,
+        number: r.number,
+        issueDate: r.issueDate,
+        currency: r.currency || currency,
+        concept: r.concept,
+        factor,
+        credit: 0,
+      };
+      byReceipt.set(r.id, entry);
+    }
+    entry.credit = round2(entry.credit + toNumber(line.amount) * entry.factor);
+  }
+
+  for (const r of byReceipt.values()) {
+    currency = r.currency || currency;
+    const issued = parseDbDate(r.issueDate);
+    const amount = round2(r.credit);
+    if (amount <= 0.009) continue;
+    movements.push({
+      id: `rec-${r.id}`,
+      date: isoDay(r.issueDate),
+      kind: "RECEIPT",
+      number: r.number,
+      description: r.concept || "Recibo de cobro",
+      debit: 0,
+      credit: amount,
+      currency: r.currency,
+      href: `/treasury/receipts/${r.id}`,
+      projectName: `${project.code} · ${project.name}`,
+    });
+    agingCredits.push({ amount, date: issued });
+  }
+
+  const balance = round2(
+    movements.reduce((acc, m) => acc + m.debit - m.credit, 0),
+  );
+  const aging = buildAging(agingDebits, agingCredits, asOf);
+  movements.sort((a, b) => a.date.localeCompare(b.date));
+
+  return {
+    partyId: project.client.id,
+    partyName: project.client.name,
+    partyKind: "client",
+    currency,
+    balance,
+    aging,
+    movements,
+  };
+}
+
 export async function getSupplierAccountStatement(
   supplierId: string,
 ): Promise<AccountStatement | null> {
