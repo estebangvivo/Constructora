@@ -31,8 +31,14 @@ export async function GET(request: NextRequest) {
           }
         : {
             organizationId: session.organizationId,
-            creadoEn: { gte: inicio, lt: fin },
-            estado: { in: ["ESPERA", "LLAMADO"] },
+            OR: [
+              {
+                creadoEn: { gte: inicio, lt: fin },
+                estado: { in: ["ESPERA", "LLAMADO"] },
+              },
+              // Turnos LLAMADO de días anteriores (quedaron colgados): hay que poder finalizarlos
+              { estado: "LLAMADO" },
+            ],
           },
     orderBy: [{ creadoEn: "asc" }, { id: "asc" }],
   });
@@ -157,8 +163,25 @@ export async function PATCH(request: NextRequest) {
     const { inicio, fin } = limitesDelDia();
 
     const resultado = await prisma.$transaction(async (tx) => {
+      // Cerrar turnos LLAMADO de días anteriores del mismo puesto (quedan “fantasma”
+      // y bloqueaban “Llamar siguiente” sin aparecer en la UI del día).
+      await tx.turneroTurno.updateMany({
+        where: {
+          organizationId,
+          estado: "LLAMADO",
+          puesto,
+          creadoEn: { lt: inicio },
+        },
+        data: { estado: "ATENDIDO" },
+      });
+
       const enAtencion = await tx.turneroTurno.findFirst({
-        where: { organizationId, estado: "LLAMADO", puesto },
+        where: {
+          organizationId,
+          estado: "LLAMADO",
+          puesto,
+          creadoEn: { gte: inicio, lt: fin },
+        },
         orderBy: { llamadoEn: "desc" },
       });
       if (enAtencion) return { tipo: "OCUPADO" as const, turno: enAtencion };
