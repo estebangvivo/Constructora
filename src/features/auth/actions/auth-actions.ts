@@ -11,7 +11,7 @@ import {
 } from "@/features/auth/lib/session";
 
 export type AuthActionResult =
-  | { ok: true }
+  | { ok: true; needsOrgPicker?: boolean }
   | { ok: false; error: string };
 
 export async function loginWithPassword(input: {
@@ -42,22 +42,26 @@ export async function loginWithPassword(input: {
       return { ok: false, error: "Credenciales inválidas." };
     }
 
-    const membership = await prisma.organizationMember.findFirst({
+    const memberships = await prisma.organizationMember.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "asc" },
+      select: { organizationId: true },
     });
-    if (!membership) {
+    if (memberships.length === 0) {
       return { ok: false, error: "El usuario no pertenece a ninguna empresa." };
     }
 
     const token = await signLocalSession({
       userId: user.id,
-      organizationId: membership.organizationId,
+      organizationId: memberships[0].organizationId,
     });
     await setLocalSessionCookie(token);
 
     revalidatePath("/", "layout");
-    return { ok: true };
+    return {
+      ok: true,
+      needsOrgPicker: memberships.length > 1,
+    };
   } catch (error) {
     console.error("loginWithPassword", error);
     return { ok: false, error: "No se pudo iniciar sesión." };

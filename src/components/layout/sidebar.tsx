@@ -1,6 +1,6 @@
 "use client";
 
-import { HardHat, LogOut } from "lucide-react";
+import { HardHat, LogOut, Building2 } from "lucide-react";
 import { SIDEBAR_NAV, filterNavByAccess } from "@/config/navigation";
 import { logoutLocal } from "@/features/auth/actions/auth-actions";
 import { NotificationsBell } from "@/features/notifications/components/notifications-bell";
@@ -41,9 +41,17 @@ export function Sidebar({
         ) : (
           <HardHat className="size-5" aria-hidden />
         )}
-        <span className="truncate font-display text-lg tracking-tight">
-          {organizationName ?? "Constructora"}
-        </span>
+        <div className="min-w-0 flex-1">
+          <span className="block truncate font-display text-lg tracking-tight">
+            {organizationName ?? "Constructora"}
+          </span>
+          <a
+            href="/select-organization"
+            className="text-[11px] text-sidebar-foreground/55 hover:text-sidebar-foreground"
+          >
+            Cambiar empresa
+          </a>
+        </div>
       </div>
 
       <nav
@@ -93,6 +101,13 @@ export function Sidebar({
               Cerrar sesión
             </button>
           </form>
+          <a
+            href="/select-organization"
+            className="mt-1 flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm text-sidebar-foreground/75 hover:bg-sidebar-hover hover:text-sidebar-foreground"
+          >
+            <Building2 className="size-4 shrink-0" aria-hidden />
+            Empresas
+          </a>
         </div>
       )}
     </aside>

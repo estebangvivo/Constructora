@@ -49,11 +49,12 @@ async function authenticate(emailRaw: string, password: string) {
     return { ok: false as const, error: "Credenciales inválidas." };
   }
 
-  const membership = await prisma.organizationMember.findFirst({
+  const memberships = await prisma.organizationMember.findMany({
     where: { userId: user.id },
     orderBy: { createdAt: "asc" },
+    select: { organizationId: true },
   });
-  if (!membership) {
+  if (memberships.length === 0) {
     return {
       ok: false as const,
       error: "El usuario no pertenece a ninguna empresa.",
@@ -62,10 +63,14 @@ async function authenticate(emailRaw: string, password: string) {
 
   const token = await signLocalSession({
     userId: user.id,
-    organizationId: membership.organizationId,
+    organizationId: memberships[0].organizationId,
   });
 
-  return { ok: true as const, token };
+  return {
+    ok: true as const,
+    token,
+    needsOrgPicker: memberships.length > 1,
+  };
 }
 
 /** Login compatible con Silk / tablets (sin Server Actions). */
@@ -106,7 +111,10 @@ export async function POST(request: Request) {
     }
 
     if (wantsJson) {
-      const res = NextResponse.json({ ok: true });
+      const res = NextResponse.json({
+        ok: true,
+        needsOrgPicker: result.needsOrgPicker,
+      });
       res.cookies.set(
         SESSION_COOKIE,
         result.token,
@@ -115,7 +123,10 @@ export async function POST(request: Request) {
       return res;
     }
 
-    const res = NextResponse.redirect(publicUrl(request, "/"), 303);
+    const dest = result.needsOrgPicker
+      ? "/select-organization?required=1"
+      : "/";
+    const res = NextResponse.redirect(publicUrl(request, dest), 303);
     res.cookies.set(
       SESSION_COOKIE,
       result.token,

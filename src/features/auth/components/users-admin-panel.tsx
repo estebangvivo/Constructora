@@ -8,6 +8,7 @@ import {
   removeOrganizationUser,
   updateOrganizationUser,
   type TurneroPuestoOption,
+  type ManageableOrganization,
 } from "@/features/auth/actions/user-actions";
 import {
   APP_MODULES,
@@ -32,6 +33,8 @@ type UserRow = {
   allowedModules: string[];
   turneroPuestoId: string | null;
   turneroPuestoNombre: string | null;
+  organizationIds: string[];
+  organizations: { id: string; name: string }[];
 };
 
 const fieldClass =
@@ -52,6 +55,8 @@ function etiquetaCategoria(categoria: string) {
 type UsersAdminPanelProps = {
   users: UserRow[];
   puestos: TurneroPuestoOption[];
+  organizations: ManageableOrganization[];
+  currentOrganizationId: string;
   currentUserId: string;
   canAssignAdmin: boolean;
 };
@@ -59,6 +64,8 @@ type UsersAdminPanelProps = {
 export function UsersAdminPanel({
   users,
   puestos,
+  organizations,
+  currentOrganizationId,
   currentUserId,
   canAssignAdmin,
 }: UsersAdminPanelProps) {
@@ -86,7 +93,7 @@ export function UsersAdminPanel({
         <div>
           <h2 className="font-display text-xl tracking-tight">Usuarios</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Alta, baja, permisos por módulo y puesto de operador del turnero.
+            Alta, baja, permisos, empresas y puesto de operador del turnero.
           </p>
         </div>
         <button
@@ -107,6 +114,8 @@ export function UsersAdminPanel({
           canAssignAdmin={canAssignAdmin}
           pending={pending}
           puestos={puestos}
+          organizations={organizations}
+          currentOrganizationId={currentOrganizationId}
           onCancel={() => setShowCreate(false)}
           onSubmit={(data) =>
             run(() =>
@@ -115,10 +124,11 @@ export function UsersAdminPanel({
                 firstName: data.firstName,
                 lastName: data.lastName,
                 phone: data.phone,
-                password: data.password!,
+                password: data.password || undefined,
                 role: data.role,
                 allowedModules: data.allowedModules,
                 turneroPuestoId: data.turneroPuestoId,
+                organizationIds: data.organizationIds,
               }),
             )
           }
@@ -150,6 +160,12 @@ export function UsersAdminPanel({
                       ? ` · Turnero: ${u.turneroPuestoNombre}`
                       : " · Sin puesto de turnero"}
                   </p>
+                  {u.organizations.length > 0 && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Empresas:{" "}
+                      {u.organizations.map((o) => o.name).join(", ")}
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -193,6 +209,8 @@ export function UsersAdminPanel({
                     canAssignAdmin={canAssignAdmin}
                     pending={pending}
                     puestos={puestos}
+                    organizations={organizations}
+                    currentOrganizationId={currentOrganizationId}
                     initial={{
                       email: u.email,
                       firstName: u.firstName ?? "",
@@ -202,6 +220,10 @@ export function UsersAdminPanel({
                       isActive: u.isActive,
                       allowedModules: u.allowedModules as AppModuleKey[],
                       turneroPuestoId: u.turneroPuestoId,
+                      organizationIds:
+                        u.organizationIds.length > 0
+                          ? u.organizationIds
+                          : [currentOrganizationId],
                     }}
                     onCancel={() => setEditingId(null)}
                     onSubmit={(data) =>
@@ -216,6 +238,7 @@ export function UsersAdminPanel({
                           allowedModules: data.allowedModules,
                           password: data.password || undefined,
                           turneroPuestoId: data.turneroPuestoId,
+                          organizationIds: data.organizationIds,
                         }),
                       )
                     }
@@ -240,6 +263,7 @@ type FormData = {
   isActive?: boolean;
   allowedModules: AppModuleKey[];
   turneroPuestoId: string | null;
+  organizationIds: string[];
 };
 
 function UserForm({
@@ -247,6 +271,8 @@ function UserForm({
   canAssignAdmin,
   pending,
   puestos,
+  organizations,
+  currentOrganizationId,
   initial,
   onCancel,
   onSubmit,
@@ -255,6 +281,8 @@ function UserForm({
   canAssignAdmin: boolean;
   pending: boolean;
   puestos: TurneroPuestoOption[];
+  organizations: ManageableOrganization[];
+  currentOrganizationId: string;
   initial?: FormData;
   onCancel: () => void;
   onSubmit: (data: FormData) => void;
@@ -273,6 +301,11 @@ function UserForm({
   );
   const [turneroPuestoId, setTurneroPuestoId] = useState(
     initial?.turneroPuestoId ?? "",
+  );
+  const [organizationIds, setOrganizationIds] = useState<string[]>(
+    initial?.organizationIds?.length
+      ? initial.organizationIds
+      : [currentOrganizationId],
   );
 
   const globalMods = useMemo(
@@ -296,6 +329,17 @@ function UserForm({
     );
   }
 
+  function toggleOrganization(orgId: string) {
+    setOrganizationIds((prev) => {
+      if (prev.includes(orgId)) {
+        if (orgId === currentOrganizationId) return prev;
+        if (prev.length <= 1) return prev;
+        return prev.filter((id) => id !== orgId);
+      }
+      return [...prev, orgId];
+    });
+  }
+
   return (
     <form
       className="space-y-4 rounded-md border border-border bg-surface p-4"
@@ -312,6 +356,7 @@ function UserForm({
           allowedModules:
             role === "ADMIN" ? [...ROLE_DEFAULT_MODULES.ADMIN] : modules,
           turneroPuestoId: turneroPuestoId || null,
+          organizationIds,
         });
       }}
     >
@@ -368,6 +413,43 @@ function UserForm({
             ))}
           </select>
         </label>
+
+        {organizations.length > 0 && (
+          <fieldset className="space-y-2 sm:col-span-2">
+            <legend className="text-sm font-medium">
+              Empresas a las que puede acceder
+            </legend>
+            <div className="space-y-1.5 rounded-md border border-border bg-background p-3">
+              {organizations.map((org) => {
+                const checked = organizationIds.includes(org.id);
+                const lockedCurrent =
+                  org.id === currentOrganizationId && checked;
+                return (
+                  <label
+                    key={org.id}
+                    className="flex cursor-pointer items-center gap-2 text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={lockedCurrent}
+                      onChange={() => toggleOrganization(org.id)}
+                    />
+                    <span>
+                      {org.name}
+                      {org.id === currentOrganizationId ? " (actual)" : ""}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Solo aparecen empresas donde sos Admin o Dirección. La empresa
+              actual queda marcada.
+            </p>
+          </fieldset>
+        )}
+
         <label className="block space-y-1.5 sm:col-span-2">
           <span className="text-sm font-medium">
             Puesto de operador (turnero)
@@ -385,22 +467,28 @@ function UserForm({
             ))}
           </select>
           <span className="mt-1 block text-xs text-muted-foreground">
-            Si está asignado, el panel de operador puede preseleccionar este
-            puesto.
+            Aplica a la empresa actual. Si está asignado, el panel de operador
+            puede preseleccionarlo.
           </span>
         </label>
         <label className="block space-y-1.5 sm:col-span-2">
           <span className="text-sm font-medium">
-            Contraseña{mode === "edit" ? " (opcional)" : ""}
+            Contraseña
+            {mode === "edit"
+              ? " (opcional)"
+              : " (obligatoria si el email es nuevo)"}
           </span>
           <input
             type="password"
             className={fieldClass}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            required={mode === "create"}
-            minLength={mode === "create" ? 6 : undefined}
-            placeholder={mode === "edit" ? "Dejar vacío para no cambiar" : ""}
+            minLength={password ? 6 : undefined}
+            placeholder={
+              mode === "edit"
+                ? "Dejar vacío para no cambiar"
+                : "Si el email ya existe en otra empresa, se invita sin cambiar su clave"
+            }
           />
         </label>
         {mode === "edit" && (

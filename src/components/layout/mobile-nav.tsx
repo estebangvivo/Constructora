@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { HardHat, LogOut, Menu } from "lucide-react";
+import { HardHat, LogOut, Menu, Building2 } from "lucide-react";
 import { SIDEBAR_NAV, filterNavByAccess } from "@/config/navigation";
 import { logoutLocal } from "@/features/auth/actions/auth-actions";
 import { NotificationsBell } from "@/features/notifications/components/notifications-bell";
@@ -30,7 +30,7 @@ export function MobileNav({
   return (
     <div className="border-b border-border bg-sidebar text-sidebar-foreground print:hidden md:hidden">
       <div className="flex h-14 items-center justify-between px-4">
-        <a href="/" className="flex min-w-0 items-center gap-2">
+          <a href="/" className="flex min-w-0 items-center gap-2">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -41,8 +41,10 @@ export function MobileNav({
           ) : (
             <HardHat className="size-5 shrink-0" aria-hidden />
           )}
-          <span className="truncate font-display text-lg tracking-tight">
-            {organizationName ?? "Constructora"}
+          <span className="min-w-0">
+            <span className="block truncate font-display text-lg tracking-tight">
+              {organizationName ?? "Constructora"}
+            </span>
           </span>
         </a>
         <div className="flex shrink-0 items-center gap-1">
@@ -88,6 +90,14 @@ export function MobileNav({
               </a>
             );
           })}
+          <a
+            href="/select-organization"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm text-sidebar-foreground/75"
+          >
+            <Building2 className="size-4" aria-hidden />
+            Cambiar empresa
+          </a>
           <form action={logoutLocal}>
             <button
               type="submit"

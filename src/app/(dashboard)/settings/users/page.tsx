@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { listOrganizationUsers, listTurneroPuestosForUsers } from "@/features/auth/actions/user-actions";
+import { listOrganizationUsers, listTurneroPuestosForUsers, listManageableOrganizationsForUsers } from "@/features/auth/actions/user-actions";
 import { UsersAdminPanel } from "@/features/auth/components/users-admin-panel";
 import { hasModule } from "@/features/auth/lib/modules";
 
@@ -17,9 +17,10 @@ export default async function SettingsUsersPage() {
 
   if (!canManage) redirect("/settings");
 
-  const [users, puestos] = await Promise.all([
+  const [users, puestos, organizations] = await Promise.all([
     listOrganizationUsers(),
     listTurneroPuestosForUsers(),
+    listManageableOrganizationsForUsers(),
   ]);
 
   return (
@@ -32,6 +33,8 @@ export default async function SettingsUsersPage() {
       <UsersAdminPanel
         users={users}
         puestos={puestos}
+        organizations={organizations}
+        currentOrganizationId={session.organizationId}
         currentUserId={session.user.id}
         canAssignAdmin={session.organizationRole === "ADMIN"}
       />

@@ -22,8 +22,65 @@ export type TurneroPuestoOption = {
   activo: boolean;
 };
 
+export type ManageableOrganization = {
+  id: string;
+  name: string;
+  slug: string;
+};
+
 function canManageUsers(role: string) {
   return role === "ADMIN" || role === "DIRECTOR";
+}
+
+/** Empresas donde el usuario actual puede gestionar miembros. */
+export async function listManageableOrganizationsForUsers(): Promise<
+  ManageableOrganization[]
+> {
+  const session = await requireSession();
+  if (!canManageUsers(session.organizationRole)) return [];
+
+  const memberships = await prisma.organizationMember.findMany({
+    where: {
+      userId: session.user.id,
+      role: { in: ["ADMIN", "DIRECTOR"] },
+    },
+    include: {
+      organization: { select: { id: true, name: true, slug: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  return memberships.map((m) => ({
+    id: m.organization.id,
+    name: m.organization.name,
+    slug: m.organization.slug,
+  }));
+}
+
+async function assertManageableOrganizationIds(
+  userId: string,
+  organizationIds: string[],
+): Promise<{ ok: true; ids: string[] } | { ok: false; error: string }> {
+  const unique = [...new Set(organizationIds.filter(Boolean))];
+  if (unique.length === 0) {
+    return { ok: false, error: "Seleccioná al menos una empresa." };
+  }
+
+  const allowed = await prisma.organizationMember.findMany({
+    where: {
+      userId,
+      role: { in: ["ADMIN", "DIRECTOR"] },
+      organizationId: { in: unique },
+    },
+    select: { organizationId: true },
+  });
+  if (allowed.length !== unique.length) {
+    return {
+      ok: false,
+      error: "Solo podés asignar empresas donde sos Admin o Dirección.",
+    };
+  }
+  return { ok: true, ids: unique };
 }
 
 function sanitizeModules(
@@ -116,6 +173,12 @@ export async function listOrganizationUsers() {
           isActive: true,
           passwordHash: true,
           createdAt: true,
+          memberships: {
+            select: {
+              organizationId: true,
+              organization: { select: { id: true, name: true } },
+            },
+          },
         },
       },
       turneroPuesto: {
@@ -124,6 +187,9 @@ export async function listOrganizationUsers() {
     },
     orderBy: { createdAt: "asc" },
   });
+
+  const manageable = await listManageableOrganizationsForUsers();
+  const manageableIds = new Set(manageable.map((o) => o.id));
 
   return members.map((m) => ({
     membershipId: m.id,
@@ -143,6 +209,15 @@ export async function listOrganizationUsers() {
     turneroPuestoNombre: m.turneroPuesto?.activo
       ? m.turneroPuesto.nombre
       : null,
+    organizationIds: m.user.memberships
+      .filter((mem) => manageableIds.has(mem.organizationId))
+      .map((mem) => mem.organizationId),
+    organizations: m.user.memberships
+      .filter((mem) => manageableIds.has(mem.organizationId))
+      .map((mem) => ({
+        id: mem.organization.id,
+        name: mem.organization.name,
+      })),
     createdAt: m.user.createdAt,
   }));
 }
@@ -152,10 +227,13 @@ export async function createOrganizationUser(input: {
   firstName?: string;
   lastName?: string;
   phone?: string;
-  password: string;
+  /** Obligatoria solo si el email es nuevo. Si el user ya existe, se ignora. */
+  password?: string;
   role: OrganizationRole;
   allowedModules: string[];
   turneroPuestoId?: string | null;
+  /** Empresas a las que tendrá acceso (debe incluir al menos una gestionable). */
+  organizationIds?: string[];
 }): Promise<ActionResult> {
   try {
     const session = await requireSession();
@@ -167,13 +245,19 @@ export async function createOrganizationUser(input: {
     }
 
     const email = input.email.trim().toLowerCase();
-    const password = input.password;
-    if (!email || !password) {
-      return { ok: false, error: "Email y contraseña son obligatorios." };
+    const password = input.password?.trim() ?? "";
+    if (!email) {
+      return { ok: false, error: "El email es obligatorio." };
     }
-    if (password.length < 6) {
-      return { ok: false, error: "La contraseña debe tener al menos 6 caracteres." };
-    }
+
+    const orgCheck = await assertManageableOrganizationIds(
+      session.user.id,
+      input.organizationIds?.length
+        ? input.organizationIds
+        : [session.organizationId],
+    );
+    if (!orgCheck.ok) return orgCheck;
+    const orgIds = orgCheck.ids;
 
     const puestoResult = await resolveTurneroPuestoId(
       session.organizationId,
@@ -181,64 +265,91 @@ export async function createOrganizationUser(input: {
     );
     if (!puestoResult.ok) return puestoResult;
 
+    const modules = sanitizeModules(input.role, input.allowedModules);
     const existing = await prisma.user.findUnique({ where: { email } });
+
+    let userId: string;
+
     if (existing) {
-      const alreadyMember = await prisma.organizationMember.findUnique({
+      const alreadyInAny = await prisma.organizationMember.findMany({
         where: {
-          organizationId_userId: {
-            organizationId: session.organizationId,
-            userId: existing.id,
-          },
+          userId: existing.id,
+          organizationId: { in: orgIds },
+        },
+        select: { organizationId: true },
+      });
+      if (alreadyInAny.length === orgIds.length) {
+        return {
+          ok: false,
+          error: "Ese email ya está en todas las empresas seleccionadas.",
+        };
+      }
+
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: {
+          firstName: existing.firstName || input.firstName?.trim() || null,
+          lastName: existing.lastName || input.lastName?.trim() || null,
+          phone: existing.phone || input.phone?.trim() || null,
+          isActive: true,
         },
       });
-      if (alreadyMember) {
-        return { ok: false, error: "Ese email ya está en la organización." };
+      userId = existing.id;
+    } else {
+      if (!password) {
+        return {
+          ok: false,
+          error: "La contraseña es obligatoria para un usuario nuevo.",
+        };
       }
-    }
+      if (password.length < 6) {
+        return {
+          ok: false,
+          error: "La contraseña debe tener al menos 6 caracteres.",
+        };
+      }
 
-    const modules = sanitizeModules(input.role, input.allowedModules);
-    const passwordHash = await hashPassword(password);
-
-    const user =
-      existing ??
-      (await prisma.user.create({
+      const user = await prisma.user.create({
         data: {
           authId: `local:${email}`,
           email,
-          passwordHash,
+          passwordHash: await hashPassword(password),
           firstName: input.firstName?.trim() || null,
           lastName: input.lastName?.trim() || null,
           phone: input.phone?.trim() || null,
           isActive: true,
         },
-      }));
-
-    if (existing) {
-      await prisma.user.update({
-        where: { id: existing.id },
-        data: {
-          passwordHash,
-          firstName: input.firstName?.trim() || existing.firstName,
-          lastName: input.lastName?.trim() || existing.lastName,
-          phone: input.phone?.trim() || existing.phone,
-          isActive: true,
-        },
       });
+      userId = user.id;
     }
 
-    const membership = await prisma.organizationMember.create({
-      data: {
-        organizationId: session.organizationId,
-        userId: user.id,
-        role: input.role,
-        allowedModules: modules,
-        turneroPuestoId: puestoResult.id,
-      },
-    });
+    let primaryMembershipId: string | undefined;
+    for (const organizationId of orgIds) {
+      const existingMem = await prisma.organizationMember.findUnique({
+        where: {
+          organizationId_userId: { organizationId, userId },
+        },
+      });
+      if (existingMem) continue;
+
+      const membership = await prisma.organizationMember.create({
+        data: {
+          organizationId,
+          userId,
+          role: input.role,
+          allowedModules: modules,
+          turneroPuestoId:
+            organizationId === session.organizationId ? puestoResult.id : null,
+        },
+      });
+      if (organizationId === session.organizationId) {
+        primaryMembershipId = membership.id;
+      }
+    }
 
     revalidatePath("/settings");
     revalidatePath("/settings/users");
-    return { ok: true, id: membership.id };
+    return { ok: true, id: primaryMembershipId };
   } catch (error) {
     console.error("createOrganizationUser", error);
     return { ok: false, error: "No se pudo crear el usuario." };
@@ -255,6 +366,7 @@ export async function updateOrganizationUser(input: {
   isActive: boolean;
   password?: string;
   turneroPuestoId?: string | null;
+  organizationIds?: string[];
 }): Promise<ActionResult> {
   try {
     const session = await requireSession();
@@ -314,8 +426,30 @@ export async function updateOrganizationUser(input: {
       ? await hashPassword(input.password)
       : undefined;
 
-    await prisma.$transaction([
-      prisma.user.update({
+    const manageable = await listManageableOrganizationsForUsers();
+    const manageableIds = new Set(manageable.map((o) => o.id));
+
+    let desiredOrgIds: string[] | null = null;
+    if (input.organizationIds) {
+      const orgCheck = await assertManageableOrganizationIds(
+        session.user.id,
+        input.organizationIds,
+      );
+      if (!orgCheck.ok) return orgCheck;
+      desiredOrgIds = orgCheck.ids;
+      if (!desiredOrgIds.includes(session.organizationId)) {
+        // Evitar que al editar desde esta empresa se auto-expulsara sin querer
+        // si desmarcó la actual: exigir que quede al menos la actual o avisar.
+        return {
+          ok: false,
+          error:
+            "Tenés que dejar marcada la empresa actual (desde la que estás editando).",
+        };
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
         where: { id: input.userId },
         data: {
           firstName: input.firstName?.trim() || null,
@@ -324,16 +458,56 @@ export async function updateOrganizationUser(input: {
           isActive: input.isActive,
           ...(passwordHash ? { passwordHash } : {}),
         },
-      }),
-      prisma.organizationMember.update({
+      });
+
+      await tx.organizationMember.update({
         where: { id: membership.id },
         data: {
           role: input.role,
           allowedModules: modules,
           turneroPuestoId: puestoResult.id,
         },
-      }),
-    ]);
+      });
+
+      if (desiredOrgIds) {
+        const desired = new Set(desiredOrgIds);
+        const currentManaged = await tx.organizationMember.findMany({
+          where: {
+            userId: input.userId,
+            organizationId: { in: [...manageableIds] },
+          },
+          select: { id: true, organizationId: true },
+        });
+
+        for (const mem of currentManaged) {
+          if (!desired.has(mem.organizationId)) {
+            if (
+              mem.organizationId === session.organizationId &&
+              input.userId === session.user.id
+            ) {
+              continue; // no auto-expulsarse de la sesión actual
+            }
+            await tx.organizationMember.delete({ where: { id: mem.id } });
+          }
+        }
+
+        for (const organizationId of desiredOrgIds) {
+          const exists = currentManaged.some(
+            (m) => m.organizationId === organizationId,
+          );
+          if (exists) continue;
+          await tx.organizationMember.create({
+            data: {
+              organizationId,
+              userId: input.userId,
+              role: input.role,
+              allowedModules: modules,
+              turneroPuestoId: null,
+            },
+          });
+        }
+      }
+    });
 
     revalidatePath("/settings");
     revalidatePath("/settings/users");

@@ -350,6 +350,132 @@ async function main() {
   console.log(`   Clientes: ${clientDefs.length}`);
   console.log(`   Proveedores: ${supplierDefs.length}`);
   console.log(`   Obras: ${PROJECTS.length}`);
+
+  // Segunda empresa (aislamiento multi-tenant local)
+  const SECOND_ORG_SLUG = "otra-constructora";
+  const SECOND_PASSWORD = "admin123";
+
+  const orgB = await prisma.organization.upsert({
+    where: { slug: SECOND_ORG_SLUG },
+    create: {
+      name: "Otra Constructora",
+      slug: SECOND_ORG_SLUG,
+      taxId: "30-70000000-1",
+      legalName: "Otra Constructora S.A.",
+      email: "contacto@otra-constructora.local",
+      phone: "+54 11 5000-0000",
+      city: "Rosario",
+      province: "Santa Fe",
+      country: "AR",
+      themeId: "obra",
+      currency: "ARS",
+      enabledCurrencies: ["ARS", "USD"],
+    },
+    update: {
+      // No pisar el nombre comercial si ya se renombró en producción (p.ej. Buñas SAS)
+    },
+  });
+
+  const userB = await prisma.user.upsert({
+    where: { email: "admin@otra-constructora.local" },
+    create: {
+      authId: "local:admin@otra-constructora.local",
+      email: "admin@otra-constructora.local",
+      passwordHash: await hash(SECOND_PASSWORD, 10),
+      firstName: "Admin",
+      lastName: "Otra",
+      isActive: true,
+    },
+    update: {
+      passwordHash: await hash(SECOND_PASSWORD, 10),
+      firstName: "Admin",
+      lastName: "Otra",
+      isActive: true,
+    },
+  });
+
+  await prisma.organizationMember.upsert({
+    where: {
+      organizationId_userId: {
+        organizationId: orgB.id,
+        userId: userB.id,
+      },
+    },
+    create: {
+      organizationId: orgB.id,
+      userId: userB.id,
+      role: "ADMIN",
+      allowedModules: [],
+    },
+    update: { role: "ADMIN" },
+  });
+
+  // El admin demo también puede entrar a la segunda org (para probar el selector)
+  await prisma.organizationMember.upsert({
+    where: {
+      organizationId_userId: {
+        organizationId: orgB.id,
+        userId: user.id,
+      },
+    },
+    create: {
+      organizationId: orgB.id,
+      userId: user.id,
+      role: "ADMIN",
+      allowedModules: [],
+    },
+    update: { role: "ADMIN" },
+  });
+
+  const clientB =
+    (await prisma.client.findFirst({
+      where: { organizationId: orgB.id, name: "Cliente Exclusivo B" },
+    })) ??
+    (await prisma.client.create({
+      data: {
+        organizationId: orgB.id,
+        name: "Cliente Exclusivo B",
+        taxId: "20-11111111-1",
+        contactName: "Solo Org B",
+      },
+    }));
+
+  await prisma.project.upsert({
+    where: {
+      organizationId_code: {
+        organizationId: orgB.id,
+        code: "OB-B-001",
+      },
+    },
+    create: {
+      organizationId: orgB.id,
+      createdById: userB.id,
+      clientId: clientB.id,
+      code: "OB-B-001",
+      name: "Obra Solo Empresa B",
+      city: "Rosario",
+      status: "ACTIVE",
+      currency: "ARS",
+      members: {
+        create: {
+          userId: userB.id,
+          role: "ADMIN",
+        },
+      },
+    },
+    update: {
+      name: "Obra Solo Empresa B",
+      clientId: clientB.id,
+      deletedAt: null,
+    },
+  });
+
+  console.log("✅ Seed segunda empresa OK");
+  console.log(`   Org B: ${orgB.name} (${orgB.slug})`);
+  console.log(`   User B: ${userB.email} / ${SECOND_PASSWORD}`);
+  console.log(
+    `   ${user.email} también es ADMIN de Org B (selector al login)`,
+  );
 }
 
 main()
