@@ -171,32 +171,33 @@ async function ensureEmpresaDeTestOrg() {
   });
 
   if (!member) {
-    const donorWhere = {
-      role: { in: ["ADMIN", "DIRECTOR"] as const },
-      organization: { slug: { not: ORG_SLUG } },
-    };
-    const donor =
-      (await prisma.organizationMember.findFirst({
-        where: {
-          ...donorWhere,
-          organization: {
-            slug: { not: ORG_SLUG },
-            OR: [
-              { name: { contains: "Buñ", mode: "insensitive" } },
-              { name: { contains: "Bunas", mode: "insensitive" } },
-              { legalName: { contains: "Buñ", mode: "insensitive" } },
-              { legalName: { contains: "Bunas", mode: "insensitive" } },
-            ],
-          },
+    const donorInclude = { user: true, organization: true } as const;
+    let donor = await prisma.organizationMember.findFirst({
+      where: {
+        role: { in: ["ADMIN", "DIRECTOR"] },
+        organization: {
+          slug: { not: ORG_SLUG },
+          OR: [
+            { name: { contains: "Buñ", mode: "insensitive" } },
+            { name: { contains: "Bunas", mode: "insensitive" } },
+            { legalName: { contains: "Buñ", mode: "insensitive" } },
+            { legalName: { contains: "Bunas", mode: "insensitive" } },
+          ],
         },
-        include: { user: true, organization: true },
+      },
+      include: donorInclude,
+      orderBy: { createdAt: "asc" },
+    });
+    if (!donor) {
+      donor = await prisma.organizationMember.findFirst({
+        where: {
+          role: { in: ["ADMIN", "DIRECTOR"] },
+          organization: { slug: { not: ORG_SLUG } },
+        },
+        include: donorInclude,
         orderBy: { createdAt: "asc" },
-      })) ??
-      (await prisma.organizationMember.findFirst({
-        where: donorWhere,
-        include: { user: true, organization: true },
-        orderBy: { createdAt: "asc" },
-      }));
+      });
+    }
     if (!donor) {
       throw new Error(
         "No hay ningún Admin/Dirección en el sistema para asociar a Empresa de Test.",
