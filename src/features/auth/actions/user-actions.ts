@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import type { OrganizationRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth";
+import {
+  hasOrganization,
+  requireAuthSession,
+  type SessionContext,
+} from "@/lib/auth";
 import { hashPassword } from "@/features/auth/lib/password";
 import {
   APP_MODULE_KEYS,
@@ -11,6 +15,7 @@ import {
   type AppModuleKey,
 } from "@/features/auth/lib/modules";
 import { assertOrgCanAddMembers } from "@/features/billing/lib/seats";
+import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
 
 export type ActionResult =
   | { ok: true; id?: string }
@@ -33,12 +38,99 @@ function canManageUsers(role: string) {
   return role === "ADMIN" || role === "DIRECTOR";
 }
 
+type ManagerContext = {
+  session: SessionContext;
+  organizationId: string;
+  /** Rol efectivo para permisos de gestión (ADMIN si superadmin). */
+  managerRole: OrganizationRole;
+  superadmin: boolean;
+};
+
+async function resolveManagerContext(
+  targetOrganizationId?: string | null,
+): Promise<
+  | { ok: true; ctx: ManagerContext }
+  | { ok: false; error: string }
+> {
+  const session = await requireAuthSession();
+  const superadmin = isPlatformSuperadmin(session);
+
+  if (superadmin) {
+    const organizationId =
+      targetOrganizationId?.trim() || session.organizationId || "";
+    if (!organizationId) {
+      return {
+        ok: false,
+        error: "Seleccioná una empresa para gestionar usuarios.",
+      };
+    }
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { id: true },
+    });
+    if (!org) return { ok: false, error: "Empresa no encontrada." };
+    return {
+      ok: true,
+      ctx: {
+        session,
+        organizationId,
+        managerRole: "ADMIN",
+        superadmin: true,
+      },
+    };
+  }
+
+  if (!hasOrganization(session) || !canManageUsers(session.organizationRole)) {
+    return { ok: false, error: "Sin permiso para gestionar usuarios." };
+  }
+
+  const organizationId =
+    targetOrganizationId?.trim() || session.organizationId;
+  if (organizationId !== session.organizationId) {
+    const membership = await prisma.organizationMember.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId,
+          userId: session.user.id,
+        },
+      },
+      select: { role: true },
+    });
+    if (!membership || !canManageUsers(membership.role)) {
+      return {
+        ok: false,
+        error: "No podés gestionar usuarios de esa empresa.",
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    ctx: {
+      session,
+      organizationId,
+      managerRole: session.organizationRole,
+      superadmin: false,
+    },
+  };
+}
+
 /** Empresas donde el usuario actual puede gestionar miembros. */
 export async function listManageableOrganizationsForUsers(): Promise<
   ManageableOrganization[]
 > {
-  const session = await requireSession();
-  if (!canManageUsers(session.organizationRole)) return [];
+  const session = await requireAuthSession();
+  if (isPlatformSuperadmin(session)) {
+    const orgs = await prisma.organization.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, slug: true },
+    });
+    return orgs;
+  }
+
+  if (!hasOrganization(session) || !canManageUsers(session.organizationRole)) {
+    return [];
+  }
 
   const memberships = await prisma.organizationMember.findMany({
     where: {
@@ -59,7 +151,7 @@ export async function listManageableOrganizationsForUsers(): Promise<
 }
 
 async function assertManageableOrganizationIds(
-  userId: string,
+  session: SessionContext,
   organizationIds: string[],
 ): Promise<{ ok: true; ids: string[] } | { ok: false; error: string }> {
   const unique = [...new Set(organizationIds.filter(Boolean))];
@@ -67,9 +159,20 @@ async function assertManageableOrganizationIds(
     return { ok: false, error: "Seleccioná al menos una empresa." };
   }
 
+  if (isPlatformSuperadmin(session)) {
+    const found = await prisma.organization.findMany({
+      where: { id: { in: unique } },
+      select: { id: true },
+    });
+    if (found.length !== unique.length) {
+      return { ok: false, error: "Alguna empresa seleccionada no existe." };
+    }
+    return { ok: true, ids: unique };
+  }
+
   const allowed = await prisma.organizationMember.findMany({
     where: {
-      userId,
+      userId: session.user.id,
       role: { in: ["ADMIN", "DIRECTOR"] },
       organizationId: { in: unique },
     },
@@ -113,14 +216,14 @@ async function resolveTurneroPuestoId(
 }
 
 /** Puestos activos para el select de usuarios. */
-export async function listTurneroPuestosForUsers(): Promise<
-  TurneroPuestoOption[]
-> {
-  const session = await requireSession();
-  if (!canManageUsers(session.organizationRole)) return [];
+export async function listTurneroPuestosForUsers(
+  organizationId?: string | null,
+): Promise<TurneroPuestoOption[]> {
+  const resolved = await resolveManagerContext(organizationId);
+  if (!resolved.ok) return [];
 
   return prisma.turneroPuesto.findMany({
-    where: { organizationId: session.organizationId, activo: true },
+    where: { organizationId: resolved.ctx.organizationId, activo: true },
     select: { id: true, nombre: true, categoria: true, activo: true },
     orderBy: [{ categoria: "asc" }, { nombre: "asc" }],
   });
@@ -132,7 +235,8 @@ export async function getMyAssignedTurneroPuesto(): Promise<{
   nombre: string;
   categoria: string;
 } | null> {
-  const session = await requireSession();
+  const session = await requireAuthSession();
+  if (!hasOrganization(session)) return null;
   const membership = await prisma.organizationMember.findUnique({
     where: {
       organizationId_userId: {
@@ -155,14 +259,13 @@ export async function getMyAssignedTurneroPuesto(): Promise<{
   };
 }
 
-export async function listOrganizationUsers() {
-  const session = await requireSession();
-  if (!canManageUsers(session.organizationRole)) {
-    return [];
-  }
+export async function listOrganizationUsers(organizationId?: string | null) {
+  const resolved = await resolveManagerContext(organizationId);
+  if (!resolved.ok) return [];
+  const { ctx } = resolved;
 
   const members = await prisma.organizationMember.findMany({
-    where: { organizationId: session.organizationId },
+    where: { organizationId: ctx.organizationId },
     include: {
       user: {
         select: {
@@ -235,13 +338,16 @@ export async function createOrganizationUser(input: {
   turneroPuestoId?: string | null;
   /** Empresas a las que tendrá acceso (debe incluir al menos una gestionable). */
   organizationIds?: string[];
+  /** Empresa desde la que se edita (superadmin / multi-empresa). */
+  organizationId?: string | null;
 }): Promise<ActionResult> {
   try {
-    const session = await requireSession();
-    if (!canManageUsers(session.organizationRole)) {
-      return { ok: false, error: "Sin permiso para gestionar usuarios." };
-    }
-    if (input.role === "ADMIN" && session.organizationRole !== "ADMIN") {
+    const resolved = await resolveManagerContext(input.organizationId);
+    if (!resolved.ok) return resolved;
+    const { ctx } = resolved;
+    const { session, organizationId: primaryOrgId, managerRole } = ctx;
+
+    if (input.role === "ADMIN" && managerRole !== "ADMIN") {
       return { ok: false, error: "Solo un Admin puede crear otros Admin." };
     }
 
@@ -252,16 +358,14 @@ export async function createOrganizationUser(input: {
     }
 
     const orgCheck = await assertManageableOrganizationIds(
-      session.user.id,
-      input.organizationIds?.length
-        ? input.organizationIds
-        : [session.organizationId],
+      session,
+      input.organizationIds?.length ? input.organizationIds : [primaryOrgId],
     );
     if (!orgCheck.ok) return orgCheck;
     const orgIds = orgCheck.ids;
 
     const puestoResult = await resolveTurneroPuestoId(
-      session.organizationId,
+      primaryOrgId,
       input.turneroPuestoId,
     );
     if (!puestoResult.ok) return puestoResult;
@@ -353,10 +457,10 @@ export async function createOrganizationUser(input: {
           role: input.role,
           allowedModules: modules,
           turneroPuestoId:
-            organizationId === session.organizationId ? puestoResult.id : null,
+            organizationId === primaryOrgId ? puestoResult.id : null,
         },
       });
-      if (organizationId === session.organizationId) {
+      if (organizationId === primaryOrgId) {
         primaryMembershipId = membership.id;
       }
     }
@@ -382,17 +486,18 @@ export async function updateOrganizationUser(input: {
   password?: string;
   turneroPuestoId?: string | null;
   organizationIds?: string[];
+  organizationId?: string | null;
 }): Promise<ActionResult> {
   try {
-    const session = await requireSession();
-    if (!canManageUsers(session.organizationRole)) {
-      return { ok: false, error: "Sin permiso para gestionar usuarios." };
-    }
+    const resolved = await resolveManagerContext(input.organizationId);
+    if (!resolved.ok) return resolved;
+    const { ctx } = resolved;
+    const { session, organizationId: primaryOrgId, managerRole } = ctx;
 
     const membership = await prisma.organizationMember.findUnique({
       where: {
         organizationId_userId: {
-          organizationId: session.organizationId,
+          organizationId: primaryOrgId,
           userId: input.userId,
         },
       },
@@ -402,18 +507,18 @@ export async function updateOrganizationUser(input: {
       return { ok: false, error: "Usuario no encontrado en la organización." };
     }
 
-    if (input.role === "ADMIN" && session.organizationRole !== "ADMIN") {
+    if (input.role === "ADMIN" && managerRole !== "ADMIN") {
       return { ok: false, error: "Solo un Admin puede asignar rol Admin." };
     }
 
     if (
       membership.userId === session.user.id &&
       input.role !== "ADMIN" &&
-      session.organizationRole === "ADMIN"
+      managerRole === "ADMIN"
     ) {
       const otherAdmins = await prisma.organizationMember.count({
         where: {
-          organizationId: session.organizationId,
+          organizationId: primaryOrgId,
           role: "ADMIN",
           userId: { not: session.user.id },
         },
@@ -431,7 +536,7 @@ export async function updateOrganizationUser(input: {
     }
 
     const puestoResult = await resolveTurneroPuestoId(
-      session.organizationId,
+      primaryOrgId,
       input.turneroPuestoId,
     );
     if (!puestoResult.ok) return puestoResult;
@@ -447,14 +552,12 @@ export async function updateOrganizationUser(input: {
     let desiredOrgIds: string[] | null = null;
     if (input.organizationIds) {
       const orgCheck = await assertManageableOrganizationIds(
-        session.user.id,
+        session,
         input.organizationIds,
       );
       if (!orgCheck.ok) return orgCheck;
       desiredOrgIds = orgCheck.ids;
-      if (!desiredOrgIds.includes(session.organizationId)) {
-        // Evitar que al editar desde esta empresa se auto-expulsara sin querer
-        // si desmarcó la actual: exigir que quede al menos la actual o avisar.
+      if (!desiredOrgIds.includes(primaryOrgId)) {
         return {
           ok: false,
           error:
@@ -511,10 +614,10 @@ export async function updateOrganizationUser(input: {
         for (const mem of currentManaged) {
           if (!desired.has(mem.organizationId)) {
             if (
-              mem.organizationId === session.organizationId &&
+              mem.organizationId === primaryOrgId &&
               input.userId === session.user.id
             ) {
-              continue; // no auto-expulsarse de la sesión actual
+              continue;
             }
             await tx.organizationMember.delete({ where: { id: mem.id } });
           }
@@ -551,20 +654,23 @@ export async function updateOrganizationUser(input: {
 
 export async function removeOrganizationUser(
   userId: string,
+  organizationId?: string | null,
 ): Promise<ActionResult> {
   try {
-    const session = await requireSession();
-    if (session.organizationRole !== "ADMIN") {
+    const resolved = await resolveManagerContext(organizationId);
+    if (!resolved.ok) return resolved;
+    const { ctx } = resolved;
+    if (ctx.managerRole !== "ADMIN") {
       return { ok: false, error: "Solo un Admin puede quitar usuarios." };
     }
-    if (userId === session.user.id) {
+    if (userId === ctx.session.user.id) {
       return { ok: false, error: "No podés eliminarte a vos mismo." };
     }
 
     const membership = await prisma.organizationMember.findUnique({
       where: {
         organizationId_userId: {
-          organizationId: session.organizationId,
+          organizationId: ctx.organizationId,
           userId,
         },
       },

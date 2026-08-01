@@ -2,7 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getSession, requireAuthSession, requireSession } from "@/lib/auth";
+import {
+  getSession,
+  requireAuthSession,
+  hasOrganization,
+} from "@/lib/auth";
 import {
   setLocalSessionCookie,
   signLocalSession,
@@ -110,6 +114,27 @@ export async function switchOrganization(
   }
 }
 
+export async function clearActiveOrganization(): Promise<OrgActionResult> {
+  try {
+    const session = await requireAuthSession();
+    if (!isPlatformSuperadmin(session)) {
+      return { ok: false, error: "Solo el superadmin puede salir a modo plataforma." };
+    }
+    const token = await signLocalSession({
+      userId: session.user.id,
+      organizationId: null,
+    });
+    await setLocalSessionCookie(token);
+    revalidatePath("/", "layout");
+    revalidatePath("/admin");
+    revalidatePath("/select-organization");
+    return { ok: true };
+  } catch (error) {
+    console.error("clearActiveOrganization", error);
+    return { ok: false, error: "No se pudo volver al modo plataforma." };
+  }
+}
+
 export async function createOrganization(input: {
   name: string;
   slug?: string;
@@ -117,7 +142,12 @@ export async function createOrganization(input: {
   switchTo?: boolean;
 }): Promise<OrgActionResult> {
   try {
-    const session = await requireSession();
+    const session = await requireAuthSession();
+    const superadmin = isPlatformSuperadmin(session);
+    if (!superadmin && !hasOrganization(session)) {
+      return { ok: false, error: "Iniciá sesión con una empresa." };
+    }
+
     const name = input.name.trim();
     if (name.length < 2) {
       return { ok: false, error: "Indicá el nombre de la empresa." };
@@ -147,7 +177,6 @@ export async function createOrganization(input: {
         enabledCurrencies: ["ARS", "USD"],
         themeId: "obra",
         country: "AR",
-        // Empresas creadas desde el panel Admin quedan exentas de cobro SaaS
         billingStatus: "EXEMPT",
         members: {
           create: {

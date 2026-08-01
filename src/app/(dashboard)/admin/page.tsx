@@ -18,22 +18,42 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminPage() {
+type AdminPageProps = {
+  searchParams?: Promise<{ org?: string; tab?: string }>;
+};
+
+export default async function AdminPage({ searchParams }: AdminPageProps) {
   const session = await getSession();
   if (!session) redirect("/sign-in");
-  if (!session.organizationId) redirect("/onboarding/planes");
 
   const superadmin = isPlatformSuperadmin(session);
+  if (!superadmin && !session.organizationId) {
+    redirect("/onboarding/planes");
+  }
   if (!superadmin && session.organizationRole !== "ADMIN") {
     redirect("/");
   }
+
+  const params = (await searchParams) ?? {};
+  const organizations = await listManageableOrganizationsForUsers();
+
+  const requestedOrgId = params.org?.trim() || "";
+  const targetOrganizationId =
+    (requestedOrgId &&
+      organizations.some((o) => o.id === requestedOrgId) &&
+      requestedOrgId) ||
+    session.organizationId ||
+    organizations[0]?.id ||
+    "";
+
+  const targetOrgName =
+    organizations.find((o) => o.id === targetOrganizationId)?.name ?? null;
 
   const [
     overview,
     orgProfiles,
     users,
     puestos,
-    organizations,
     currentOrg,
     pendingPayments,
     mercadoPagoConfig,
@@ -41,17 +61,32 @@ export default async function AdminPage() {
   ] = await Promise.all([
     listAdminOrganizationsOverview(),
     listAdminOrganizationProfiles(),
-    listOrganizationUsers(),
-    listTurneroPuestosForUsers(),
-    listManageableOrganizationsForUsers(),
-    prisma.organization.findUnique({
-      where: { id: session.organizationId },
-      select: { name: true, billingStatus: true },
-    }),
+    targetOrganizationId
+      ? listOrganizationUsers(targetOrganizationId)
+      : Promise.resolve([]),
+    targetOrganizationId
+      ? listTurneroPuestosForUsers(targetOrganizationId)
+      : Promise.resolve([]),
+    session.organizationId
+      ? prisma.organization.findUnique({
+          where: { id: session.organizationId },
+          select: { name: true, billingStatus: true },
+        })
+      : Promise.resolve(null),
     listPendingBillingPayments(),
     superadmin ? getAdminMercadoPagoConfig() : Promise.resolve(null),
     superadmin ? listAllFeatureRequestsForAdmin() : Promise.resolve([]),
   ]);
+
+  const initialTab =
+    params.tab === "users" ||
+    params.tab === "companies" ||
+    params.tab === "connected" ||
+    params.tab === "payments" ||
+    params.tab === "mercadopago" ||
+    params.tab === "requests"
+      ? params.tab
+      : undefined;
 
   return (
     <div className="px-4 py-6 lg:px-6">
@@ -59,7 +94,7 @@ export default async function AdminPage() {
         <h1 className="font-display text-3xl tracking-tight">Administración</h1>
         <p className="mt-1 text-muted-foreground">
           {superadmin
-            ? `Superadmin (${session.user.email}): todas las empresas de la plataforma, sin importar la empresa activa.`
+            ? `Superadmin (${session.user.email}): elegí la empresa en Alta y permisos o Empresas para gestionar usuarios y perfiles sin cambiar de sesión.`
             : "Usuarios por empresa, presencia en línea, alta de cuentas, configuración y revisión de pagos SaaS."}
         </p>
       </div>
@@ -69,8 +104,12 @@ export default async function AdminPage() {
         users={users}
         puestos={puestos}
         organizations={organizations}
-        currentOrganizationId={session.organizationId}
-        currentOrganizationName={currentOrg?.name ?? "Empresa actual"}
+        currentOrganizationId={targetOrganizationId}
+        currentOrganizationName={
+          targetOrgName ??
+          currentOrg?.name ??
+          (superadmin ? "Sin empresa" : "Empresa actual")
+        }
         currentUserId={session.user.id}
         pendingPayments={pendingPayments}
         canReviewPayments={
@@ -79,6 +118,7 @@ export default async function AdminPage() {
         isPlatformSuperadmin={superadmin}
         mercadoPagoConfig={mercadoPagoConfig}
         featureRequests={featureRequests}
+        initialTab={initialTab}
       />
     </div>
   );

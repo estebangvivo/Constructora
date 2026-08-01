@@ -92,7 +92,10 @@ export function FeatureRequestDetail({
   const canReply = !closed && (request.isOwner || request.isStaffView);
   const staffOnly = request.isStaffView && !request.isOwner;
 
-  function run(action: () => Promise<{ ok: boolean; error?: string }>) {
+  function run(
+    action: () => Promise<{ ok: boolean; error?: string }>,
+    options?: { backToList?: boolean },
+  ) {
     setError(null);
     startTransition(async () => {
       const result = await action();
@@ -102,6 +105,15 @@ export function FeatureRequestDetail({
       }
       setStatusNote("");
       formRef.current?.reset();
+      if (options?.backToList) {
+        router.push(
+          request.isStaffView && !request.isOwner
+            ? "/admin?tab=requests"
+            : "/solicitudes",
+        );
+        router.refresh();
+        return;
+      }
       router.refresh();
     });
   }
@@ -462,12 +474,14 @@ export function FeatureRequestDetail({
               type="button"
               disabled={pending}
               onClick={() =>
-                run(() =>
-                  updateFeatureRequestStatus(
-                    request.id,
-                    nextStatus,
-                    statusNote || undefined,
-                  ),
+                run(
+                  () =>
+                    updateFeatureRequestStatus(
+                      request.id,
+                      nextStatus,
+                      statusNote || undefined,
+                    ),
+                  { backToList: true },
                 )
               }
               className="rounded-md border border-border bg-background px-4 py-2 text-sm disabled:opacity-60"

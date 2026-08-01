@@ -1,13 +1,19 @@
 import { prisma } from "@/lib/prisma";
 import { getPlatformSuperadminEmails } from "@/features/auth/lib/platform-admin";
 
-/** Notifica a todos los superadmins de plataforma (en su membresía primaria). */
+/**
+ * Notifica a todos los superadmins de plataforma.
+ * `contextOrganizationId` se usa como empresa de la notificación cuando el
+ * superadmin no tiene membresía (modo plataforma).
+ */
 export async function notifyPlatformSuperadmins(input: {
   type: string;
   title: string;
   body: string;
   href: string;
   excludeUserId?: string;
+  /** Empresa origen del evento (p. ej. la que creó la solicitud). */
+  contextOrganizationId?: string | null;
 }) {
   const emails = getPlatformSuperadminEmails();
   if (emails.length === 0) return;
@@ -28,22 +34,27 @@ export async function notifyPlatformSuperadmins(input: {
     },
   });
 
-  const rows = users
-    .map((u) => {
-      const orgId = u.memberships[0]?.organizationId;
-      if (!orgId) return null;
-      return {
-        organizationId: orgId,
-        userId: u.id,
-        type: input.type,
-        title: input.title,
-        body: input.body,
-        href: input.href,
-      };
-    })
-    .filter((r): r is NonNullable<typeof r> => Boolean(r));
+  if (users.length === 0) return;
 
-  if (rows.length === 0) return;
+  let fallbackOrgId = input.contextOrganizationId?.trim() || null;
+  if (!fallbackOrgId) {
+    const anyOrg = await prisma.organization.findFirst({
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+    fallbackOrgId = anyOrg?.id ?? null;
+  }
+  if (!fallbackOrgId) return;
+
+  const rows = users.map((u) => ({
+    organizationId: u.memberships[0]?.organizationId ?? fallbackOrgId!,
+    userId: u.id,
+    type: input.type,
+    title: input.title,
+    body: input.body,
+    href: input.href,
+  }));
+
   await prisma.appNotification.createMany({ data: rows });
 }
 

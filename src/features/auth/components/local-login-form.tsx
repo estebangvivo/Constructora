@@ -33,8 +33,7 @@ export function LocalLoginForm() {
           spellCheck={false}
           className={fieldClass}
           required
-          defaultValue="admin@demo-constructora.local"
-          placeholder="admin@demo-constructora.local"
+          placeholder="tu@email.com"
         />
       </label>
       <label className="block space-y-1.5">

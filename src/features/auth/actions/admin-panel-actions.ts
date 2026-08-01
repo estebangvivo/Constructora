@@ -4,7 +4,7 @@ import type { BillingPlan, BillingStatus, OrganizationRole } from "@prisma/clien
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth";
+import { requireAdminPanelSession, requireAuthSession } from "@/lib/auth";
 import { ROLE_DEFAULT_MODULES } from "@/features/auth/lib/modules";
 import {
   normalizeCurrency,
@@ -48,15 +48,7 @@ export type AdminOrganizationOverview = {
 };
 
 function requireAdminOrSuperadminSession() {
-  return requireSession().then((session) => {
-    if (
-      !isPlatformSuperadmin(session) &&
-      session.organizationRole !== "ADMIN"
-    ) {
-      throw new Error("FORBIDDEN");
-    }
-    return session;
-  });
+  return requireAdminPanelSession();
 }
 
 async function orgIdsForAdminActor(userId: string, email: string) {
@@ -80,7 +72,7 @@ async function orgIdsForAdminActor(userId: string, email: string) {
 export async function listAdminOrganizationsOverview(): Promise<
   AdminOrganizationOverview[]
 > {
-  const session = await requireSession();
+  const session = await requireAdminPanelSession();
   const superadmin = isPlatformSuperadmin(session);
   if (!superadmin && session.organizationRole !== "ADMIN") return [];
 
@@ -274,7 +266,7 @@ export async function updateOrganizationBillingBySuperadmin(input: {
   paidUntil: string | null;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
-    const session = await requireSession();
+    const session = await requireAuthSession();
     requirePlatformSuperadmin(session);
 
     if (!BILLING_STATUSES.includes(input.billingStatus as BillingStatus)) {

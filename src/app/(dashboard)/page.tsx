@@ -1,6 +1,8 @@
 import { ArrowRight } from "lucide-react";
+import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { isDevAuthBypass } from "@/lib/auth-config";
+import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
 import { SIDEBAR_NAV, filterNavByAccess } from "@/config/navigation";
 import { getOrganizationProfile } from "@/features/settings/queries/get-organization";
 import { organizationLogoSrc } from "@/features/settings/lib/organization-logo";
@@ -24,6 +26,14 @@ function parseDateParam(value?: string): Date | undefined {
 
 export default async function HomePage({ searchParams }: PageProps) {
   const session = await getSession();
+  if (
+    session &&
+    isPlatformSuperadmin(session) &&
+    !session.organizationId
+  ) {
+    redirect("/admin");
+  }
+
   const { from, to } = await searchParams;
   const modules = session?.allowedModules ?? [];
   const fromDate = parseDateParam(from);

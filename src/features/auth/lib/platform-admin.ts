@@ -1,10 +1,7 @@
 import type { SessionContext } from "@/lib/auth";
 
-/** Superadmins por defecto (seed). Ampliá con PLATFORM_SUPERADMIN_EMAILS. */
-const DEFAULT_SUPERADMIN_EMAILS = [
-  "admin@otra-constructora.local",
-  "admin@demo-constructora.local",
-];
+/** Superadmins por defecto. Ampliá con PLATFORM_SUPERADMIN_EMAILS. */
+const DEFAULT_SUPERADMIN_EMAILS = ["adminesteban@bunas.com.ar"];
 
 function parseEmails(raw: string | undefined): string[] {
   if (!raw?.trim()) return [];

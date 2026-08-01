@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { OrganizationTheme } from "@/features/settings/components/organization-theme";
@@ -15,6 +16,16 @@ import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
 
 export const dynamic = "force-dynamic";
 
+async function currentPathname(): Promise<string> {
+  const h = await headers();
+  return (
+    h.get("x-pathname") ||
+    h.get("next-url") ||
+    h.get("x-invoke-path") ||
+    ""
+  );
+}
+
 export default async function DashboardLayout({
   children,
 }: {
@@ -25,11 +36,50 @@ export default async function DashboardLayout({
     redirect("/sign-in");
   }
 
-  if (!session.organizationId) {
-    redirect("/onboarding/planes");
-  }
-
   const superadmin = isPlatformSuperadmin(session);
+
+  // Superadmin sin empresa: solo panel de plataforma.
+  if (!session.organizationId) {
+    if (!superadmin) {
+      redirect("/onboarding/planes");
+    }
+
+    const pathname = await currentPathname();
+    const allowedWithoutOrg =
+      pathname.startsWith("/admin") ||
+      pathname.startsWith("/solicitudes") ||
+      pathname === "/admin" ||
+      pathname === "" ||
+      pathname === "/";
+
+    if (
+      pathname &&
+      !allowedWithoutOrg
+    ) {
+      redirect("/admin");
+    }
+
+    return (
+      <>
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `html{${themeToCssText(DEFAULT_THEME_ID)}}`,
+          }}
+        />
+        <OrganizationTheme themeId={DEFAULT_THEME_ID} />
+        <SessionIdleGuard idleMinutes={30} />
+        <DashboardShell
+          role={session.role}
+          modules={session.allowedModules}
+          organizationName="Plataforma"
+          logoUrl={null}
+          userEmail={session.user.email}
+        >
+          {children}
+        </DashboardShell>
+      </>
+    );
+  }
 
   await markOrganizationPastDueIfNeeded(session.organizationId);
 
@@ -45,6 +95,7 @@ export default async function DashboardLayout({
   });
 
   if (!organization) {
+    if (superadmin) redirect("/admin");
     redirect("/onboarding/planes");
   }
 

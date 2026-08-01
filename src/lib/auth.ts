@@ -64,6 +64,16 @@ async function sessionFromMembership(
 }
 
 function sessionWithoutOrg(user: User): SessionContext {
+  // Superadmin sin empresa: panel de plataforma (admin), sin tenant activo.
+  if (isPlatformSuperadminEmail(user.email)) {
+    return {
+      user,
+      organizationId: null,
+      organizationRole: "ADMIN",
+      role: "ADMIN",
+      allowedModules: ["admin", "manual", "home"],
+    };
+  }
   return {
     user,
     organizationId: null,
@@ -278,11 +288,25 @@ export async function requireSession(): Promise<OrganizationSession> {
   return session;
 }
 
-/** Sesión autenticada (con o sin empresa). Para onboarding / billing. */
+/** Sesión autenticada (con o sin empresa). Para onboarding / billing / superadmin. */
 export async function requireAuthSession(): Promise<SessionContext> {
   const session = await getSession();
   if (!session) {
     throw new Error("UNAUTHORIZED");
+  }
+  return session;
+}
+
+/**
+ * Admin de org con empresa activa, o superadmin de plataforma (con o sin empresa).
+ */
+export async function requireAdminPanelSession(): Promise<SessionContext> {
+  const session = await requireAuthSession();
+  if (isPlatformSuperadminEmail(session.user.email)) {
+    return session;
+  }
+  if (!hasOrganization(session) || session.organizationRole !== "ADMIN") {
+    throw new Error("FORBIDDEN");
   }
   return session;
 }

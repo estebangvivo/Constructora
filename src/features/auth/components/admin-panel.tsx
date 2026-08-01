@@ -103,6 +103,7 @@ type AdminPanelProps = {
       createdByEmail: string;
     }
   >;
+  initialTab?: TabId;
 };
 
 export function AdminPanel({
@@ -112,19 +113,44 @@ export function AdminPanel({
   puestos,
   organizations,
   currentOrganizationId,
-  currentOrganizationName,
+  currentOrganizationName: _currentOrganizationName,
   currentUserId,
   pendingPayments,
   canReviewPayments,
   isPlatformSuperadmin = false,
   mercadoPagoConfig = null,
   featureRequests = [],
+  initialTab,
 }: AdminPanelProps) {
   const router = useRouter();
-  const [tab, setTab] = useState<TabId>("connected");
-  const [selectedOrgId, setSelectedOrgId] = useState(
-    () => orgProfiles[0]?.id ?? currentOrganizationId,
+  const [tab, setTab] = useState<TabId>(
+    () =>
+      initialTab ??
+      (isPlatformSuperadmin ? "users" : "connected"),
   );
+  const [selectedOrgId, setSelectedOrgId] = useState(
+    () =>
+      currentOrganizationId ||
+      orgProfiles[0]?.id ||
+      organizations[0]?.id ||
+      "",
+  );
+
+  function selectUsersOrganization(orgId: string) {
+    const params = new URLSearchParams();
+    if (orgId) params.set("org", orgId);
+    params.set("tab", "users");
+    router.push(`/admin?${params.toString()}`);
+    setTab("users");
+  }
+
+  function selectCompaniesOrganization(orgId: string) {
+    setSelectedOrgId(orgId);
+    const params = new URLSearchParams();
+    if (orgId) params.set("org", orgId);
+    params.set("tab", "companies");
+    router.replace(`/admin?${params.toString()}`, { scroll: false });
+  }
   const [showCreateOrg, setShowCreateOrg] = useState(false);
   const [pending, startTransition] = useTransition();
   const [createError, setCreateError] = useState<string | null>(null);
@@ -150,7 +176,10 @@ export function AdminPanel({
       ? [
           {
             id: "requests" as const,
-            label: "Mejoras",
+            label:
+              featureRequests.length > 0
+                ? `Mejoras (${featureRequests.length})`
+                : "Mejoras",
             icon: Lightbulb,
           },
           {
@@ -192,7 +221,17 @@ export function AdminPanel({
             <button
               key={t.id}
               type="button"
-              onClick={() => setTab(t.id)}
+              onClick={() => {
+                setTab(t.id);
+                const params = new URLSearchParams();
+                if (currentOrganizationId) {
+                  params.set("org", currentOrganizationId);
+                }
+                params.set("tab", t.id);
+                router.replace(`/admin?${params.toString()}`, {
+                  scroll: false,
+                });
+              }}
               className={cn(
                 "inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                 active
@@ -321,21 +360,42 @@ export function AdminPanel({
 
       {tab === "users" && (
         <section className="space-y-4">
-          <p className="rounded-md border border-border bg-surface/40 px-3 py-2 text-sm text-muted-foreground">
-            Alta y edición de usuarios de la empresa activa:{" "}
-            <span className="font-medium text-foreground">
-              {currentOrganizationName}
-            </span>
-            . Para trabajar sobre otra, cambiá de empresa y volvé a este panel.
-          </p>
-          <UsersAdminPanel
-            users={users}
-            puestos={puestos}
-            organizations={organizations}
-            currentOrganizationId={currentOrganizationId}
-            currentUserId={currentUserId}
-            canAssignAdmin
-          />
+          <label className="block max-w-md text-sm">
+            <span className="mb-1 block text-muted-foreground">Empresa</span>
+            <select
+              className={fieldClass}
+              value={currentOrganizationId}
+              disabled={organizations.length === 0}
+              onChange={(e) => selectUsersOrganization(e.target.value)}
+            >
+              {organizations.length === 0 ? (
+                <option value="">No hay empresas</option>
+              ) : (
+                organizations.map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {org.name}
+                    {isPlatformSuperadmin ? ` (${org.slug})` : ""}
+                  </option>
+                ))
+              )}
+            </select>
+          </label>
+
+          {!currentOrganizationId ? (
+            <p className="rounded-md border border-border bg-surface/40 px-3 py-2 text-sm text-muted-foreground">
+              No hay empresas para gestionar usuarios.
+            </p>
+          ) : (
+            <UsersAdminPanel
+              key={currentOrganizationId}
+              users={users}
+              puestos={puestos}
+              organizations={organizations}
+              currentOrganizationId={currentOrganizationId}
+              currentUserId={currentUserId}
+              canAssignAdmin
+            />
+          )}
         </section>
       )}
 
@@ -417,28 +477,23 @@ export function AdminPanel({
             </p>
           ) : (
             <>
-              <div className="flex flex-wrap gap-2">
-                {orgProfiles.map((org) => (
-                  <button
-                    key={org.id}
-                    type="button"
-                    onClick={() => setSelectedOrgId(org.id)}
-                    className={cn(
-                      "rounded-md border px-3 py-1.5 text-sm",
-                      selectedOrgId === org.id
-                        ? "border-accent bg-accent/10 text-foreground"
-                        : "border-border text-muted-foreground hover:bg-surface",
-                    )}
-                  >
-                    {org.name}
-                    {isPlatformSuperadmin ? (
-                      <span className="ml-1 text-xs opacity-70">
-                        ({org.slug})
-                      </span>
-                    ) : null}
-                  </button>
-                ))}
-              </div>
+              <label className="block max-w-md text-sm">
+                <span className="mb-1 block text-muted-foreground">
+                  Empresa a editar
+                </span>
+                <select
+                  className={fieldClass}
+                  value={selectedOrgId}
+                  onChange={(e) => selectCompaniesOrganization(e.target.value)}
+                >
+                  {orgProfiles.map((org) => (
+                    <option key={org.id} value={org.id}>
+                      {org.name}
+                      {isPlatformSuperadmin ? ` (${org.slug})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
               {selectedProfile && (
                 <OrganizationSettingsForm

@@ -1,14 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOrganizationSession } from "@/lib/auth";
+import { getSession, hasOrganization } from "@/lib/auth";
+import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
 const noStore = { "Cache-Control": "no-store, max-age=0" };
 
+async function resolveNotificationScope() {
+  const session = await getSession();
+  if (!session) return null;
+
+  const superadmin = isPlatformSuperadmin(session);
+  if (!superadmin && !hasOrganization(session)) return null;
+
+  return {
+    userId: session.user.id,
+    /**
+     * Superadmin: todas las notificaciones del usuario (plataforma / cualquier org).
+     * Resto: solo las de la empresa activa.
+     */
+    organizationId: superadmin ? null : session.organizationId,
+    superadmin,
+  };
+}
+
 export async function GET(request: NextRequest) {
-  const session = await getOrganizationSession();
-  if (!session) {
+  const scope = await resolveNotificationScope();
+  if (!scope) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
@@ -19,8 +38,10 @@ export async function GET(request: NextRequest) {
     : 20;
 
   const where = {
-    organizationId: session.organizationId,
-    userId: session.user.id,
+    userId: scope.userId,
+    ...(scope.organizationId
+      ? { organizationId: scope.organizationId }
+      : {}),
     ...(unreadOnly ? { readAt: null } : {}),
   };
 
@@ -41,8 +62,10 @@ export async function GET(request: NextRequest) {
     }),
     prisma.appNotification.count({
       where: {
-        organizationId: session.organizationId,
-        userId: session.user.id,
+        userId: scope.userId,
+        ...(scope.organizationId
+          ? { organizationId: scope.organizationId }
+          : {}),
         readAt: null,
       },
     }),
@@ -63,8 +86,8 @@ export async function GET(request: NextRequest) {
 
 /** Marca como leídas: body `{ ids?: string[], all?: true }`. */
 export async function PATCH(request: NextRequest) {
-  const session = await getOrganizationSession();
-  if (!session) {
+  const scope = await resolveNotificationScope();
+  if (!scope) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
@@ -75,12 +98,17 @@ export async function PATCH(request: NextRequest) {
     };
 
     const now = new Date();
+    const scopeWhere = {
+      userId: scope.userId,
+      ...(scope.organizationId
+        ? { organizationId: scope.organizationId }
+        : {}),
+    };
 
     if (body.all === true) {
       await prisma.appNotification.updateMany({
         where: {
-          organizationId: session.organizationId,
-          userId: session.user.id,
+          ...scopeWhere,
           readAt: null,
         },
         data: { readAt: now },
@@ -102,8 +130,7 @@ export async function PATCH(request: NextRequest) {
     await prisma.appNotification.updateMany({
       where: {
         id: { in: ids },
-        organizationId: session.organizationId,
-        userId: session.user.id,
+        ...scopeWhere,
         readAt: null,
       },
       data: { readAt: now },

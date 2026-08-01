@@ -3,10 +3,7 @@ import { LogOut } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { logoutLocal } from "@/features/auth/actions/auth-actions";
 import { prisma } from "@/lib/prisma";
-import {
-  setLocalSessionCookie,
-  signLocalSession,
-} from "@/features/auth/lib/session";
+import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -18,19 +15,21 @@ export default async function OnboardingLayout({
   const session = await getSession();
   if (!session) redirect("/sign-in");
 
-  // Si ya tiene membresía pero la cookie quedó sin org (post-pago), enlazar
+  // Superadmin sin empresa: panel de plataforma, no onboarding de planes.
+  if (isPlatformSuperadmin(session) && !session.organizationId) {
+    redirect("/admin");
+  }
+
+  // Si ya tiene membresía pero la cookie quedó sin org, restaurar vía route handler
+  // (los layouts no pueden modificar cookies).
   if (!session.organizationId) {
     const membership = await prisma.organizationMember.findFirst({
       where: { userId: session.user.id },
       orderBy: { createdAt: "desc" },
+      select: { id: true },
     });
     if (membership) {
-      const token = await signLocalSession({
-        userId: session.user.id,
-        organizationId: membership.organizationId,
-      });
-      await setLocalSessionCookie(token);
-      redirect("/");
+      redirect("/api/auth/restore-org");
     }
   }
 

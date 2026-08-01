@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireSession } from "@/lib/auth";
+import { requireAuthSession } from "@/lib/auth";
 import { requirePlatformSuperadmin } from "@/features/auth/lib/platform-admin";
 import {
   getMercadoPagoConfigPublic,
@@ -11,7 +11,7 @@ import {
 
 export async function getAdminMercadoPagoConfig(): Promise<MercadoPagoConfigPublic | null> {
   try {
-    const session = await requireSession();
+    const session = await requireAuthSession();
     requirePlatformSuperadmin(session);
     return getMercadoPagoConfigPublic();
   } catch {
@@ -26,7 +26,7 @@ export async function saveAdminMercadoPagoConfig(input: {
   clearPublicKey?: boolean;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
-    const session = await requireSession();
+    const session = await requireAuthSession();
     requirePlatformSuperadmin(session);
 
     const token = input.accessToken?.trim() ?? "";

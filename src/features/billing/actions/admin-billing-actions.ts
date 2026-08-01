@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth";
+import { requireAuthSession } from "@/lib/auth";
 import { activateBillingPayment } from "@/features/billing/lib/activate";
 import {
   setLocalSessionCookie,
@@ -26,7 +26,7 @@ async function assertPlatformBillingAdmin(userId: string, email: string) {
 }
 
 export async function listPendingBillingPayments() {
-  const session = await requireSession();
+  const session = await requireAuthSession();
   try {
     await assertPlatformBillingAdmin(session.user.id, session.user.email);
   } catch {
@@ -70,7 +70,7 @@ export async function approveBillingPayment(
   paymentId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
-    const session = await requireSession();
+    const session = await requireAuthSession();
     await assertPlatformBillingAdmin(session.user.id, session.user.email);
 
     const updated = await activateBillingPayment(paymentId, {
@@ -107,7 +107,7 @@ export async function rejectBillingPayment(
   reason?: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
-    const session = await requireSession();
+    const session = await requireAuthSession();
     await assertPlatformBillingAdmin(session.user.id, session.user.email);
 
     const payment = await prisma.billingPayment.findUnique({

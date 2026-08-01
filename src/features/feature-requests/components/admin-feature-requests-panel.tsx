@@ -38,7 +38,7 @@ export function AdminFeatureRequestsPanel({
 }: {
   requests: AdminItem[];
 }) {
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]["id"]>("open");
+  const [filter, setFilter] = useState<(typeof FILTERS)[number]["id"]>("all");
   const filtered = requests.filter((r) => matchesFilter(r.status, filter));
 
   return (
@@ -50,6 +50,9 @@ export function AdminFeatureRequestsPanel({
         <p className="mt-1 text-sm text-muted-foreground">
           Revisá pedidos de usuarios, cotizá, consultá o aprobá la
           implementación. Abrí cada solicitud para el detalle y el hilo.
+          {requests.length > 0
+            ? ` · ${requests.length} en total`
+            : ""}
         </p>
       </div>
 
@@ -71,9 +74,13 @@ export function AdminFeatureRequestsPanel({
         ))}
       </div>
 
-      {filtered.length === 0 ? (
+      {requests.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No hay solicitudes en este filtro.
+          Todavía no hay solicitudes de mejora en la plataforma.
+        </p>
+      ) : filtered.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No hay solicitudes en este filtro. Probá “Todas”.
         </p>
       ) : (
         <ul className="divide-y divide-border rounded-lg border border-border">

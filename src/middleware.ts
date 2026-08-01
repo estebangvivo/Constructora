@@ -38,7 +38,11 @@ export default async function middleware(
   if (token) {
     const local = await verifyLocalSession(token);
     if (local) {
-      return NextResponse.next();
+      const requestHeaders = new Headers(request.headers);
+      requestHeaders.set("x-pathname", request.nextUrl.pathname);
+      return NextResponse.next({
+        request: { headers: requestHeaders },
+      });
     }
   }
 

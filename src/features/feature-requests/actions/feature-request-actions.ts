@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { FeatureRequestStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth";
+import { requireAuthSession, requireSession } from "@/lib/auth";
 import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
 import {
   notifyFeatureRequestUser,
@@ -69,8 +69,10 @@ export async function listMyFeatureRequests() {
 }
 
 export async function getFeatureRequestDetail(requestId: string) {
-  const session = await requireSession();
+  const session = await requireAuthSession();
   const superadmin = isPlatformSuperadmin(session);
+
+  if (!superadmin && !session.organizationId) return null;
 
   const row = await prisma.featureRequest.findFirst({
     where: {
@@ -78,7 +80,7 @@ export async function getFeatureRequestDetail(requestId: string) {
       ...(superadmin
         ? {}
         : {
-            organizationId: session.organizationId,
+            organizationId: session.organizationId!,
             createdById: session.user.id,
           }),
     },
@@ -224,8 +226,9 @@ export async function createFeatureRequest(
       type: "FEATURE_REQUEST_NEW",
       title: "Nueva solicitud de mejora",
       body: `${requester} (${request.organization.name}): ${title}`,
-      href: "/admin",
+      href: "/admin?tab=requests",
       excludeUserId: session.user.id,
+      contextOrganizationId: request.organizationId,
     });
 
     revalidateFeaturePaths(request.id);
@@ -306,8 +309,9 @@ export async function addFeatureRequestUserMessage(
       type: "FEATURE_REQUEST_REPLY",
       title: "Respuesta en solicitud de mejora",
       body: `${request.organization.name}: ${request.title}`,
-      href: "/admin",
+      href: "/admin?tab=requests",
       excludeUserId: session.user.id,
+      contextOrganizationId: request.organizationId,
     });
 
     revalidateFeaturePaths(requestId);
@@ -362,8 +366,9 @@ export async function acceptFeatureRequestQuote(
       type: "FEATURE_REQUEST_ACCEPTED",
       title: "Cotización aceptada",
       body: request.title,
-      href: "/admin",
+      href: "/admin?tab=requests",
       excludeUserId: session.user.id,
+      contextOrganizationId: request.organizationId,
     });
 
     revalidateFeaturePaths(requestId);
@@ -418,8 +423,9 @@ export async function rejectFeatureRequestQuote(
       type: "FEATURE_REQUEST_REJECTED_QUOTE",
       title: "Cotización rechazada",
       body: request.title,
-      href: "/admin",
+      href: "/admin?tab=requests",
       excludeUserId: session.user.id,
+      contextOrganizationId: request.organizationId,
     });
 
     revalidateFeaturePaths(requestId);
@@ -431,45 +437,51 @@ export async function rejectFeatureRequestQuote(
 }
 
 export async function listAllFeatureRequestsForAdmin() {
-  const session = await requireSession();
+  const session = await requireAuthSession();
   if (!isPlatformSuperadmin(session)) return [];
 
-  const rows = await prisma.featureRequest.findMany({
-    orderBy: { updatedAt: "desc" },
-    take: 200,
-    include: {
-      organization: { select: { id: true, name: true } },
-      createdBy: {
-        select: { email: true, firstName: true, lastName: true },
+  try {
+    const rows = await prisma.featureRequest.findMany({
+      orderBy: { updatedAt: "desc" },
+      take: 200,
+      include: {
+        organization: { select: { id: true, name: true } },
+        createdBy: {
+          select: { email: true, firstName: true, lastName: true },
+        },
+        _count: { select: { messages: true } },
       },
-      _count: { select: { messages: true } },
-    },
-  });
+    });
 
-  return rows.map((r) => ({
-    id: r.id,
-    title: r.title,
-    status: r.status,
-    quoteAmount: r.quoteAmount ? Number(r.quoteAmount) : null,
-    quoteCurrency: r.quoteCurrency,
-    attachmentCount: r.attachmentUrls.length,
-    messageCount: r._count.messages,
-    createdAt: r.createdAt.toISOString(),
-    updatedAt: r.updatedAt.toISOString(),
-    organizationId: r.organization.id,
-    organizationName: r.organization.name,
-    createdByEmail: r.createdBy.email,
-    createdByName:
-      [r.createdBy.firstName, r.createdBy.lastName].filter(Boolean).join(" ") ||
-      r.createdBy.email,
-  }));
+    return rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      status: r.status,
+      quoteAmount: r.quoteAmount ? Number(r.quoteAmount) : null,
+      quoteCurrency: r.quoteCurrency,
+      attachmentCount: r.attachmentUrls?.length ?? 0,
+      messageCount: r._count.messages,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+      organizationId: r.organization.id,
+      organizationName: r.organization.name,
+      createdByEmail: r.createdBy.email,
+      createdByName:
+        [r.createdBy.firstName, r.createdBy.lastName]
+          .filter(Boolean)
+          .join(" ") || r.createdBy.email,
+    }));
+  } catch (error) {
+    console.error("listAllFeatureRequestsForAdmin", error);
+    return [];
+  }
 }
 
 export async function addFeatureRequestStaffMessage(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
-    const session = await requireSession();
+    const session = await requireAuthSession();
     if (!isPlatformSuperadmin(session)) {
       return { ok: false, error: "Sin permiso de superadmin." };
     }
@@ -557,7 +569,7 @@ export async function quoteFeatureRequest(
   },
 ): Promise<ActionResult> {
   try {
-    const session = await requireSession();
+    const session = await requireAuthSession();
     if (!isPlatformSuperadmin(session)) {
       return { ok: false, error: "Sin permiso de superadmin." };
     }
@@ -621,7 +633,7 @@ export async function updateFeatureRequestStatus(
   note?: string,
 ): Promise<ActionResult> {
   try {
-    const session = await requireSession();
+    const session = await requireAuthSession();
     if (!isPlatformSuperadmin(session)) {
       return { ok: false, error: "Sin permiso de superadmin." };
     }

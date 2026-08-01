@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  clearActiveOrganization,
   createOrganization,
   switchOrganization,
   type MyOrganization,
@@ -15,11 +16,15 @@ const fieldClass =
 type SelectOrganizationPanelProps = {
   organizations: MyOrganization[];
   requireChoice?: boolean;
+  isPlatformSuperadmin?: boolean;
+  hasActiveOrganization?: boolean;
 };
 
 export function SelectOrganizationPanel({
   organizations,
   requireChoice = false,
+  isPlatformSuperadmin = false,
+  hasActiveOrganization = false,
 }: SelectOrganizationPanelProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -29,7 +34,10 @@ export function SelectOrganizationPanel({
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
 
-  function run(action: () => Promise<{ ok: boolean; error?: string }>) {
+  function run(
+    action: () => Promise<{ ok: boolean; error?: string }>,
+    nextPath = "/",
+  ) {
     startTransition(async () => {
       setError(null);
       const result = await action();
@@ -37,7 +45,7 @@ export function SelectOrganizationPanel({
         setError(result.error ?? "Error");
         return;
       }
-      router.push("/");
+      router.push(nextPath);
       router.refresh();
     });
   }
@@ -49,11 +57,26 @@ export function SelectOrganizationPanel({
           {requireChoice ? "Elegí una empresa" : "Empresas"}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {requireChoice
-            ? "Tu usuario pertenece a más de una empresa. Seleccioná con cuál trabajar."
-            : "Cambiá de empresa o creá una nueva. Los datos de cada una están aislados."}
+          {isPlatformSuperadmin
+            ? "Elegí una empresa para operar su ERP, o volvé al panel de plataforma sin tenant activo."
+            : requireChoice
+              ? "Tu usuario pertenece a más de una empresa. Seleccioná con cuál trabajar."
+              : "Cambiá de empresa o creá una nueva. Los datos de cada una quedan aislados."}
         </p>
       </div>
+
+      {isPlatformSuperadmin && hasActiveOrganization && (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() =>
+            run(() => clearActiveOrganization(), "/admin")
+          }
+          className="w-full rounded-md border border-border bg-background px-4 py-3 text-sm font-medium hover:border-accent/40 disabled:opacity-50"
+        >
+          Volver a plataforma (sin empresa)
+        </button>
+      )}
 
       {organizations.length > 0 && (
         <ul className="space-y-2">
@@ -62,7 +85,7 @@ export function SelectOrganizationPanel({
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => run(() => switchOrganization(org.id))}
+                onClick={() => run(() => switchOrganization(org.id), "/")}
                 className="flex w-full items-center justify-between gap-3 rounded-md border border-border bg-background px-4 py-3 text-left transition-colors hover:border-accent/40 disabled:opacity-50"
               >
                 <span className="min-w-0">

@@ -155,6 +155,7 @@ export function UsersAdminPanel({
                 allowedModules: data.allowedModules,
                 turneroPuestoId: data.turneroPuestoId,
                 organizationIds: data.organizationIds,
+                organizationId: currentOrganizationId,
               }),
             )
           }
@@ -218,7 +219,12 @@ export function UsersAdminPanel({
                         ) {
                           return;
                         }
-                        run(() => removeOrganizationUser(u.userId));
+                        run(() =>
+                          removeOrganizationUser(
+                            u.userId,
+                            currentOrganizationId,
+                          ),
+                        );
                       }}
                       className="rounded-md px-3 py-1.5 text-sm text-danger hover:bg-danger/10"
                     >
@@ -265,6 +271,7 @@ export function UsersAdminPanel({
                           password: data.password || undefined,
                           turneroPuestoId: data.turneroPuestoId,
                           organizationIds: data.organizationIds,
+                          organizationId: currentOrganizationId,
                         }),
                       )
                     }

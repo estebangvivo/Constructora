@@ -17,9 +17,11 @@ export default async function SolicitudDetailPage({ params }: PageProps) {
   const { id } = await params;
   const session = await getSession();
   if (!session) redirect("/sign-in");
-  if (!hasOrganization(session)) redirect("/onboarding/planes");
-
   const superadmin = isPlatformSuperadmin(session);
+  if (!hasOrganization(session) && !superadmin) {
+    redirect("/onboarding/planes");
+  }
+
   if (
     !superadmin &&
     !hasModule(session.allowedModules, "featureRequests")
@@ -34,7 +36,11 @@ export default async function SolicitudDetailPage({ params }: PageProps) {
     <div className="px-4 py-6 lg:px-6">
       <div className="mx-auto mb-4 max-w-3xl">
         <Link
-          href={superadmin && !request.isOwner ? "/admin" : "/solicitudes"}
+          href={
+            superadmin && !request.isOwner
+              ? "/admin?tab=requests"
+              : "/solicitudes"
+          }
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-4" />

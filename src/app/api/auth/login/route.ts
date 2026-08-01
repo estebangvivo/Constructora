@@ -6,6 +6,7 @@ import {
   signLocalSession,
 } from "@/features/auth/lib/session-crypto";
 import { publicUrl } from "@/lib/request-origin";
+import { isPlatformSuperadminEmail } from "@/features/auth/lib/platform-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -49,15 +50,20 @@ async function authenticate(emailRaw: string, password: string) {
     return { ok: false as const, error: "Credenciales inválidas." };
   }
 
+  const isSuperadmin = isPlatformSuperadminEmail(user.email);
+
   const memberships = await prisma.organizationMember.findMany({
     where: { userId: user.id },
     orderBy: { createdAt: "asc" },
     select: { organizationId: true },
   });
 
+  // Superadmin entra sin empresa activa; elige una después si quiere operar un tenant.
   const token = await signLocalSession({
     userId: user.id,
-    organizationId: memberships[0]?.organizationId ?? null,
+    organizationId: isSuperadmin
+      ? null
+      : (memberships[0]?.organizationId ?? null),
   });
 
   try {
@@ -73,8 +79,9 @@ async function authenticate(emailRaw: string, password: string) {
   return {
     ok: true as const,
     token,
-    needsOrgPicker: memberships.length > 1,
-    needsOnboarding: memberships.length === 0,
+    isPlatformSuperadmin: isSuperadmin,
+    needsOrgPicker: !isSuperadmin && memberships.length > 1,
+    needsOnboarding: !isSuperadmin && memberships.length === 0,
   };
 }
 
@@ -97,7 +104,6 @@ export async function POST(request: Request) {
       const form = await request.formData();
       email = String(form.get("email") ?? "");
       password = String(form.get("password") ?? "");
-      // form HTML clásico → redirect
       wantsJson = form.get("ajax") === "1";
     }
 
@@ -115,31 +121,28 @@ export async function POST(request: Request) {
       return NextResponse.redirect(url, 303);
     }
 
+    const dest = result.isPlatformSuperadmin
+      ? "/admin"
+      : result.needsOnboarding
+        ? "/onboarding/planes"
+        : result.needsOrgPicker
+          ? "/select-organization?required=1"
+          : "/";
+
     if (wantsJson) {
       const res = NextResponse.json({
         ok: true,
         needsOrgPicker: result.needsOrgPicker,
         needsOnboarding: result.needsOnboarding,
+        isPlatformSuperadmin: result.isPlatformSuperadmin,
+        redirectTo: dest,
       });
-      res.cookies.set(
-        SESSION_COOKIE,
-        result.token,
-        sessionCookieOptions(),
-      );
+      res.cookies.set(SESSION_COOKIE, result.token, sessionCookieOptions());
       return res;
     }
 
-    const dest = result.needsOnboarding
-      ? "/onboarding/planes"
-      : result.needsOrgPicker
-        ? "/select-organization?required=1"
-        : "/";
     const res = NextResponse.redirect(publicUrl(request, dest), 303);
-    res.cookies.set(
-      SESSION_COOKIE,
-      result.token,
-      sessionCookieOptions(),
-    );
+    res.cookies.set(SESSION_COOKIE, result.token, sessionCookieOptions());
     return res;
   } catch (error) {
     console.error("POST /api/auth/login", error);
