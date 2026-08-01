@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { getOrganizationSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TurneroBrandProvider } from "@/features/turnero/components/turnero-brand";
 import { TurneroBackToApp } from "@/features/turnero/components/turnero-back-to-app";
@@ -15,7 +15,7 @@ export default async function TurneroLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await getSession().catch(() => null);
+  const session = await getOrganizationSession().catch(() => null);
   if (!session) {
     redirect("/sign-in?next=/turnero");
   }

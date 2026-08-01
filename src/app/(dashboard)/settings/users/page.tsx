@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { getOrganizationSession } from "@/lib/auth";
 import { listOrganizationUsers, listTurneroPuestosForUsers, listManageableOrganizationsForUsers } from "@/features/auth/actions/user-actions";
 import { UsersAdminPanel } from "@/features/auth/components/users-admin-panel";
 import { hasModule } from "@/features/auth/lib/modules";
@@ -9,8 +9,8 @@ import { organizationIsOnTrial } from "@/features/billing/lib/seats";
 export const dynamic = "force-dynamic";
 
 export default async function SettingsUsersPage() {
-  const session = await getSession();
-  if (!session) redirect("/sign-in");
+  const session = await getOrganizationSession();
+  if (!session) redirect("/onboarding/planes");
 
   const canManage =
     hasModule(session.allowedModules, "users") ||

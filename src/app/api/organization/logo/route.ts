@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getOrganizationSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
  * Evita depender de /uploads en el filesystem efímero de Railway.
  */
 export async function GET() {
-  const session = await getSession().catch(() => null);
+  const session = await getOrganizationSession().catch(() => null);
   if (!session) {
     return new NextResponse("Unauthorized", { status: 401 });
   }

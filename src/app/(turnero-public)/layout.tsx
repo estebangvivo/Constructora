@@ -18,7 +18,7 @@ export default async function TurneroPantallaLayout({
   const session = await getSession().catch(() => null);
 
   let org: { name: string; logoUrl: string | null } | null = null;
-  if (session) {
+  if (session?.organizationId) {
     org = await prisma.organization.findUnique({
       where: { id: session.organizationId },
       select: { name: true, logoUrl: true },

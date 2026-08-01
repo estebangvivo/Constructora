@@ -5,7 +5,7 @@ import { ProjectNav } from "@/components/layout/project-nav";
 import { getProjectById } from "@/features/projects/queries/get-projects";
 import { PROJECT_STATUS_LABEL } from "@/features/projects/lib/status";
 import { ProjectLifecycleButton } from "@/features/projects/components/project-lifecycle-button";
-import { getProjectRole, getSession } from "@/lib/auth";
+import { getProjectRole, getOrganizationSession } from "@/lib/auth";
 import type { AppRole } from "@/types";
 
 type ProjectLayoutProps = {
@@ -17,9 +17,9 @@ export default async function ProjectLayout({
   children,
   params,
 }: ProjectLayoutProps) {
-  const session = await getSession();
+  const session = await getOrganizationSession();
   if (!session) {
-    redirect("/sign-in");
+    redirect("/onboarding/planes");
   }
 
   const { id } = await params;

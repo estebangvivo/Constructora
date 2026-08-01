@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { getOrganizationSession } from "@/lib/auth";
 import { getProjectById } from "@/features/projects/queries/get-projects";
 import {
   getCertificationById,
@@ -20,8 +20,8 @@ type PageProps = {
 };
 
 export default async function CertificationDetailPage({ params }: PageProps) {
-  const session = await getSession();
-  if (!session) redirect("/sign-in");
+  const session = await getOrganizationSession();
+  if (!session) redirect("/onboarding/planes");
 
   const { id: projectId, certId } = await params;
   const project = await getProjectById(projectId);

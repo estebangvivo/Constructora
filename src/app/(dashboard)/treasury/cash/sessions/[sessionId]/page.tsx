@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { getOrganizationSession } from "@/lib/auth";
 import { getCashSessionById } from "@/features/treasury/queries/cash-queries";
 import { CashSessionControls } from "@/features/treasury/components/cash-session-controls";
 import {
@@ -14,8 +14,8 @@ import { formatDateAR, formatDateTimeAR } from "@/lib/format-date";
 type PageProps = { params: Promise<{ sessionId: string }> };
 
 export default async function CashSessionPage({ params }: PageProps) {
-  const auth = await getSession();
-  if (!auth) redirect("/sign-in");
+  const auth = await getOrganizationSession();
+  if (!auth) redirect("/onboarding/planes");
 
   const { sessionId } = await params;
   const session = await getCashSessionById(sessionId);

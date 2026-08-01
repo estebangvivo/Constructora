@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { getOrganizationSession } from "@/lib/auth";
 import { getProjectById } from "@/features/projects/queries/get-projects";
 import {
   getChangeOrderById,
@@ -13,8 +13,8 @@ type Params = {
 };
 
 export default async function EditChangeOrderPage({ params }: Params) {
-  const session = await getSession();
-  if (!session) redirect("/sign-in");
+  const session = await getOrganizationSession();
+  if (!session) redirect("/onboarding/planes");
 
   const { id, coId } = await params;
   const project = await getProjectById(id);

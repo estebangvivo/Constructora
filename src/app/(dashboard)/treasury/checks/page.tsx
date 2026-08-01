@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { getOrganizationSession } from "@/lib/auth";
 import {
   getChecksDueAlert,
   listChecks,
@@ -63,8 +63,8 @@ function isDueReached(dueDate: Date | null): boolean {
 }
 
 export default async function ChecksPage({ searchParams }: PageProps) {
-  const session = await getSession();
-  if (!session) redirect("/sign-in");
+  const session = await getOrganizationSession();
+  if (!session) redirect("/onboarding/planes");
 
   const canManage = ["ADMIN", "DIRECTOR", "RESIDENT"].includes(
     session.organizationRole,

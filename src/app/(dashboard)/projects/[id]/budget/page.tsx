@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { ProjectRouteParams } from "@/types";
-import { getSession } from "@/lib/auth";
+import { getOrganizationSession } from "@/lib/auth";
 import { getProjectById } from "@/features/projects/queries/get-projects";
 import { getProjectFinancialSummary } from "@/features/projects/queries/get-project-financials";
 import { listProjectClientPaidDocuments } from "@/features/projects/queries/list-project-client-paid";
@@ -19,8 +19,8 @@ import {
 } from "@/features/budget/lib/labels";
 
 export default async function BudgetPage({ params }: ProjectRouteParams) {
-  const session = await getSession();
-  if (!session) redirect("/sign-in");
+  const session = await getOrganizationSession();
+  if (!session) redirect("/onboarding/planes");
 
   const { id } = await params;
   const project = await getProjectById(id);

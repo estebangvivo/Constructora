@@ -2,15 +2,15 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Plus } from "lucide-react";
 import type { ProjectRouteParams } from "@/types";
-import { getSession } from "@/lib/auth";
+import { getOrganizationSession } from "@/lib/auth";
 import { getProjectById } from "@/features/projects/queries/get-projects";
 import { listDailyReports } from "@/features/daily-report/queries/list-daily-reports";
 import { WEATHER_LABEL } from "@/features/daily-report/lib/labels";
 import { formatDateAR } from "@/lib/format-date";
 
 export default async function DailyReportPage({ params }: ProjectRouteParams) {
-  const session = await getSession();
-  if (!session) redirect("/sign-in");
+  const session = await getOrganizationSession();
+  if (!session) redirect("/onboarding/planes");
 
   const { id } = await params;
   const project = await getProjectById(id);

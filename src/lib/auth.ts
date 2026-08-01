@@ -25,6 +25,21 @@ export type SessionContext = {
   allowedModules: AppModuleKey[];
 };
 
+/** Sesión con empresa activa (dashboard / APIs de tenant). */
+export type OrganizationSession = SessionContext & {
+  organizationId: string;
+  organizationRole: OrganizationRole;
+  role: AppRole;
+};
+
+export function hasOrganization(
+  session: SessionContext,
+): session is OrganizationSession {
+  return Boolean(
+    session.organizationId && session.organizationRole && session.role,
+  );
+}
+
 function toAppRole(role: OrganizationRole): AppRole {
   return role as AppRole;
 }
@@ -239,25 +254,15 @@ export async function getSession(): Promise<SessionContext | null> {
   }
 }
 
-export async function requireSession(): Promise<
-  SessionContext & {
-    organizationId: string;
-    organizationRole: OrganizationRole;
-    role: AppRole;
-  }
-> {
+export async function requireSession(): Promise<OrganizationSession> {
   const session = await getSession();
   if (!session) {
     throw new Error("UNAUTHORIZED");
   }
-  if (!session.organizationId || !session.organizationRole || !session.role) {
+  if (!hasOrganization(session)) {
     throw new Error("NO_ORGANIZATION");
   }
-  return session as SessionContext & {
-    organizationId: string;
-    organizationRole: OrganizationRole;
-    role: AppRole;
-  };
+  return session;
 }
 
 /** Sesión autenticada (con o sin empresa). Para onboarding / billing. */
@@ -270,14 +275,15 @@ export async function requireAuthSession(): Promise<SessionContext> {
 }
 
 /** Alias explícito de requireSession (empresa obligatoria). */
-export async function requireOrganizationSession(): Promise<
-  SessionContext & {
-    organizationId: string;
-    organizationRole: OrganizationRole;
-    role: AppRole;
-  }
-> {
+export async function requireOrganizationSession(): Promise<OrganizationSession> {
   return requireSession();
+}
+
+/** Como getSession pero solo si hay empresa (null → onboarding). */
+export async function getOrganizationSession(): Promise<OrganizationSession | null> {
+  const session = await getSession();
+  if (!session || !hasOrganization(session)) return null;
+  return session;
 }
 
 export async function getProjectRole(

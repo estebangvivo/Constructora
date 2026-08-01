@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { getOrganizationSession } from "@/lib/auth";
 import { getCashOverview } from "@/features/treasury/queries/cash-queries";
 import { TreasuryCashForm } from "@/features/treasury/components/treasury-cash-form";
 import {
@@ -12,8 +12,8 @@ import { formatDateAR } from "@/lib/format-date";
 export const dynamic = "force-dynamic";
 
 export default async function TreasuryCashPage() {
-  const session = await getSession();
-  if (!session) redirect("/sign-in");
+  const session = await getOrganizationSession();
+  if (!session) redirect("/onboarding/planes");
 
   const overview = await getCashOverview("ARS");
   const canManage = ["ADMIN", "DIRECTOR", "RESIDENT"].includes(

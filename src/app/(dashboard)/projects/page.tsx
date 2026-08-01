@@ -10,7 +10,7 @@ import {
   PROJECT_STATUS_LABEL,
   PROJECT_STATUS_STYLE,
 } from "@/features/projects/lib/status";
-import { getSession } from "@/lib/auth";
+import { getOrganizationSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { listActiveClients } from "@/features/clients/queries/list-clients";
 
@@ -21,9 +21,9 @@ type PageProps = {
 };
 
 export default async function ProjectsPage({ searchParams }: PageProps) {
-  const session = await getSession();
+  const session = await getOrganizationSession();
   if (!session) {
-    redirect("/sign-in");
+    redirect("/onboarding/planes");
   }
 
   const { vista } = await searchParams;

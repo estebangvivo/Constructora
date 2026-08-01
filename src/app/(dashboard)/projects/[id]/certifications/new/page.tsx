@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { ProjectRouteParams } from "@/types";
-import { getSession } from "@/lib/auth";
+import { getOrganizationSession } from "@/lib/auth";
 import { getProjectById } from "@/features/projects/queries/get-projects";
 import { listCertifiableBudgetItems } from "@/features/certifications/queries/list-certifications";
 import { CertificationForm } from "@/features/certifications/components/certification-form";
@@ -9,8 +9,8 @@ import { CertificationForm } from "@/features/certifications/components/certific
 type PageProps = ProjectRouteParams;
 
 export default async function NewCertificationPage({ params }: PageProps) {
-  const session = await getSession();
-  if (!session) redirect("/sign-in");
+  const session = await getOrganizationSession();
+  if (!session) redirect("/onboarding/planes");
 
   if (!["ADMIN", "DIRECTOR", "RESIDENT"].includes(session.organizationRole)) {
     redirect("/");

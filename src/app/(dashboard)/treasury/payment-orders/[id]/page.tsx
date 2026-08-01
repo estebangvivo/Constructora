@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { getOrganizationSession } from "@/lib/auth";
 import {
   getPaymentOrderById,
   hasCashMovementForDoc,
@@ -19,8 +19,8 @@ import { prisma } from "@/lib/prisma";
 type PageProps = { params: Promise<{ id: string }> };
 
 export default async function PaymentOrderDetailPage({ params }: PageProps) {
-  const session = await getSession();
-  if (!session) redirect("/sign-in");
+  const session = await getOrganizationSession();
+  if (!session) redirect("/onboarding/planes");
 
   const { id } = await params;
   const doc = await getPaymentOrderById(id);
@@ -34,12 +34,7 @@ export default async function PaymentOrderDetailPage({ params }: PageProps) {
         paymentOrderId: id,
       },
       orderBy: { occurredAt: "asc" },
-      select: {
-        id: true,
-        type: true,
-        amount: true,
-        occurredAt: true,
-        description: true,
+      include: {
         session: { select: { id: true, number: true } },
       },
     }),

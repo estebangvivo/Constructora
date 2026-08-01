@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getOrganizationSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 const noStore = { "Cache-Control": "no-store, max-age=0" };
 
 export async function GET(request: NextRequest) {
-  const session = await getSession();
+  const session = await getOrganizationSession();
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
 
 /** Marca como leídas: body `{ ids?: string[], all?: true }`. */
 export async function PATCH(request: NextRequest) {
-  const session = await getSession();
+  const session = await getOrganizationSession();
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }

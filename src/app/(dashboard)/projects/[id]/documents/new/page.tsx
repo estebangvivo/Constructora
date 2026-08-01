@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { ProjectRouteParams } from "@/types";
-import { getSession } from "@/lib/auth";
+import { getOrganizationSession } from "@/lib/auth";
 import { getProjectById } from "@/features/projects/queries/get-projects";
 import { listDocumentCategories } from "@/features/documents/queries/list-documents";
 import { DocumentUploadForm } from "@/features/documents/components/document-upload-form";
 
 export default async function NewDocumentPage({ params }: ProjectRouteParams) {
-  const session = await getSession();
-  if (!session) redirect("/sign-in");
+  const session = await getOrganizationSession();
+  if (!session) redirect("/onboarding/planes");
 
   if (!["ADMIN", "DIRECTOR", "RESIDENT"].includes(session.organizationRole)) {
     redirect("/");

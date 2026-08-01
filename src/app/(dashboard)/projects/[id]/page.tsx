@@ -27,7 +27,7 @@ import { ProjectClientAccount } from "@/features/projects/components/project-cli
 import { listProjectSuppliers } from "@/features/suppliers/queries/list-suppliers";
 import { formatBudgetMoney } from "@/features/budget/lib/labels";
 import { getProjectClientAccountStatement } from "@/features/treasury/queries/account-statements";
-import { getSession } from "@/lib/auth";
+import { getOrganizationSession } from "@/lib/auth";
 import type { ProjectRouteParams } from "@/types";
 import { notFound, redirect } from "next/navigation";
 
@@ -110,8 +110,8 @@ const QUICK_LINKS: QuickLink[] = [
 export default async function ProjectOverviewPage({
   params,
 }: ProjectRouteParams) {
-  const session = await getSession();
-  if (!session) redirect("/sign-in");
+  const session = await getOrganizationSession();
+  if (!session) redirect("/onboarding/planes");
 
   const { id } = await params;
   const project = await getProjectById(id);

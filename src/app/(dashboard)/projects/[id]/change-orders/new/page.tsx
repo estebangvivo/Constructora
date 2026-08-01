@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { ProjectRouteParams } from "@/types";
-import { getSession } from "@/lib/auth";
+import { getOrganizationSession } from "@/lib/auth";
 import { getProjectById } from "@/features/projects/queries/get-projects";
 import { listBudgetItemsForChangeOrder } from "@/features/change-orders/queries/list-change-orders";
 import { ChangeOrderForm } from "@/features/change-orders/components/change-order-form";
@@ -9,8 +9,8 @@ import { ChangeOrderForm } from "@/features/change-orders/components/change-orde
 export default async function NewChangeOrderPage({
   params,
 }: ProjectRouteParams) {
-  const session = await getSession();
-  if (!session) redirect("/sign-in");
+  const session = await getOrganizationSession();
+  if (!session) redirect("/onboarding/planes");
 
   const { id } = await params;
   const project = await getProjectById(id);

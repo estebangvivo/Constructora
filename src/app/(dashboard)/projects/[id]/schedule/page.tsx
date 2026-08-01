@@ -1,13 +1,13 @@
 import { notFound, redirect } from "next/navigation";
 import type { ProjectRouteParams } from "@/types";
-import { getSession } from "@/lib/auth";
+import { getOrganizationSession } from "@/lib/auth";
 import { getProjectById } from "@/features/projects/queries/get-projects";
 import { getProjectSchedule } from "@/features/schedule/queries/get-project-schedule";
 import { ScheduleBoard } from "@/features/schedule/components/schedule-board";
 
 export default async function SchedulePage({ params }: ProjectRouteParams) {
-  const session = await getSession();
-  if (!session) redirect("/sign-in");
+  const session = await getOrganizationSession();
+  if (!session) redirect("/onboarding/planes");
 
   const { id } = await params;
   const project = await getProjectById(id);

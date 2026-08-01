@@ -48,7 +48,7 @@ export default async function OnboardingPagoPage({
   }
 
   const plan: PaidBillingPlanId = isPaidBillingPlan(planRaw ?? "")
-    ? planRaw!
+    ? (planRaw as PaidBillingPlanId)
     : "TEAM_MONTHLY";
 
   const [usdArsRate, bank, mpConfigured] = await Promise.all([

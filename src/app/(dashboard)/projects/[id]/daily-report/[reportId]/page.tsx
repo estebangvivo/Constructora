@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { getOrganizationSession } from "@/lib/auth";
 import { getProjectById } from "@/features/projects/queries/get-projects";
 import { getDailyReportById } from "@/features/daily-report/queries/list-daily-reports";
 import { DailyReportForm } from "@/features/daily-report/components/daily-report-form";
@@ -16,8 +16,8 @@ type PageProps = {
 };
 
 export default async function DailyReportDetailPage({ params }: PageProps) {
-  const session = await getSession();
-  if (!session) redirect("/sign-in");
+  const session = await getOrganizationSession();
+  if (!session) redirect("/onboarding/planes");
 
   const { id: projectId, reportId } = await params;
   const project = await getProjectById(projectId);

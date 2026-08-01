@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { getOrganizationSession } from "@/lib/auth";
 import { getBankAccountDetail } from "@/features/treasury/queries/bank-queries";
 import {
   BANK_MOVEMENT_LABEL,
@@ -16,8 +16,8 @@ type PageProps = {
 };
 
 export default async function BankAccountDetailPage({ params }: PageProps) {
-  const session = await getSession();
-  if (!session) redirect("/sign-in");
+  const session = await getOrganizationSession();
+  if (!session) redirect("/onboarding/planes");
 
   const { id } = await params;
   const detail = await getBankAccountDetail(id);

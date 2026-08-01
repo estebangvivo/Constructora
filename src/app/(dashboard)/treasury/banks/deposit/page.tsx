@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { getOrganizationSession } from "@/lib/auth";
 import { listBankAccounts } from "@/features/treasury/queries/bank-queries";
 import { listChecks } from "@/features/treasury/queries/list-checks";
 import { getCashOverview } from "@/features/treasury/queries/cash-queries";
@@ -15,8 +15,8 @@ type PageProps = {
 };
 
 export default async function BankDepositPage({ searchParams }: PageProps) {
-  const session = await getSession();
-  if (!session) redirect("/sign-in");
+  const session = await getOrganizationSession();
+  if (!session) redirect("/onboarding/planes");
 
   const { bankId } = await searchParams;
   const canManage = ["ADMIN", "DIRECTOR", "RESIDENT"].includes(

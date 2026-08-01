@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { getOrganizationSession } from "@/lib/auth";
 import { getOrganizationProfile } from "@/features/settings/queries/get-organization";
 import {
   getLatestExchangeRate,
@@ -19,8 +19,8 @@ import { organizationIsOnTrial } from "@/features/billing/lib/seats";
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const session = await getSession();
-  if (!session) redirect("/sign-in");
+  const session = await getOrganizationSession();
+  if (!session) redirect("/onboarding/planes");
 
   if (
     !hasModule(session.allowedModules, "settings") &&
