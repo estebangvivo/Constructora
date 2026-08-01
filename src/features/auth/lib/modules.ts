@@ -13,6 +13,7 @@ export const APP_MODULE_KEYS = [
   "admin",
   "manual",
   "turnero",
+  "featureRequests",
   "project.overview",
   "project.stakeholders",
   "project.budget",
@@ -92,6 +93,12 @@ export const APP_MODULES: AppModuleDef[] = [
     label: "Turnero",
     group: "global",
     pathPrefixes: ["/turnero"],
+  },
+  {
+    key: "featureRequests",
+    label: "Solicitudes de mejora",
+    group: "global",
+    pathPrefixes: ["/solicitudes"],
   },
   {
     key: "project.overview",
@@ -179,6 +186,7 @@ export const ROLE_DEFAULT_MODULES: Record<OrganizationRole, AppModuleKey[]> = {
     "suppliers",
     "manual",
     "turnero",
+    "featureRequests",
     "project.overview",
     "project.stakeholders",
     "project.budget",
@@ -196,6 +204,7 @@ export const ROLE_DEFAULT_MODULES: Record<OrganizationRole, AppModuleKey[]> = {
     "home",
     "projects",
     "manual",
+    "featureRequests",
     "project.overview",
     "project.documents",
     "project.contractors",
@@ -204,6 +213,7 @@ export const ROLE_DEFAULT_MODULES: Record<OrganizationRole, AppModuleKey[]> = {
     "home",
     "projects",
     "manual",
+    "featureRequests",
     "project.overview",
     "project.schedule",
     "project.dailyReport",
@@ -242,6 +252,7 @@ export const SIDEBAR_MODULE_BY_HREF: Record<string, AppModuleKey> = {
   "/admin": "admin",
   "/manual": "manual",
   "/turnero": "turnero",
+  "/solicitudes": "featureRequests",
 };
 
 /** Mapeo suffix project nav → módulo */
@@ -269,6 +280,7 @@ export function moduleForPathname(pathname: string): AppModuleKey | null {
   if (pathname.startsWith("/suppliers")) return "suppliers";
   if (pathname.startsWith("/manual")) return "manual";
   if (pathname.startsWith("/turnero")) return "turnero";
+  if (pathname.startsWith("/solicitudes")) return "featureRequests";
   if (pathname === "/" || pathname === "") return "home";
 
   const projectMatch = pathname.match(/^\/projects\/([^/]+)(\/.*)?$/);

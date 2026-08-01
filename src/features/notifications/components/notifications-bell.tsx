@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +20,8 @@ type NotificationsResponse = {
   unreadCount: number;
   items: NotificationItem[];
 };
+
+const PANEL_WIDTH = 320;
 
 function tiempoRelativo(iso: string) {
   const ms = Date.now() - new Date(iso).getTime();
@@ -41,7 +45,12 @@ export function NotificationsBell({
   const [unreadCount, setUnreadCount] = useState(0);
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [panelStyle, setPanelStyle] = useState<CSSProperties>({});
   const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => setMounted(true), []);
 
   const cargar = useCallback(async (withItems: boolean) => {
     try {
@@ -55,11 +64,41 @@ export function NotificationsBell({
       setUnreadCount(data.unreadCount);
       if (withItems) setItems(data.items);
     } catch {
-      /* silencioso: la campana no debe romper el shell */
+      /* silencioso */
     } finally {
       if (withItems) setLoading(false);
     }
   }, []);
+
+  const placePanel = useCallback(() => {
+    const btn = buttonRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const gap = 8;
+    const maxLeft = window.innerWidth - PANEL_WIDTH - 16;
+
+    if (variant === "mobile") {
+      setPanelStyle({
+        position: "fixed",
+        top: rect.bottom + gap,
+        left: Math.max(16, Math.min(rect.right - PANEL_WIDTH, maxLeft)),
+        width: PANEL_WIDTH,
+      });
+      return;
+    }
+
+    // Sidebar: abrir hacia la derecha del botón, anclado abajo (sin recorte del aside).
+    let left = rect.right + gap;
+    if (left > maxLeft) {
+      left = Math.max(16, rect.left - PANEL_WIDTH - gap);
+    }
+    setPanelStyle({
+      position: "fixed",
+      bottom: Math.max(16, window.innerHeight - rect.bottom),
+      left,
+      width: PANEL_WIDTH,
+    });
+  }, [variant]);
 
   useEffect(() => {
     void cargar(false);
@@ -72,10 +111,28 @@ export function NotificationsBell({
     void cargar(true);
   }, [open, cargar]);
 
+  useLayoutEffect(() => {
+    if (!open) return;
+    placePanel();
+    function onResize() {
+      placePanel();
+    }
+    window.addEventListener("resize", onResize);
+    window.addEventListener("scroll", onResize, true);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onResize, true);
+    };
+  }, [open, placePanel]);
+
   useEffect(() => {
     if (!open) return;
     function onPointerDown(e: MouseEvent) {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      const panel = document.getElementById("notifications-panel");
+      if (panel?.contains(target)) return;
+      setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
@@ -107,14 +164,80 @@ export function NotificationsBell({
     if (item.href) window.location.href = item.href;
   }
 
-  const panelSide =
-    variant === "mobile"
-      ? "right-0 top-full mt-2"
-      : "left-0 bottom-full mb-2 md:left-auto md:right-0";
+  const panel = open && mounted && (
+    <div
+      id="notifications-panel"
+      style={panelStyle}
+      className="z-[80] overflow-hidden rounded-lg border border-border bg-surface text-foreground shadow-xl"
+      role="dialog"
+      aria-label="Notificaciones"
+    >
+      <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
+        <p className="text-sm font-medium">Notificaciones</p>
+        {unreadCount > 0 && (
+          <button
+            type="button"
+            className="text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => void marcarLeidas()}
+          >
+            Marcar todas leídas
+          </button>
+        )}
+      </div>
+
+      <div className="max-h-80 overflow-y-auto">
+        {loading && items.length === 0 ? (
+          <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+            Cargando…
+          </p>
+        ) : items.length === 0 ? (
+          <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+            No hay notificaciones
+          </p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {items.map((item) => (
+              <li key={item.id}>
+                    <button
+                      type="button"
+                      onClick={() => void abrirItem(item)}
+                      className={cn(
+                        "w-full border-l-2 px-3 py-2.5 text-left transition-colors hover:bg-muted/50",
+                        item.readAt
+                          ? "border-l-transparent"
+                          : "border-l-accent bg-muted/40",
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="min-w-0 flex-1 text-sm font-medium leading-snug text-foreground">
+                          {item.title}
+                        </p>
+                        {!item.readAt && (
+                          <span
+                            className="mt-1 size-1.5 shrink-0 rounded-full bg-accent"
+                            aria-hidden
+                          />
+                        )}
+                      </div>
+                      <p className="mt-0.5 break-words text-xs text-foreground/70 line-clamp-2">
+                        {item.body}
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        {tiempoRelativo(item.createdAt)}
+                      </p>
+                    </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div ref={rootRef} className={cn("relative", className)}>
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
@@ -138,74 +261,7 @@ export function NotificationsBell({
         )}
       </button>
 
-      {open && (
-        <div
-          className={cn(
-            "absolute z-50 w-[min(100vw-2rem,20rem)] overflow-hidden rounded-md border border-border bg-surface text-foreground shadow-lg",
-            panelSide,
-          )}
-          role="dialog"
-          aria-label="Notificaciones"
-        >
-          <div className="flex items-center justify-between border-b border-border px-3 py-2">
-            <p className="text-sm font-medium">Notificaciones</p>
-            {unreadCount > 0 && (
-              <button
-                type="button"
-                className="text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => void marcarLeidas()}
-              >
-                Marcar todas leídas
-              </button>
-            )}
-          </div>
-
-          <div className="max-h-80 overflow-y-auto">
-            {loading && items.length === 0 ? (
-              <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-                Cargando…
-              </p>
-            ) : items.length === 0 ? (
-              <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-                No hay notificaciones
-              </p>
-            ) : (
-              <ul className="divide-y divide-border">
-                {items.map((item) => (
-                  <li key={item.id}>
-                    <button
-                      type="button"
-                      onClick={() => void abrirItem(item)}
-                      className={cn(
-                        "w-full px-3 py-2.5 text-left transition-colors hover:bg-muted/60",
-                        !item.readAt && "bg-accent/10",
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-medium leading-snug">
-                          {item.title}
-                        </p>
-                        {!item.readAt && (
-                          <span
-                            className="mt-1 size-1.5 shrink-0 rounded-full bg-accent"
-                            aria-hidden
-                          />
-                        )}
-                      </div>
-                      <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
-                        {item.body}
-                      </p>
-                      <p className="mt-1 text-[11px] text-muted-foreground/80">
-                        {tiempoRelativo(item.createdAt)}
-                      </p>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      )}
+      {mounted && panel ? createPortal(panel, document.body) : null}
     </div>
   );
 }

@@ -10,6 +10,7 @@ import {
   Settings2,
   Banknote,
   CreditCard,
+  Lightbulb,
 } from "lucide-react";
 import type {
   AdminOrganizationOverview,
@@ -28,6 +29,8 @@ import {
   AdminSuperadminOrgsPanel,
   OrgBillingBadge,
 } from "@/features/auth/components/admin-superadmin-orgs-panel";
+import { AdminFeatureRequestsPanel } from "@/features/feature-requests/components/admin-feature-requests-panel";
+import type { FeatureRequestListItem } from "@/features/feature-requests/components/feature-request-list";
 import { cn } from "@/lib/utils";
 
 type UserRow = {
@@ -47,7 +50,13 @@ type UserRow = {
   organizations: { id: string; name: string }[];
 };
 
-type TabId = "connected" | "users" | "companies" | "payments" | "mercadopago";
+type TabId =
+  | "connected"
+  | "users"
+  | "companies"
+  | "payments"
+  | "mercadopago"
+  | "requests";
 
 const ROLE_LABEL: Record<OrganizationRole, string> = {
   ADMIN: "Admin",
@@ -87,6 +96,13 @@ type AdminPanelProps = {
   canReviewPayments: boolean;
   isPlatformSuperadmin?: boolean;
   mercadoPagoConfig?: MercadoPagoConfigPublic | null;
+  featureRequests?: Array<
+    FeatureRequestListItem & {
+      organizationName: string;
+      createdByName: string;
+      createdByEmail: string;
+    }
+  >;
 };
 
 export function AdminPanel({
@@ -102,6 +118,7 @@ export function AdminPanel({
   canReviewPayments,
   isPlatformSuperadmin = false,
   mercadoPagoConfig = null,
+  featureRequests = [],
 }: AdminPanelProps) {
   const router = useRouter();
   const [tab, setTab] = useState<TabId>("connected");
@@ -130,7 +147,18 @@ export function AdminPanel({
       ? [{ id: "payments" as const, label: "Pagos", icon: Banknote }]
       : []),
     ...(isPlatformSuperadmin
-      ? [{ id: "mercadopago" as const, label: "Mercado Pago", icon: CreditCard }]
+      ? [
+          {
+            id: "requests" as const,
+            label: "Mejoras",
+            icon: Lightbulb,
+          },
+          {
+            id: "mercadopago" as const,
+            label: "Mercado Pago",
+            icon: CreditCard,
+          },
+        ]
       : []),
   ];
 
@@ -435,6 +463,12 @@ export function AdminPanel({
             </p>
           </div>
           <AdminBillingPaymentsPanel payments={pendingPayments} />
+        </section>
+      )}
+
+      {tab === "requests" && isPlatformSuperadmin && (
+        <section>
+          <AdminFeatureRequestsPanel requests={featureRequests} />
         </section>
       )}
 

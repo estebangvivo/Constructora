@@ -7,6 +7,7 @@ import {
   updateOrganizationBillingBySuperadmin,
   type AdminOrganizationOverview,
 } from "@/features/auth/actions/admin-panel-actions";
+import { switchOrganization } from "@/features/auth/actions/organization-actions";
 import {
   BILLING_PLANS,
   normalizeBillingPlanId,
@@ -67,6 +68,19 @@ export function AdminSuperadminOrgsPanel({
   const [plan, setPlan] = useState("NONE");
   const [paidUntil, setPaidUntil] = useState("");
 
+  function enterOrg(organizationId: string) {
+    setError(null);
+    startTransition(async () => {
+      const result = await switchOrganization(organizationId);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.push("/");
+      router.refresh();
+    });
+  }
+
   function startEdit(org: AdminOrganizationOverview) {
     setEditingId(org.id);
     setError(null);
@@ -104,8 +118,9 @@ export function AdminSuperadminOrgsPanel({
   return (
     <div className="space-y-6">
       <p className="text-sm text-muted-foreground">
-        Vista de plataforma: todas las empresas, usuarios y plan. Podés cambiar
-        estado, plan y vigencia.
+        Vista de plataforma: todas las empresas, usuarios y plan. Podés entrar a
+        cualquiera (aunque el plan esté vencido), y cambiar estado, plan y
+        vigencia.
       </p>
       {error && (
         <p className="rounded-md border border-red-700/40 bg-red-50 px-3 py-2 text-sm text-red-800">
@@ -146,13 +161,23 @@ export function AdminSuperadminOrgsPanel({
                   {org.onlineCount}/{org.memberCount} en línea
                 </p>
                 {!editing ? (
-                  <button
-                    type="button"
-                    onClick={() => startEdit(org)}
-                    className="rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface"
-                  >
-                    Editar plan
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => enterOrg(org.id)}
+                      className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-foreground disabled:opacity-60"
+                    >
+                      Entrar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => startEdit(org)}
+                      className="rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface"
+                    >
+                      Editar plan
+                    </button>
+                  </>
                 ) : (
                   <>
                     <button

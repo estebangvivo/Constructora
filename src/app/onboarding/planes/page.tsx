@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { BILLING_PLANS, BILLING_TIERS } from "@/features/billing/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { organizationHasAppAccess } from "@/features/billing/lib/access";
+import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,9 @@ export default async function OnboardingPlanesPage() {
   if (!session) redirect("/sign-in");
 
   if (session.organizationId) {
+    if (isPlatformSuperadmin(session)) {
+      redirect("/");
+    }
     const org = await prisma.organization.findUnique({
       where: { id: session.organizationId },
       select: { billingStatus: true, paidUntil: true },

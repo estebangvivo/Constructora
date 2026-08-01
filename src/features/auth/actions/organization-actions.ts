@@ -2,12 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getSession, requireSession } from "@/lib/auth";
+import { getSession, requireAuthSession, requireSession } from "@/lib/auth";
 import {
   setLocalSessionCookie,
   signLocalSession,
 } from "@/features/auth/lib/session";
 import { normalizeOrgSlug } from "@/features/auth/lib/org-slug";
+import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
 
 export type OrgActionResult =
   | { ok: true; organizationId?: string }
@@ -24,6 +25,20 @@ export type MyOrganization = {
 export async function listMyOrganizations(): Promise<MyOrganization[]> {
   const session = await getSession();
   if (!session) return [];
+
+  if (isPlatformSuperadmin(session)) {
+    const orgs = await prisma.organization.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, slug: true },
+    });
+    return orgs.map((org) => ({
+      id: org.id,
+      name: org.name,
+      slug: org.slug,
+      role: "ADMIN",
+      isActive: org.id === session.organizationId,
+    }));
+  }
 
   const memberships = await prisma.organizationMember.findMany({
     where: { userId: session.user.id },
@@ -46,7 +61,9 @@ export async function switchOrganization(
   organizationId: string,
 ): Promise<OrgActionResult> {
   try {
-    const session = await requireSession();
+    const session = await requireAuthSession();
+    const superadmin = isPlatformSuperadmin(session);
+
     const membership = await prisma.organizationMember.findUnique({
       where: {
         organizationId_userId: {
@@ -55,13 +72,25 @@ export async function switchOrganization(
         },
       },
     });
-    if (!membership) {
+
+    if (!membership && !superadmin) {
       return { ok: false, error: "No pertenecés a esa empresa." };
     }
 
+    if (!membership && superadmin) {
+      const org = await prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { id: true },
+      });
+      if (!org) {
+        return { ok: false, error: "Empresa no encontrada." };
+      }
+    }
+
+    const targetOrgId = membership?.organizationId ?? organizationId;
     const token = await signLocalSession({
       userId: session.user.id,
-      organizationId: membership.organizationId,
+      organizationId: targetOrgId,
     });
     await setLocalSessionCookie(token);
     try {
@@ -74,7 +103,7 @@ export async function switchOrganization(
       console.warn("switchOrganization touch activity", error);
     }
     revalidatePath("/", "layout");
-    return { ok: true, organizationId: membership.organizationId };
+    return { ok: true, organizationId: targetOrgId };
   } catch (error) {
     console.error("switchOrganization", error);
     return { ok: false, error: "No se pudo cambiar de empresa." };

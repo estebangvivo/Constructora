@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { DEFAULT_THEME_ID, themeToCssText } from "@/config/themes";
 import { organizationHasAppAccess } from "@/features/billing/lib/access";
 import { markOrganizationPastDueIfNeeded } from "@/features/billing/lib/activate";
+import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,8 @@ export default async function DashboardLayout({
   if (!session.organizationId) {
     redirect("/onboarding/planes");
   }
+
+  const superadmin = isPlatformSuperadmin(session);
 
   await markOrganizationPastDueIfNeeded(session.organizationId);
 
@@ -45,7 +48,7 @@ export default async function DashboardLayout({
     redirect("/onboarding/planes");
   }
 
-  if (!organizationHasAppAccess(organization)) {
+  if (!superadmin && !organizationHasAppAccess(organization)) {
     redirect("/billing");
   }
 

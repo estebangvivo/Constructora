@@ -14,6 +14,7 @@ import {
   clearLocalSessionCookie,
   readLocalSessionFromCookies,
 } from "@/features/auth/lib/session";
+import { isPlatformSuperadminEmail } from "@/features/auth/lib/platform-admin";
 import type { AppRole } from "@/types";
 
 export type SessionContext = {
@@ -142,6 +143,18 @@ async function getLocalCookieSession(): Promise<SessionContext | null> {
     },
   });
   if (!membership) {
+    // Superadmin de plataforma: puede operar en cualquier empresa sin membresía.
+    if (isPlatformSuperadminEmail(user.email)) {
+      const org = await prisma.organization.findUnique({
+        where: { id: local.organizationId },
+        select: { id: true },
+      });
+      if (org) {
+        const ok = await touchIdleCheck(user.id, org.id);
+        if (!ok) return null;
+        return sessionFromMembership(user, org.id, "ADMIN", []);
+      }
+    }
     // Membresía perdida: sesión sin org
     const ok = await touchIdleCheck(user.id, null);
     if (!ok) return null;

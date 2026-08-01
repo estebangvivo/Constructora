@@ -26,6 +26,7 @@ import {
   BookOpen,
   Ticket,
   Shield,
+  Lightbulb,
   type LucideIcon,
 } from "lucide-react";
 
@@ -101,6 +102,13 @@ export const SIDEBAR_NAV: NavItem[] = [
     icon: BookOpen,
     description: "Guía completa de uso del sistema",
     module: "manual",
+  },
+  {
+    title: "Mejoras",
+    href: "/solicitudes",
+    icon: Lightbulb,
+    description: "Solicitar mejoras o cambios al sistema",
+    module: "featureRequests",
   },
 ];
 

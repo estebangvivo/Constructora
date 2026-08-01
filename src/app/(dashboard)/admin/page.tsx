@@ -11,6 +11,7 @@ import {
 } from "@/features/auth/actions/user-actions";
 import { listPendingBillingPayments } from "@/features/billing/actions/admin-billing-actions";
 import { getAdminMercadoPagoConfig } from "@/features/billing/actions/admin-mercadopago-actions";
+import { listAllFeatureRequestsForAdmin } from "@/features/feature-requests/actions/feature-request-actions";
 import { AdminPanel } from "@/features/auth/components/admin-panel";
 import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
 import { prisma } from "@/lib/prisma";
@@ -36,6 +37,7 @@ export default async function AdminPage() {
     currentOrg,
     pendingPayments,
     mercadoPagoConfig,
+    featureRequests,
   ] = await Promise.all([
     listAdminOrganizationsOverview(),
     listAdminOrganizationProfiles(),
@@ -48,6 +50,7 @@ export default async function AdminPage() {
     }),
     listPendingBillingPayments(),
     superadmin ? getAdminMercadoPagoConfig() : Promise.resolve(null),
+    superadmin ? listAllFeatureRequestsForAdmin() : Promise.resolve([]),
   ]);
 
   return (
@@ -75,6 +78,7 @@ export default async function AdminPage() {
         }
         isPlatformSuperadmin={superadmin}
         mercadoPagoConfig={mercadoPagoConfig}
+        featureRequests={featureRequests}
       />
     </div>
   );

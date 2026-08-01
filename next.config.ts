@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
   ],
   experimental: {
     serverActions: {
-      bodySizeLimit: "30mb",
+      bodySizeLimit: "50mb",
       // Permite login desde tablet/celular en la LAN (IP local) y dominios de prod.
       allowedOrigins: [
         "localhost:3000",
