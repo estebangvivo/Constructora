@@ -14,6 +14,7 @@ import { listOrganizationUsers, listTurneroPuestosForUsers, listManageableOrgani
 import { UsersAdminPanel } from "@/features/auth/components/users-admin-panel";
 import { hasModule } from "@/features/auth/lib/modules";
 import { listBankAccounts } from "@/features/treasury/queries/bank-queries";
+import { organizationIsOnTrial } from "@/features/billing/lib/seats";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +46,7 @@ export default async function SettingsPage() {
     session.organizationRole,
   );
 
-  const [latestUsdArs, recentRates, users, puestos, organizations, bankAccounts] =
+  const [latestUsdArs, recentRates, users, puestos, organizations, bankAccounts, trialBlocksNewUsers] =
     await Promise.all([
       getLatestExchangeRate("USD", "ARS"),
       listRecentExchangeRates(14),
@@ -55,6 +56,7 @@ export default async function SettingsPage() {
         ? listManageableOrganizationsForUsers()
         : Promise.resolve([]),
       listBankAccounts(),
+      organizationIsOnTrial(session.organizationId),
     ]);
 
   return (
@@ -91,6 +93,7 @@ export default async function SettingsPage() {
             currentOrganizationId={session.organizationId}
             currentUserId={session.user.id}
             canAssignAdmin={session.organizationRole === "ADMIN"}
+            trialBlocksNewUsers={trialBlocksNewUsers}
           />
         )}
       </div>

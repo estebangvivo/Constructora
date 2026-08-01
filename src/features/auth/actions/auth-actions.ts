@@ -11,7 +11,7 @@ import {
 } from "@/features/auth/lib/session";
 
 export type AuthActionResult =
-  | { ok: true; needsOrgPicker?: boolean }
+  | { ok: true; needsOrgPicker?: boolean; needsOnboarding?: boolean }
   | { ok: false; error: string };
 
 export async function loginWithPassword(input: {
@@ -47,20 +47,28 @@ export async function loginWithPassword(input: {
       orderBy: { createdAt: "asc" },
       select: { organizationId: true },
     });
-    if (memberships.length === 0) {
-      return { ok: false, error: "El usuario no pertenece a ninguna empresa." };
-    }
 
     const token = await signLocalSession({
       userId: user.id,
-      organizationId: memberships[0].organizationId,
+      organizationId: memberships[0]?.organizationId ?? null,
     });
     await setLocalSessionCookie(token);
+
+    try {
+      await prisma.$executeRaw`
+        UPDATE users
+        SET "lastSeenAt" = NOW(), "lastActivityAt" = NOW()
+        WHERE id = ${user.id}
+      `;
+    } catch (error) {
+      console.warn("loginWithPassword touch activity", error);
+    }
 
     revalidatePath("/", "layout");
     return {
       ok: true,
       needsOrgPicker: memberships.length > 1,
+      needsOnboarding: memberships.length === 0,
     };
   } catch (error) {
     console.error("loginWithPassword", error);

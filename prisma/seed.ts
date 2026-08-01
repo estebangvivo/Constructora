@@ -64,6 +64,7 @@ async function main() {
       themeId: "obra",
       currency: "ARS",
       enabledCurrencies: ["ARS", "USD"],
+      billingStatus: "EXEMPT",
     },
     update: {
       name: "Demo Constructora",
@@ -71,6 +72,7 @@ async function main() {
       taxId: "30-71234567-8",
       currency: "ARS",
       enabledCurrencies: ["ARS", "USD"],
+      billingStatus: "EXEMPT",
     },
   });
 
@@ -370,9 +372,11 @@ async function main() {
       themeId: "obra",
       currency: "ARS",
       enabledCurrencies: ["ARS", "USD"],
+      billingStatus: "EXEMPT",
     },
     update: {
       // No pisar el nombre comercial si ya se renombró en producción (p.ej. Buñas SAS)
+      billingStatus: "EXEMPT",
     },
   });
 

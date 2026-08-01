@@ -4,7 +4,8 @@ export const SESSION_COOKIE = "constructora_session";
 
 export type LocalSessionPayload = {
   userId: string;
-  organizationId: string;
+  /** null = usuario sin empresa (onboarding / pago). */
+  organizationId: string | null;
 };
 
 function secretKey() {
@@ -20,11 +21,11 @@ export async function signLocalSession(
 ): Promise<string> {
   return new SignJWT({
     userId: payload.userId,
-    organizationId: payload.organizationId,
+    organizationId: payload.organizationId ?? "",
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("14d")
+    .setExpirationTime("12h")
     .sign(secretKey());
 }
 
@@ -35,10 +36,12 @@ export async function verifyLocalSession(
     const { payload } = await jwtVerify(token, secretKey());
     const userId = payload.userId;
     const organizationId = payload.organizationId;
-    if (typeof userId !== "string" || typeof organizationId !== "string") {
-      return null;
-    }
-    return { userId, organizationId };
+    if (typeof userId !== "string") return null;
+    if (typeof organizationId !== "string") return null;
+    return {
+      userId,
+      organizationId: organizationId.length > 0 ? organizationId : null,
+    };
   } catch {
     return null;
   }

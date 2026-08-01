@@ -49,8 +49,11 @@ export function LocalLoginForm() {
       </label>
 
       {error && (
-        <p className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
-          {error}
+        <p
+          role="alert"
+          className="rounded-md border border-red-700/40 bg-red-50 px-3 py-2 text-sm font-medium text-red-800"
+        >
+          {decodeURIComponent(error)}
         </p>
       )}
 

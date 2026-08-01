@@ -64,6 +64,15 @@ export async function switchOrganization(
       organizationId: membership.organizationId,
     });
     await setLocalSessionCookie(token);
+    try {
+      await prisma.$executeRaw`
+        UPDATE users
+        SET "lastActivityAt" = NOW(), "lastSeenAt" = NOW()
+        WHERE id = ${session.user.id}
+      `;
+    } catch (error) {
+      console.warn("switchOrganization touch activity", error);
+    }
     revalidatePath("/", "layout");
     return { ok: true, organizationId: membership.organizationId };
   } catch (error) {
@@ -75,6 +84,8 @@ export async function switchOrganization(
 export async function createOrganization(input: {
   name: string;
   slug?: string;
+  /** Si es false, crea la empresa sin cambiar la sesión activa. Default true. */
+  switchTo?: boolean;
 }): Promise<OrgActionResult> {
   try {
     const session = await requireSession();
@@ -107,6 +118,8 @@ export async function createOrganization(input: {
         enabledCurrencies: ["ARS", "USD"],
         themeId: "obra",
         country: "AR",
+        // Empresas creadas desde el panel Admin quedan exentas de cobro SaaS
+        billingStatus: "EXEMPT",
         members: {
           create: {
             userId: session.user.id,
@@ -117,12 +130,17 @@ export async function createOrganization(input: {
       },
     });
 
-    const token = await signLocalSession({
-      userId: session.user.id,
-      organizationId: org.id,
-    });
-    await setLocalSessionCookie(token);
+    const shouldSwitch = input.switchTo !== false;
+    if (shouldSwitch) {
+      const token = await signLocalSession({
+        userId: session.user.id,
+        organizationId: org.id,
+      });
+      await setLocalSessionCookie(token);
+    }
     revalidatePath("/", "layout");
+    revalidatePath("/admin");
+    revalidatePath("/select-organization");
     return { ok: true, organizationId: org.id };
   } catch (error) {
     console.error("createOrganization", error);

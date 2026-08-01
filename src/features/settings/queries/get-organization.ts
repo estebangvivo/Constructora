@@ -30,6 +30,7 @@ export type OrganizationProfile = {
   currency: string;
   enabledCurrencies: string[];
   checkDueAlertDays: number;
+  sessionIdleMinutes: number;
 };
 
 export async function getOrganizationProfile(): Promise<OrganizationProfile | null> {
@@ -66,6 +67,21 @@ export async function getOrganizationProfile(): Promise<OrganizationProfile | nu
 
   if (!org) return null;
 
+  let sessionIdleMinutes = 30;
+  try {
+    const rows = await prisma.$queryRaw<
+      Array<{ sessionIdleMinutes: number | null }>
+    >`
+      SELECT "sessionIdleMinutes" FROM organizations WHERE id = ${org.id} LIMIT 1
+    `;
+    sessionIdleMinutes = Math.min(
+      480,
+      Math.max(5, rows[0]?.sessionIdleMinutes ?? 30),
+    );
+  } catch {
+    sessionIdleMinutes = 30;
+  }
+
   return {
     ...org,
     currency: normalizeCurrency(org.currency),
@@ -74,6 +90,7 @@ export async function getOrganizationProfile(): Promise<OrganizationProfile | nu
       org.currency,
     ),
     checkDueAlertDays: Math.max(0, org.checkDueAlertDays ?? 7),
+    sessionIdleMinutes,
   };
 }
 

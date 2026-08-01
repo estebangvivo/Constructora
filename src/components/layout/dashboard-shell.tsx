@@ -12,6 +12,7 @@ type DashboardShellProps = {
   modules?: AppModuleKey[] | string[] | null;
   organizationName?: string | null;
   logoUrl?: string | null;
+  userEmail?: string | null;
 };
 
 export function DashboardShell({
@@ -20,6 +21,7 @@ export function DashboardShell({
   modules = null,
   organizationName,
   logoUrl,
+  userEmail,
 }: DashboardShellProps) {
   const pathname = usePathname();
 
@@ -31,6 +33,7 @@ export function DashboardShell({
         modules={modules}
         organizationName={organizationName}
         logoUrl={logoUrl}
+        userEmail={userEmail}
       />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <MobileNav
@@ -38,6 +41,7 @@ export function DashboardShell({
           modules={modules}
           organizationName={organizationName}
           logoUrl={logoUrl}
+          userEmail={userEmail}
         />
         <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-0">
           {children}

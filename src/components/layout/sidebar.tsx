@@ -15,6 +15,7 @@ type SidebarProps = {
   modules?: AppModuleKey[] | string[] | null;
   organizationName?: string | null;
   logoUrl?: string | null;
+  userEmail?: string | null;
   showLogout?: boolean;
 };
 
@@ -24,6 +25,7 @@ export function Sidebar({
   modules = null,
   organizationName,
   logoUrl,
+  userEmail,
   showLogout = true,
 }: SidebarProps) {
   const items = filterNavByAccess(SIDEBAR_NAV, { role, modules });
@@ -92,6 +94,14 @@ export function Sidebar({
             <span className="text-xs text-sidebar-foreground/50">Avisos</span>
             <NotificationsBell variant="sidebar" />
           </div>
+          {userEmail ? (
+            <p
+              className="mb-1 truncate px-3 text-xs text-sidebar-foreground/55"
+              title={userEmail}
+            >
+              {userEmail}
+            </p>
+          ) : null}
           <form action={logoutLocal}>
             <button
               type="submit"

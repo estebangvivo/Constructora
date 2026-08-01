@@ -145,6 +145,37 @@ enum DocumentType {
 // =============================================================================
 
 /// Empresa constructora (tenant). Todo el dominio cuelga de Organization.
+enum BillingStatus {
+  ACTIVE
+  PAST_DUE
+  PENDING_PAYMENT
+  EXEMPT
+}
+
+enum BillingPlan {
+  TRIAL
+  SOLO_MONTHLY
+  SOLO_ANNUAL
+  TEAM_MONTHLY
+  TEAM_ANNUAL
+  UNLIMITED_MONTHLY
+  UNLIMITED_ANNUAL
+  /// Legacy → Equipo (mantener por datos existentes)
+  MONTHLY
+  ANNUAL
+}
+
+enum BillingPaymentMethod {
+  MERCADOPAGO
+  TRANSFER
+}
+
+enum BillingPaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model Organization {
   id                String   @id @default(cuid())
   name              String /// Nombre comercial
@@ -172,6 +203,14 @@ model Organization {
   enabledCurrencies String[] @default(["ARS", "USD"])
   /// Días de anticipación para avisar cheques en cartera por vencer (0 = solo vencidos)
   checkDueAlertDays Int      @default(7)
+  /// Minutos sin actividad del usuario antes de cerrar sesión (5–480)
+  sessionIdleMinutes Int     @default(30)
+  /// Facturación SaaS
+  billingStatus     BillingStatus @default(PENDING_PAYMENT)
+  billingPlan       BillingPlan?
+  paidUntil         DateTime?
+  mpPreapprovalId   String?
+  mpCustomerId      String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -190,6 +229,7 @@ model Organization {
   bankAccounts  BankAccount[]
   bankMovements BankMovement[]
   checkRejectionFees CheckRejectionFee[]
+  billingPayments      BillingPayment[]
 
   turneroClientes          TurneroCliente[]
   turneroPuestos           TurneroPuesto[]
@@ -232,6 +272,10 @@ model User {
   phone        String?
   avatarUrl    String?
   isActive     Boolean  @default(true)
+  /// Última actividad (heartbeat) para presencia “en línea”
+  lastSeenAt   DateTime?
+  /// Última interacción del usuario (para cierre de sesión por inactividad)
+  lastActivityAt DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -252,8 +296,57 @@ model User {
   cashMovementsCreated CashMovement[]       @relation("CashMovementCreator")
   bankMovementsCreated BankMovement[]       @relation("BankMovementCreator")
   notifications        AppNotification[]
+  billingPayments      BillingPayment[]     @relation("BillingPaymentPayer")
+  billingPaymentsApproved BillingPayment[]  @relation("BillingPaymentApprover")
 
   @@map("users")
+}
+
+/// Pago de suscripción SaaS (alta o renovación de empresa).
+model BillingPayment {
+  id               String               @id @default(cuid())
+  userId           String
+  organizationId   String?
+  /// Nombre solicitado para la empresa (alta nueva)
+  companyName      String?
+  companySlug      String?
+  plan             BillingPlan
+  method           BillingPaymentMethod
+  currency         String               /// USD | ARS
+  amount           Decimal              @db.Decimal(14, 2)
+  fxRateUsed       Decimal?             @db.Decimal(18, 6)
+  status           BillingPaymentStatus @default(PENDING)
+  mpPreferenceId   String?
+  mpPaymentId      String?
+  mpPreapprovalId  String?
+  transferProofUrl String?
+  notes            String?
+  approvedById     String?
+  periodStart      DateTime?
+  periodEnd        DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  user         User          @relation("BillingPaymentPayer", fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  approvedBy   User?         @relation("BillingPaymentApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+  @@index([organizationId, status])
+  @@index([status, createdAt])
+  @@map("billing_payments")
+}
+
+/// Configuración SaaS de plataforma (Mercado Pago, etc.). Una sola fila `default`.
+model PlatformBillingSettings {
+  id              String   @id @default("default")
+  mpAccessToken   String?
+  /// Público opcional (Checkout Bricks / SDK). No requerido para preferencias API.
+  mpPublicKey     String?
+  updatedAt       DateTime @updatedAt
+  updatedByUserId String?
+
+  @@map("platform_billing_settings")
 }
 
 /// Membresía del usuario en una organización + rol global en esa org.

@@ -25,6 +25,7 @@ import {
   Banknote,
   BookOpen,
   Ticket,
+  Shield,
   type LucideIcon,
 } from "lucide-react";
 
@@ -78,6 +79,14 @@ export const SIDEBAR_NAV: NavItem[] = [
     description: "Datos de la constructora, logo y contacto",
     roles: ["ADMIN", "DIRECTOR"],
     module: "settings",
+  },
+  {
+    title: "Administración",
+    href: "/admin",
+    icon: Shield,
+    description: "Usuarios por empresa, alta y configuración multi-empresa",
+    roles: ["ADMIN"],
+    module: "admin",
   },
   {
     title: "Turnero",

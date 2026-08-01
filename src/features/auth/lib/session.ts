@@ -19,12 +19,12 @@ export async function setLocalSessionCookie(token: string) {
   const secure =
     process.env.NODE_ENV === "production" &&
     process.env.FORCE_INSECURE_COOKIES !== "true";
+  // Sin maxAge = cookie de sesión: al cerrar el navegador hay que volver a loguearse.
   jar.set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
     secure,
     path: "/",
-    maxAge: 60 * 60 * 24 * 14,
   });
 }
 

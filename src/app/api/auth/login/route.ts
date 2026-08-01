@@ -16,13 +16,13 @@ function cookieSecure() {
   );
 }
 
-function sessionCookieOptions(maxAge: number) {
+/** Cookie de sesión del navegador (sin maxAge): se borra al cerrar el browser. */
+function sessionCookieOptions() {
   return {
     httpOnly: true,
     sameSite: "lax" as const,
     secure: cookieSecure(),
     path: "/",
-    maxAge,
   };
 }
 
@@ -54,22 +54,27 @@ async function authenticate(emailRaw: string, password: string) {
     orderBy: { createdAt: "asc" },
     select: { organizationId: true },
   });
-  if (memberships.length === 0) {
-    return {
-      ok: false as const,
-      error: "El usuario no pertenece a ninguna empresa.",
-    };
-  }
 
   const token = await signLocalSession({
     userId: user.id,
-    organizationId: memberships[0].organizationId,
+    organizationId: memberships[0]?.organizationId ?? null,
   });
+
+  try {
+    await prisma.$executeRaw`
+      UPDATE users
+      SET "lastSeenAt" = NOW(), "lastActivityAt" = NOW()
+      WHERE id = ${user.id}
+    `;
+  } catch (error) {
+    console.warn("login touch activity", error);
+  }
 
   return {
     ok: true as const,
     token,
     needsOrgPicker: memberships.length > 1,
+    needsOnboarding: memberships.length === 0,
   };
 }
 
@@ -114,23 +119,26 @@ export async function POST(request: Request) {
       const res = NextResponse.json({
         ok: true,
         needsOrgPicker: result.needsOrgPicker,
+        needsOnboarding: result.needsOnboarding,
       });
       res.cookies.set(
         SESSION_COOKIE,
         result.token,
-        sessionCookieOptions(60 * 60 * 24 * 14),
+        sessionCookieOptions(),
       );
       return res;
     }
 
-    const dest = result.needsOrgPicker
-      ? "/select-organization?required=1"
-      : "/";
+    const dest = result.needsOnboarding
+      ? "/onboarding/planes"
+      : result.needsOrgPicker
+        ? "/select-organization?required=1"
+        : "/";
     const res = NextResponse.redirect(publicUrl(request, dest), 303);
     res.cookies.set(
       SESSION_COOKIE,
       result.token,
-      sessionCookieOptions(60 * 60 * 24 * 14),
+      sessionCookieOptions(),
     );
     return res;
   } catch (error) {

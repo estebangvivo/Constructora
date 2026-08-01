@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { OrganizationRole } from "@prisma/client";
 import {
   createOrganizationUser,
@@ -59,6 +60,8 @@ type UsersAdminPanelProps = {
   currentOrganizationId: string;
   currentUserId: string;
   canAssignAdmin: boolean;
+  /** En prueba gratis no se permiten altas. */
+  trialBlocksNewUsers?: boolean;
 };
 
 export function UsersAdminPanel({
@@ -68,6 +71,7 @@ export function UsersAdminPanel({
   currentOrganizationId,
   currentUserId,
   canAssignAdmin,
+  trialBlocksNewUsers = false,
 }: UsersAdminPanelProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -98,17 +102,39 @@ export function UsersAdminPanel({
         </div>
         <button
           type="button"
+          disabled={trialBlocksNewUsers}
+          title={
+            trialBlocksNewUsers
+              ? "Contratá un plan para dar de alta usuarios"
+              : undefined
+          }
           onClick={() => {
+            if (trialBlocksNewUsers) return;
             setShowCreate((v) => !v);
             setEditingId(null);
           }}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50"
         >
           {showCreate ? "Cerrar" : "Nuevo usuario"}
         </button>
       </div>
 
-      {showCreate && (
+      {trialBlocksNewUsers && (
+        <p
+          role="status"
+          className="rounded-md border border-[#fde68a] bg-[#fffbeb] px-3 py-2 text-sm text-[#78350f]"
+        >
+          Estás en prueba gratis: no podés dar de alta usuarios.{" "}
+          <Link
+            href="/billing"
+            className="font-medium underline underline-offset-2"
+          >
+            Ver planes
+          </Link>
+        </p>
+      )}
+
+      {showCreate && !trialBlocksNewUsers && (
         <UserForm
           mode="create"
           canAssignAdmin={canAssignAdmin}

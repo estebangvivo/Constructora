@@ -17,6 +17,8 @@ import { cn } from "@/lib/utils";
 
 type OrganizationSettingsFormProps = {
   organization: OrganizationProfile;
+  /** Si se indica, guarda sobre esa empresa (requiere ser Admin de ella). */
+  targetOrganizationId?: string;
 };
 
 const fieldClass =
@@ -24,6 +26,7 @@ const fieldClass =
 
 export function OrganizationSettingsForm({
   organization,
+  targetOrganizationId,
 }: OrganizationSettingsFormProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -70,6 +73,9 @@ export function OrganizationSettingsForm({
 
   return (
     <form onSubmit={onSubmit} className="mx-auto max-w-3xl space-y-8">
+      {targetOrganizationId ? (
+        <input type="hidden" name="organizationId" value={targetOrganizationId} />
+      ) : null}
       <section className="space-y-4">
         <div>
           <h2 className="font-display text-lg tracking-tight">Identidad</h2>
@@ -211,6 +217,27 @@ export function OrganizationSettingsForm({
             <span className="mt-1 block text-xs text-muted-foreground">
               Se muestra un aviso en toda la app cuando un cheque en cartera
               vence dentro de esta cantidad de días (0 = solo vencidos).
+            </span>
+          </label>
+
+          <label className="block text-sm sm:col-span-2">
+            <span className="mb-1 block text-muted-foreground">
+              Cierre de sesión por inactividad (minutos)
+            </span>
+            <input
+              name="sessionIdleMinutes"
+              type="number"
+              min={5}
+              max={480}
+              step={1}
+              required
+              defaultValue={organization.sessionIdleMinutes ?? 30}
+              className={cn(fieldClass, "max-w-[8rem]")}
+            />
+            <span className="mt-1 block text-xs text-muted-foreground">
+              Si el usuario no interactúa durante este tiempo, se cierra la
+              sesión y debe volver a ingresar (entre 5 y 480 minutos). Además,
+              al cerrar el navegador siempre hay que volver a loguearse.
             </span>
           </label>
         </div>

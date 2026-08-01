@@ -15,6 +15,7 @@ type MobileNavProps = {
   modules?: AppModuleKey[] | string[] | null;
   organizationName?: string | null;
   logoUrl?: string | null;
+  userEmail?: string | null;
 };
 
 export function MobileNav({
@@ -22,6 +23,7 @@ export function MobileNav({
   modules = null,
   organizationName,
   logoUrl,
+  userEmail,
 }: MobileNavProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -98,6 +100,14 @@ export function MobileNav({
             <Building2 className="size-4" aria-hidden />
             Cambiar empresa
           </a>
+          {userEmail ? (
+            <p
+              className="truncate px-3 pt-1 text-xs text-sidebar-foreground/55"
+              title={userEmail}
+            >
+              {userEmail}
+            </p>
+          ) : null}
           <form action={logoutLocal}>
             <button
               type="submit"

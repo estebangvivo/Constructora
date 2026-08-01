@@ -2,7 +2,6 @@ import type { OrganizationRole, User } from "@prisma/client";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import {
-  DEV_ORG_SLUG,
   DEV_USER_AUTH_ID,
   isClerkConfigured,
   isDevAuthBypass,
@@ -11,14 +10,18 @@ import {
   resolveAllowedModules,
   type AppModuleKey,
 } from "@/features/auth/lib/modules";
-import { readLocalSessionFromCookies } from "@/features/auth/lib/session";
+import {
+  clearLocalSessionCookie,
+  readLocalSessionFromCookies,
+} from "@/features/auth/lib/session";
 import type { AppRole } from "@/types";
 
 export type SessionContext = {
   user: User;
-  organizationId: string;
-  organizationRole: OrganizationRole;
-  role: AppRole;
+  /** null = sin empresa (onboarding / pago). */
+  organizationId: string | null;
+  organizationRole: OrganizationRole | null;
+  role: AppRole | null;
   allowedModules: AppModuleKey[];
 };
 
@@ -44,6 +47,62 @@ async function sessionFromMembership(
   };
 }
 
+function sessionWithoutOrg(user: User): SessionContext {
+  return {
+    user,
+    organizationId: null,
+    organizationRole: null,
+    role: null,
+    allowedModules: ["home"],
+  };
+}
+
+async function touchIdleCheck(
+  userId: string,
+  organizationId: string | null,
+): Promise<boolean> {
+  let idleMinutes = 30;
+  let lastActivityAt: Date | null = null;
+  try {
+    if (organizationId) {
+      const idleRows = await prisma.$queryRaw<
+        Array<{ sessionIdleMinutes: number | null; lastActivityAt: Date | null }>
+      >`
+        SELECT o."sessionIdleMinutes" AS "sessionIdleMinutes", u."lastActivityAt" AS "lastActivityAt"
+        FROM organizations o
+        CROSS JOIN users u
+        WHERE o.id = ${organizationId} AND u.id = ${userId}
+        LIMIT 1
+      `;
+      const row = idleRows[0];
+      if (row) {
+        idleMinutes = Math.min(480, Math.max(5, row.sessionIdleMinutes ?? 30));
+        lastActivityAt = row.lastActivityAt;
+      }
+    } else {
+      const idleRows = await prisma.$queryRaw<
+        Array<{ lastActivityAt: Date | null }>
+      >`
+        SELECT "lastActivityAt" FROM users WHERE id = ${userId} LIMIT 1
+      `;
+      lastActivityAt = idleRows[0]?.lastActivityAt ?? null;
+      idleMinutes = 30;
+    }
+  } catch (error) {
+    console.warn("touchIdleCheck", error);
+    return true;
+  }
+
+  if (lastActivityAt) {
+    const idleMs = idleMinutes * 60_000;
+    if (Date.now() - lastActivityAt.getTime() > idleMs) {
+      await clearLocalSessionCookie();
+      return false;
+    }
+  }
+  return true;
+}
+
 async function getLocalCookieSession(): Promise<SessionContext | null> {
   const local = await readLocalSessionFromCookies();
   if (!local) return null;
@@ -53,6 +112,12 @@ async function getLocalCookieSession(): Promise<SessionContext | null> {
   });
   if (!user) return null;
 
+  if (!local.organizationId) {
+    const ok = await touchIdleCheck(user.id, null);
+    if (!ok) return null;
+    return sessionWithoutOrg(user);
+  }
+
   const membership = await prisma.organizationMember.findUnique({
     where: {
       organizationId_userId: {
@@ -61,7 +126,15 @@ async function getLocalCookieSession(): Promise<SessionContext | null> {
       },
     },
   });
-  if (!membership) return null;
+  if (!membership) {
+    // Membresía perdida: sesión sin org
+    const ok = await touchIdleCheck(user.id, null);
+    if (!ok) return null;
+    return sessionWithoutOrg(user);
+  }
+
+  const ok = await touchIdleCheck(user.id, membership.organizationId);
+  if (!ok) return null;
 
   return sessionFromMembership(
     user,
@@ -82,7 +155,7 @@ async function getDevSession(): Promise<SessionContext | null> {
       where: { userId: user.id },
       orderBy: { createdAt: "asc" },
     });
-    if (!membership) return null;
+    if (!membership) return sessionWithoutOrg(user);
 
     return sessionFromMembership(
       user,
@@ -96,6 +169,7 @@ async function getDevSession(): Promise<SessionContext | null> {
   }
 }
 
+/** Sync Clerk → User. No crea empresa automáticamente (va por onboarding/pago). */
 export async function syncClerkUser(authId: string): Promise<User> {
   const clerkUser = await currentUser();
   const email =
@@ -105,7 +179,7 @@ export async function syncClerkUser(authId: string): Promise<User> {
     clerkUser?.emailAddresses[0]?.emailAddress ??
     `${authId}@users.local`;
 
-  const user = await prisma.user.upsert({
+  return prisma.user.upsert({
     where: { authId },
     create: {
       authId,
@@ -121,32 +195,6 @@ export async function syncClerkUser(authId: string): Promise<User> {
       avatarUrl: clerkUser?.imageUrl ?? null,
     },
   });
-
-  const existingMembership = await prisma.organizationMember.findFirst({
-    where: { userId: user.id },
-  });
-
-  if (!existingMembership) {
-    const org =
-      (await prisma.organization.findUnique({ where: { slug: DEV_ORG_SLUG } })) ??
-      (await prisma.organization.create({
-        data: {
-          name: "Mi Constructora",
-          slug: `org-${user.id.slice(-8)}`,
-        },
-      }));
-
-    await prisma.organizationMember.create({
-      data: {
-        organizationId: org.id,
-        userId: user.id,
-        role: "ADMIN",
-        allowedModules: [],
-      },
-    });
-  }
-
-  return user;
 }
 
 /**
@@ -177,7 +225,7 @@ export async function getSession(): Promise<SessionContext | null> {
       where: { userId: user.id },
       orderBy: { createdAt: "asc" },
     });
-    if (!membership) return null;
+    if (!membership) return sessionWithoutOrg(user);
 
     return sessionFromMembership(
       user,
@@ -191,12 +239,45 @@ export async function getSession(): Promise<SessionContext | null> {
   }
 }
 
-export async function requireSession(): Promise<SessionContext> {
+export async function requireSession(): Promise<
+  SessionContext & {
+    organizationId: string;
+    organizationRole: OrganizationRole;
+    role: AppRole;
+  }
+> {
+  const session = await getSession();
+  if (!session) {
+    throw new Error("UNAUTHORIZED");
+  }
+  if (!session.organizationId || !session.organizationRole || !session.role) {
+    throw new Error("NO_ORGANIZATION");
+  }
+  return session as SessionContext & {
+    organizationId: string;
+    organizationRole: OrganizationRole;
+    role: AppRole;
+  };
+}
+
+/** Sesión autenticada (con o sin empresa). Para onboarding / billing. */
+export async function requireAuthSession(): Promise<SessionContext> {
   const session = await getSession();
   if (!session) {
     throw new Error("UNAUTHORIZED");
   }
   return session;
+}
+
+/** Alias explícito de requireSession (empresa obligatoria). */
+export async function requireOrganizationSession(): Promise<
+  SessionContext & {
+    organizationId: string;
+    organizationRole: OrganizationRole;
+    role: AppRole;
+  }
+> {
+  return requireSession();
 }
 
 export async function getProjectRole(

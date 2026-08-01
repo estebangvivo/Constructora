@@ -10,6 +10,7 @@ export const APP_MODULE_KEYS = [
   "suppliers",
   "settings",
   "users",
+  "admin",
   "manual",
   "turnero",
   "project.overview",
@@ -73,6 +74,12 @@ export const APP_MODULES: AppModuleDef[] = [
     label: "Usuarios y permisos",
     group: "global",
     pathPrefixes: ["/settings/users"],
+  },
+  {
+    key: "admin",
+    label: "Administración",
+    group: "global",
+    pathPrefixes: ["/admin"],
   },
   {
     key: "manual",
@@ -163,7 +170,7 @@ export const APP_MODULES: AppModuleDef[] = [
 /** Defaults por rol cuando allowedModules está vacío. */
 export const ROLE_DEFAULT_MODULES: Record<OrganizationRole, AppModuleKey[]> = {
   ADMIN: [...APP_MODULE_KEYS],
-  DIRECTOR: [...APP_MODULE_KEYS],
+  DIRECTOR: APP_MODULE_KEYS.filter((k) => k !== "admin"),
   RESIDENT: [
     "home",
     "projects",
@@ -232,6 +239,7 @@ export const SIDEBAR_MODULE_BY_HREF: Record<string, AppModuleKey> = {
   "/clients": "clients",
   "/suppliers": "suppliers",
   "/settings": "settings",
+  "/admin": "admin",
   "/manual": "manual",
   "/turnero": "turnero",
 };
@@ -255,6 +263,7 @@ export const PROJECT_MODULE_BY_SUFFIX: Record<string, AppModuleKey> = {
 export function moduleForPathname(pathname: string): AppModuleKey | null {
   if (pathname.startsWith("/settings/users")) return "users";
   if (pathname.startsWith("/settings")) return "settings";
+  if (pathname.startsWith("/admin")) return "admin";
   if (pathname.startsWith("/treasury")) return "treasury";
   if (pathname.startsWith("/clients")) return "clients";
   if (pathname.startsWith("/suppliers")) return "suppliers";

@@ -55,7 +55,27 @@ export async function updateOrganizationProfile(
 ): Promise<ActionResult> {
   try {
     const session = await requireSession();
-    if (!canManage(session.organizationRole)) {
+
+    const targetOrgId =
+      emptyToNull(formData.get("organizationId")) ?? session.organizationId;
+
+    if (targetOrgId !== session.organizationId) {
+      const membership = await prisma.organizationMember.findUnique({
+        where: {
+          organizationId_userId: {
+            organizationId: targetOrgId,
+            userId: session.user.id,
+          },
+        },
+        select: { role: true },
+      });
+      if (!membership || membership.role !== "ADMIN") {
+        return {
+          ok: false,
+          error: "Solo un Admin de esa empresa puede editarla.",
+        };
+      }
+    } else if (!canManage(session.organizationRole)) {
       return {
         ok: false,
         error: "No tienes permiso para editar la constructora.",
@@ -70,7 +90,7 @@ export async function updateOrganizationProfile(
     const logoFile = formData.get("logo");
     let logoUrl: string | undefined;
     if (logoFile instanceof File && logoFile.size > 0) {
-      logoUrl = await saveLogoFile(session.organizationId, logoFile);
+      logoUrl = await saveLogoFile(targetOrgId, logoFile);
     }
 
     const clearLogo = formData.get("clearLogo") === "1";
@@ -104,8 +124,19 @@ export async function updateOrganizationProfile(
       };
     }
 
+    const rawIdle = emptyToNull(formData.get("sessionIdleMinutes"));
+    const sessionIdleMinutes = rawIdle
+      ? Math.min(480, Math.max(5, Math.round(Number(rawIdle))))
+      : 30;
+    if (!Number.isFinite(sessionIdleMinutes)) {
+      return {
+        ok: false,
+        error: "Los minutos de inactividad deben ser un número válido (5–480).",
+      };
+    }
+
     await prisma.organization.update({
-      where: { id: session.organizationId },
+      where: { id: targetOrgId },
       data: {
         name,
         legalName: emptyToNull(formData.get("legalName")),
@@ -131,8 +162,19 @@ export async function updateOrganizationProfile(
       },
     });
 
+    try {
+      await prisma.$executeRaw`
+        UPDATE organizations
+        SET "sessionIdleMinutes" = ${sessionIdleMinutes}
+        WHERE id = ${targetOrgId}
+      `;
+    } catch (error) {
+      console.warn("updateOrganizationProfile sessionIdleMinutes", error);
+    }
+
     revalidatePath("/", "layout");
     revalidatePath("/settings");
+    revalidatePath("/admin");
     revalidatePath("/treasury/checks");
     return { ok: true };
   } catch (error) {

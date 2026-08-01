@@ -6,6 +6,7 @@ import {
   Building2,
   CalendarRange,
   ClipboardList,
+  CreditCard,
   FileDiff,
   FileStack,
   FolderKanban,
@@ -13,9 +14,10 @@ import {
   LayoutDashboard,
   Package,
   Settings,
+  Shield,
   ShoppingCart,
+  Ticket,
   TriangleAlert,
-  Truck,
   Users,
   Wallet,
 } from "lucide-react";
@@ -39,7 +41,7 @@ export type ManualSection = {
 export const MANUAL_INTRO = {
   title: "Manual de uso",
   subtitle:
-    "Guía completa para aprender el sistema desde cero: obras, campo, compras, inventario y tesorería.",
+    "Guía del ERP Buñas: alta y planes SaaS, obras, campo, compras, inventario, tesorería, turnero y administración.",
 };
 
 export const MANUAL_SECTIONS: ManualSection[] = [
@@ -48,16 +50,19 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     title: "1. Primeros pasos",
     icon: LayoutDashboard,
     summary:
-      "Al entrar vas al Inicio. El menú izquierdo (en celular, el botón de menú) concentra lo de la empresa; cada obra tiene su propio menú interno.",
+      "Al entrar vas al Inicio. El menú izquierdo concentra lo de la empresa; abajo ves tu email y Cerrar sesión. Cada obra tiene su propio menú interno.",
     steps: [
-      "Abrí el sistema en el navegador e iniciá sesión (o usá el acceso de desarrollo si te lo configuraron).",
-      "En Inicio vas a ver accesos rápidos según tu rol (Administrador, Dirección, Residente, etc.).",
-      "Usá el menú lateral: Obras, Tesorería, Clientes, Proveedores y Configuración.",
-      "Para trabajar una obra concreta: entrá a Obras y abrí la que corresponda.",
+      "Abrí el sistema e iniciá sesión con email y contraseña (o Google si está habilitado).",
+      "Si tu usuario pertenece a varias empresas, podés cambiar con Cambiar empresa / Empresas en el menú.",
+      "En Inicio ves el resumen y accesos según tu rol y módulos habilitados.",
+      "Usá el menú: Obras, Tesorería, Clientes, Proveedores, Configuración, Administración (si sos Admin), Turnero y Manual.",
+      "Si estás en prueba gratis, un aviso arriba indica los días que quedan y el botón Ver planes.",
+      "Si hay cheques en cartera vencidos o por vencer, verás otro aviso similar con acceso a Cheques.",
     ],
     tips: [
-      "Si no ves un módulo, probablemente tu rol no lo habilita. Pedile a un administrador que revise tu permiso.",
-      "Los montos en ARS y USD no se mezclan: siempre se informan por moneda.",
+      "Si no ves un módulo, tu rol o tus permisos no lo habilitan: pedile a un Admin que revise Usuarios.",
+      "La sesión se cierra sola tras un tiempo sin actividad (configurable por empresa, por defecto 30 minutos).",
+      "ARS y USD no se mezclan: siempre se informan por moneda.",
     ],
     shots: [
       {
@@ -68,8 +73,55 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     ],
   },
   {
+    id: "planes-suscripcion",
+    title: "2. Alta, planes y suscripción",
+    icon: CreditCard,
+    summary:
+      "Empresas nuevas eligen un plan (o prueba gratis). Al vencer el acceso, hay que renovar en Suscripción.",
+    steps: [
+      "Registro: creá tu cuenta en Sign up (email/contraseña o Google si está disponible).",
+      "Si todavía no tenés empresa, el sistema te lleva a elegir plan.",
+      "Prueba 30 días: gratis, sin pago. Creás la empresa y entrás al sistema de inmediato.",
+      "Planes de pago (USD): Unipersonal (1 usuario) 59/mes o 599/año · Equipo (hasta 5) 99/mes o 999/año · Ilimitado 119/mes o 1199/año.",
+      "Pago: Mercado Pago (si está habilitado) o transferencia en USD/ARS con comprobante (queda pendiente de aprobación).",
+      "Durante la prueba no podés dar de alta más usuarios: tenés que contratar un plan.",
+      "Menú Suscripción (/billing): ves estado, plan, vigencia e historial; si venció (o querés pasar de prueba a pago), elegís nivel y periodo.",
+    ],
+    tips: [
+      "La prueba gratis es una sola vez por usuario.",
+      "Empresas internas marcadas como Exentas no pagan ni ven el bloqueo de suscripción.",
+      "El aviso de días de prueba está arriba de la pantalla mientras la prueba esté activa.",
+    ],
+    shots: [],
+  },
+  {
+    id: "usuarios-cupos",
+    title: "3. Usuarios y cupos del plan",
+    icon: Users,
+    summary:
+      "Cada plan limita cuántas personas pueden pertenecer a la empresa. Los Admin/Dirección gestionan altas y permisos.",
+    steps: [
+      "Configuración → Usuarios (o Administración → Alta y permisos).",
+      "Nuevo usuario: email, contraseña (si es nuevo), rol y módulos. Podés asignarlo a varias empresas que administres.",
+      "Roles habituales: Admin, Dirección, Residente, Solo lectura, Proveedor.",
+      "Si el plan Unipersonal o Equipo ya está lleno, el sistema no deja sumar más miembros: hay que mejorar de plan en Suscripción.",
+      "En prueba gratis el botón Nuevo usuario queda bloqueado hasta contratar un plan.",
+    ],
+    tips: [
+      "Vaciar módulos usa los defaults del rol; Admin suele ver todo.",
+      "No te quites el rol Admin si sos el único administrador de la empresa.",
+    ],
+    shots: [
+      {
+        src: "/manual/screenshots/20-configuracion.png",
+        alt: "Configuración y usuarios",
+        caption: "Configuración — también incluye usuarios",
+      },
+    ],
+  },
+  {
     id: "obras",
-    title: "2. Obras (proyectos)",
+    title: "4. Obras (proyectos)",
     icon: FolderKanban,
     summary:
       "Una obra es el centro de todo: presupuesto, partes, compras y documentos viven dentro de ella.",
@@ -78,7 +130,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
       "Para crear: botón Nueva obra → completá código (único), nombre, ciudad y cliente opcional.",
       "Hacé clic en una obra de la lista para abrir su Resumen.",
       "Desde el Resumen usá los accesos rápidos o el menú de la obra (Presupuesto, Parte diario, etc.).",
-      "Eliminar obra (solo Admin/Dirección): en Resumen → Eliminar obra. Solo funciona si la obra no tiene datos cargados (presupuesto, partes, facturas, etc.).",
+      "Eliminar obra (solo Admin/Dirección): en Resumen → Eliminar obra. Solo funciona si la obra no tiene datos cargados.",
     ],
     tips: [
       "El código de obra no se puede repetir en la misma empresa.",
@@ -99,8 +151,8 @@ export const MANUAL_SECTIONS: ManualSection[] = [
   },
   {
     id: "clientes-proveedores",
-    title: "3. Clientes y proveedores (catálogo)",
-    icon: Users,
+    title: "5. Clientes y proveedores (catálogo)",
+    icon: Handshake,
     summary:
       "Primero cargás el catálogo de la empresa; después los vinculás a cada obra.",
     steps: [
@@ -128,7 +180,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
   },
   {
     id: "presupuesto",
-    title: "4. Presupuesto",
+    title: "6. Presupuesto",
     icon: Wallet,
     summary:
       "El presupuesto define las partidas. El avance certificado y los costos/ingresos reales se contrastan contra esas partidas.",
@@ -152,7 +204,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
   },
   {
     id: "certificaciones",
-    title: "5. Certificaciones de avance",
+    title: "7. Certificaciones de avance",
     icon: BadgePercent,
     summary:
       "Documento interno de avance por % de partida (no es factura ARCA). Sirve para documentar lo ejecutado en un período.",
@@ -176,7 +228,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
   },
   {
     id: "odc",
-    title: "6. Órdenes de cambio (ODC)",
+    title: "8. Órdenes de cambio (ODC)",
     icon: FileDiff,
     summary:
       "Registran extras o ajustes contractuales. Al aprobarlas, impactan el presupuesto.",
@@ -196,7 +248,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
   },
   {
     id: "cronograma",
-    title: "7. Cronograma (Gantt)",
+    title: "9. Cronograma (Gantt)",
     icon: CalendarRange,
     summary:
       "Planificá tareas e hitos con fechas y dependencias simples.",
@@ -216,7 +268,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
   },
   {
     id: "parte-diario",
-    title: "8. Parte diario",
+    title: "10. Parte diario",
     icon: ClipboardList,
     summary:
       "Registro de lo que pasó en obra ese día: personal, clima, máquinas, incidencias y notas libres.",
@@ -239,7 +291,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
   },
   {
     id: "punch-list",
-    title: "9. Punch List (observaciones)",
+    title: "11. Punch List (observaciones)",
     icon: TriangleAlert,
     summary:
       "Lista de pendientes / defectos con foto, prioridad, ubicación y responsable.",
@@ -258,7 +310,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
   },
   {
     id: "documentos",
-    title: "10. Documentos",
+    title: "12. Documentos",
     icon: FileStack,
     summary:
       "Repositorio de planos, contratos, especificaciones y demás archivos de la obra, con versiones.",
@@ -277,7 +329,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
   },
   {
     id: "compras",
-    title: "11. Compras (facturas de proveedor)",
+    title: "13. Compras (facturas de proveedor)",
     icon: ShoppingCart,
     summary:
       "Cargá facturas (PDF o foto). El sistema intenta leer datos y líneas; vos confirmás. Al confirmar, ingresa stock al inventario.",
@@ -300,7 +352,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
   },
   {
     id: "inventario",
-    title: "12. Inventario",
+    title: "14. Inventario",
     icon: Package,
     summary:
       "Stock agrupado por categoría. Entra al confirmar facturas; sale al registrar consumo del día.",
@@ -319,15 +371,16 @@ export const MANUAL_SECTIONS: ManualSection[] = [
   },
   {
     id: "tesoreria",
-    title: "13. Tesorería: recibos y órdenes de pago",
+    title: "15. Tesorería: recibos, OP, bancos y cheques",
     icon: Banknote,
     summary:
-      "Recibos = cobros. Órdenes de pago = egresos. Al imputar, impactan ingreso/costo real de partidas si las líneas están asociadas.",
+      "Recibos = cobros. Órdenes de pago = egresos. También bancos, depósitos y cheques (propios y de terceros).",
     steps: [
       "Menú Tesorería → Recibos u Órdenes de pago.",
       "Creá el documento: fecha, cliente/proveedor o nombre libre, medio de pago, moneda y líneas (obra/partida + monto).",
-      "Emitir (pasa a emitido) y luego Imputar (POSTED) para que cuente en el control financiero.",
-      "Si el medio es Efectivo, al imputar debe haber una caja diaria abierta en esa moneda: el movimiento entra/sale de la caja automáticamente.",
+      "Emitir y luego Imputar (POSTED) para que cuente en el control financiero.",
+      "Si el medio es Efectivo, al imputar debe haber una caja diaria abierta en esa moneda.",
+      "Cheques: cargá datos de vencimiento; el aviso superior avisa vencidos / por vencer según los días configurados en la empresa.",
       "Anular revierte el impacto presupuestario y, si era efectivo, el movimiento de caja.",
     ],
     tips: [
@@ -354,7 +407,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
   },
   {
     id: "caja",
-    title: "14. Caja diaria y caja tesorería",
+    title: "16. Caja diaria y caja tesorería",
     icon: Building2,
     summary:
       "Caja diaria operativa del día; al cerrar podés transferir el efectivo a la caja de tesorería (caja fuerte).",
@@ -377,15 +430,35 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     ],
   },
   {
+    id: "turnero",
+    title: "17. Turnero",
+    icon: Ticket,
+    summary:
+      "Gestión de turnos por puesto (operador) y pantalla pública para llamar turnos.",
+    steps: [
+      "Menú Turnero (si tu rol tiene el módulo): puestos, cola y operación del día.",
+      "Operador: tomá / llamá / atendé turnos desde la vista de operador.",
+      "Pantalla pública (/turnero/pantalla): muestra llamados sin login (configurada por empresa).",
+    ],
+    tips: [
+      "Los usuarios pueden tener un puesto de turnero asignado en su ficha.",
+    ],
+    shots: [],
+  },
+  {
     id: "configuracion",
-    title: "15. Configuración de la empresa",
+    title: "18. Configuración de la empresa",
     icon: Settings,
     summary:
-      "Datos de la constructora, logo, tema visual y tipo de cambio (p. ej. BNA USD/ARS).",
+      "Datos de la constructora, logo, tema, monedas, bancos, cotización, usuarios y tiempo de sesión inactiva.",
     steps: [
       "Menú Configuración (Admin/Dirección).",
-      "Actualizá razón social, contacto y logo.",
-      "Revisá monedas y sincronizá o cargá la cotización USD/ARS cuando haga falta.",
+      "Actualizá razón social, contacto, logo y tema visual.",
+      "Revisá monedas habilitadas y cotización USD/ARS (BNA o carga manual).",
+      "Configurá cuentas bancarias si operás tesorería bancaria.",
+      "Aviso de cheques por vencer: cantidad de días de anticipación.",
+      "Minutos sin actividad antes de cerrar sesión (entre 5 y 480).",
+      "Gestioná usuarios y permisos (ver sección 3).",
     ],
     shots: [
       {
@@ -396,23 +469,43 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     ],
   },
   {
+    id: "administracion",
+    title: "19. Administración",
+    icon: Shield,
+    summary:
+      "Panel para Admin de la empresa: usuarios por empresa, altas, perfiles de empresas que administrás y revisión de pagos por transferencia cuando corresponda.",
+    steps: [
+      "Menú Administración (rol Admin).",
+      "Usuarios por empresa: miembros, roles y presencia en línea de las empresas que administrás.",
+      "Alta y permisos: crear/editar usuarios de la empresa activa.",
+      "Empresas: crear una empresa nueva o editar el perfil de las que administrás.",
+      "Pagos: si tu empresa tiene habilitada la revisión de transferencias SaaS, aprobá o rechazá comprobantes pendientes.",
+    ],
+    tips: [
+      "El email del usuario aparece arriba de Cerrar sesión: así confirmás con qué cuenta estás.",
+      "Para trabajar usuarios de otra empresa, cambiá de empresa y volvé a Administración.",
+    ],
+    shots: [],
+  },
+  {
     id: "flujo-recomendado",
-    title: "16. Flujo recomendado del día a día",
+    title: "20. Flujo recomendado del día a día",
     icon: BookOpen,
     summary:
       "Orden sugerido para no trabarte con dependencias entre módulos.",
     steps: [
-      "Una sola vez: Configuración → Clientes y Proveedores → Crear obra → Vincular stakeholders → Cargar presupuesto y aprobarlo.",
+      "Una sola vez: registrarte / plan → Configuración → Clientes y Proveedores → Crear obra → Vincular stakeholders → Cargar presupuesto y aprobarlo.",
       "En obra: Cronograma y Documentos según avance del proyecto.",
       "Cada día de campo: Parte diario + Punch list + Consumo de inventario.",
       "Compras: subir y confirmar facturas (alimenta stock).",
-      "Cobros/pagos: Recibos y OP; si hay efectivo, abrí caja primero.",
+      "Cobros/pagos: Recibos y OP; si hay efectivo, abrí caja primero. Revisá cheques por vencer.",
       "Fin de mes / hitos: Certificaciones y, si hubo extras, Órdenes de cambio.",
       "Cierre de caja diaria → transferencia a tesorería.",
+      "Si estás en prueba: contratá un plan antes de vencer y antes de sumar usuarios.",
     ],
     tips: [
-      "Subcontratas aún está en preparación (pantalla provisional).",
-      "Para practicar sin miedo, usá una obra de prueba vacía: se puede eliminar si no tiene datos.",
+      "Subcontratas aún puede estar en preparación según tu versión.",
+      "Para practicar, usá una obra de prueba vacía: se puede eliminar si no tiene datos.",
     ],
     shots: [],
   },

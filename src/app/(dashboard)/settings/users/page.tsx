@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { listOrganizationUsers, listTurneroPuestosForUsers, listManageableOrganizationsForUsers } from "@/features/auth/actions/user-actions";
 import { UsersAdminPanel } from "@/features/auth/components/users-admin-panel";
 import { hasModule } from "@/features/auth/lib/modules";
+import { organizationIsOnTrial } from "@/features/billing/lib/seats";
 
 export const dynamic = "force-dynamic";
 
@@ -17,10 +18,11 @@ export default async function SettingsUsersPage() {
 
   if (!canManage) redirect("/settings");
 
-  const [users, puestos, organizations] = await Promise.all([
+  const [users, puestos, organizations, trialBlocksNewUsers] = await Promise.all([
     listOrganizationUsers(),
     listTurneroPuestosForUsers(),
     listManageableOrganizationsForUsers(),
+    organizationIsOnTrial(session.organizationId),
   ]);
 
   return (
@@ -37,6 +39,7 @@ export default async function SettingsUsersPage() {
         currentOrganizationId={session.organizationId}
         currentUserId={session.user.id}
         canAssignAdmin={session.organizationRole === "ADMIN"}
+        trialBlocksNewUsers={trialBlocksNewUsers}
       />
     </div>
   );

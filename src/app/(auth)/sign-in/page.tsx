@@ -8,13 +8,19 @@ import { redirect } from "next/navigation";
 export default async function SignInPage() {
   const session = await getSession();
   if (session && !isDevAuthBypass()) {
+    if (!session.organizationId) redirect("/onboarding/planes");
     redirect("/");
   }
 
   if (isClerkConfigured() && !isDevAuthBypass()) {
     return (
       <div className="flex min-h-dvh min-h-screen items-center justify-center bg-background px-4 py-8">
-        <SignIn routing="path" path="/sign-in" signUpUrl="/sign-up" />
+        <SignIn
+          routing="path"
+          path="/sign-in"
+          signUpUrl="/sign-up"
+          forceRedirectUrl="/"
+        />
       </div>
     );
   }
@@ -33,6 +39,12 @@ export default async function SignInPage() {
         <Suspense fallback={<p className="text-sm text-muted-foreground">Cargando…</p>}>
           <LocalLoginForm />
         </Suspense>
+        <p className="text-center text-sm text-muted-foreground">
+          ¿Nuevo?{" "}
+          <a href="/sign-up" className="text-accent hover:underline">
+            Crear cuenta
+          </a>
+        </p>
         {isDevAuthBypass() && (
           <p className="text-center text-xs text-muted-foreground">
             Bypass de desarrollo activo: también podés entrar sin login si ya

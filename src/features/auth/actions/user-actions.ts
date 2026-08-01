@@ -10,6 +10,7 @@ import {
   ROLE_DEFAULT_MODULES,
   type AppModuleKey,
 } from "@/features/auth/lib/modules";
+import { assertOrgCanAddMembers } from "@/features/billing/lib/seats";
 
 export type ActionResult =
   | { ok: true; id?: string }
@@ -268,17 +269,30 @@ export async function createOrganizationUser(input: {
     const modules = sanitizeModules(input.role, input.allowedModules);
     const existing = await prisma.user.findUnique({ where: { email } });
 
+    const alreadyMemberOrgIds = existing
+      ? new Set(
+          (
+            await prisma.organizationMember.findMany({
+              where: {
+                userId: existing.id,
+                organizationId: { in: orgIds },
+              },
+              select: { organizationId: true },
+            })
+          ).map((m) => m.organizationId),
+        )
+      : new Set<string>();
+
+    for (const organizationId of orgIds) {
+      if (alreadyMemberOrgIds.has(organizationId)) continue;
+      const seat = await assertOrgCanAddMembers(organizationId, 1);
+      if (!seat.ok) return seat;
+    }
+
     let userId: string;
 
     if (existing) {
-      const alreadyInAny = await prisma.organizationMember.findMany({
-        where: {
-          userId: existing.id,
-          organizationId: { in: orgIds },
-        },
-        select: { organizationId: true },
-      });
-      if (alreadyInAny.length === orgIds.length) {
+      if (alreadyMemberOrgIds.size === orgIds.length) {
         return {
           ok: false,
           error: "Ese email ya está en todas las empresas seleccionadas.",
@@ -349,6 +363,7 @@ export async function createOrganizationUser(input: {
 
     revalidatePath("/settings");
     revalidatePath("/settings/users");
+    revalidatePath("/admin");
     return { ok: true, id: primaryMembershipId };
   } catch (error) {
     console.error("createOrganizationUser", error);
@@ -446,6 +461,20 @@ export async function updateOrganizationUser(input: {
             "Tenés que dejar marcada la empresa actual (desde la que estás editando).",
         };
       }
+
+      const currentManaged = await prisma.organizationMember.findMany({
+        where: {
+          userId: input.userId,
+          organizationId: { in: [...manageableIds] },
+        },
+        select: { organizationId: true },
+      });
+      const currentSet = new Set(currentManaged.map((m) => m.organizationId));
+      for (const organizationId of desiredOrgIds) {
+        if (currentSet.has(organizationId)) continue;
+        const seat = await assertOrgCanAddMembers(organizationId, 1);
+        if (!seat.ok) return seat;
+      }
     }
 
     await prisma.$transaction(async (tx) => {
@@ -511,6 +540,7 @@ export async function updateOrganizationUser(input: {
 
     revalidatePath("/settings");
     revalidatePath("/settings/users");
+    revalidatePath("/admin");
     revalidatePath("/", "layout");
     return { ok: true, id: input.userId };
   } catch (error) {
@@ -545,6 +575,7 @@ export async function removeOrganizationUser(
 
     await prisma.organizationMember.delete({ where: { id: membership.id } });
     revalidatePath("/settings/users");
+    revalidatePath("/admin");
     return { ok: true, id: userId };
   } catch (error) {
     console.error("removeOrganizationUser", error);

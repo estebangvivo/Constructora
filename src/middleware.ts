@@ -14,6 +14,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/auth/login(.*)",
   "/api/webhooks(.*)",
   "/api/cron(.*)",
+  "/api/billing/mercadopago/webhook(.*)",
   // Única vista de turnero sin login
   "/turnero/pantalla(.*)",
   "/api/turnero/pantalla(.*)",
