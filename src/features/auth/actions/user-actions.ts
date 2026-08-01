@@ -8,7 +8,10 @@ import {
   requireAuthSession,
   type SessionContext,
 } from "@/lib/auth";
-import { hashPassword } from "@/features/auth/lib/password";
+import {
+  hashPassword,
+  validatePasswordStrength,
+} from "@/features/auth/lib/password";
 import {
   APP_MODULE_KEYS,
   ROLE_DEFAULT_MODULES,
@@ -420,12 +423,8 @@ export async function createOrganizationUser(input: {
           error: "La contraseña es obligatoria para un usuario nuevo.",
         };
       }
-      if (password.length < 6) {
-        return {
-          ok: false,
-          error: "La contraseña debe tener al menos 6 caracteres.",
-        };
-      }
+      const strength = validatePasswordStrength(password);
+      if (!strength.ok) return strength;
 
       const user = await prisma.user.create({
         data: {
@@ -531,8 +530,9 @@ export async function updateOrganizationUser(input: {
       }
     }
 
-    if (input.password && input.password.length < 6) {
-      return { ok: false, error: "La contraseña debe tener al menos 6 caracteres." };
+    if (input.password) {
+      const strength = validatePasswordStrength(input.password);
+      if (!strength.ok) return strength;
     }
 
     const puestoResult = await resolveTurneroPuestoId(

@@ -24,6 +24,7 @@ export async function saveAdminMercadoPagoConfig(input: {
   publicKey?: string;
   clearToken?: boolean;
   clearPublicKey?: boolean;
+  surchargePercent?: number;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const session = await requireAuthSession();
@@ -38,17 +39,31 @@ export async function saveAdminMercadoPagoConfig(input: {
       };
     }
 
+    if (
+      input.surchargePercent != null &&
+      (!Number.isFinite(input.surchargePercent) ||
+        input.surchargePercent < 0 ||
+        input.surchargePercent > 100)
+    ) {
+      return {
+        ok: false,
+        error: "El recargo debe ser un porcentaje entre 0 y 100.",
+      };
+    }
+
     await upsertMercadoPagoSettings({
       accessToken: input.clearToken ? null : token || undefined,
       publicKey: input.clearPublicKey ? null : input.publicKey?.trim() || undefined,
       clearToken: Boolean(input.clearToken),
       clearPublicKey: Boolean(input.clearPublicKey),
+      surchargePercent: input.surchargePercent,
       updatedByUserId: session.user.id,
     });
 
     revalidatePath("/admin");
     revalidatePath("/billing");
     revalidatePath("/onboarding/pago");
+    revalidatePath("/onboarding/planes");
     return { ok: true };
   } catch (error) {
     console.error("saveAdminMercadoPagoConfig", error);

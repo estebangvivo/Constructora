@@ -20,6 +20,9 @@ export function AdminMercadoPagoPanel({ config }: AdminMercadoPagoPanelProps) {
   const [pending, startTransition] = useTransition();
   const [accessToken, setAccessToken] = useState("");
   const [publicKey, setPublicKey] = useState("");
+  const [surchargePercent, setSurchargePercent] = useState(
+    String(config.surchargePercent ?? 4),
+  );
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -28,10 +31,12 @@ export function AdminMercadoPagoPanel({ config }: AdminMercadoPagoPanelProps) {
     e.preventDefault();
     setError(null);
     setOk(false);
+    const pct = Number(surchargePercent.replace(",", "."));
     startTransition(async () => {
       const result = await saveAdminMercadoPagoConfig({
         accessToken: accessToken || undefined,
         publicKey: publicKey || undefined,
+        surchargePercent: pct,
       });
       if (!result.ok) {
         setError(result.error);
@@ -163,6 +168,25 @@ export function AdminMercadoPagoPanel({ config }: AdminMercadoPagoPanelProps) {
             }
           />
         </label>
+        <label className="block space-y-1.5">
+          <span className="text-sm font-medium">
+            Recargo Mercado Pago (%)
+          </span>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            step="0.1"
+            required
+            value={surchargePercent}
+            onChange={(e) => setSurchargePercent(e.target.value)}
+            className={fieldClass}
+          />
+          <p className="text-xs text-muted-foreground">
+            Se suma al precio del plan solo si eligen Mercado Pago (ej. 4 =
+            +4%). Transferencia bancaria no tiene este recargo.
+          </p>
+        </label>
 
         {error && (
           <p className="rounded-md border border-red-700/40 bg-red-50 px-3 py-2 text-sm text-red-800">
@@ -178,7 +202,7 @@ export function AdminMercadoPagoPanel({ config }: AdminMercadoPagoPanelProps) {
         <div className="flex flex-wrap gap-2">
           <button
             type="submit"
-            disabled={pending || (!accessToken.trim() && !publicKey.trim())}
+            disabled={pending}
             className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground disabled:opacity-60"
           >
             {pending ? "Guardando…" : "Guardar"}

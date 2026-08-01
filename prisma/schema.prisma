@@ -348,6 +348,19 @@ model PlatformBillingSettings {
   mpAccessToken   String?
   /// Público opcional (Checkout Bricks / SDK). No requerido para preferencias API.
   mpPublicKey     String?
+  /// Recargo % sobre el plan al pagar con Mercado Pago (default 4).
+  mpSurchargePercent Decimal @default(4) @db.Decimal(6, 2)
+  /// Overrides de precios SaaS: { "SOLO_MONTHLY": { "priceUsd": 59 }, "TRIAL": { "priceArs": 1 } }
+  planPrices      Json?
+  /// Datos de transferencia (DB pisa env).
+  transferAccountName   String?
+  transferTaxId         String?
+  transferBankNameArs   String?
+  transferCbuArs        String?
+  transferAliasArs      String?
+  transferBankNameUsd   String?
+  transferAccountUsd    String?
+  transferNotes         String?
   updatedAt       DateTime @updatedAt
   updatedByUserId String?
 

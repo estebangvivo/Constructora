@@ -2,11 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { hashPassword } from "@/features/auth/lib/password";
+import {
+  hashPassword,
+  validatePasswordStrength,
+} from "@/features/auth/lib/password";
 import {
   setLocalSessionCookie,
   signLocalSession,
 } from "@/features/auth/lib/session";
+import { isValidWhatsAppPhone } from "@/features/treasury/lib/share-message";
 
 export type RegisterResult =
   | { ok: true; needsOnboarding: true }
@@ -16,17 +20,35 @@ export type RegisterResult =
 export async function registerWithPassword(input: {
   email: string;
   password: string;
+  confirmPassword?: string;
+  phone: string;
   firstName?: string;
   lastName?: string;
 }): Promise<RegisterResult> {
   try {
     const email = input.email.trim().toLowerCase();
     const password = input.password;
+    const phone = input.phone.trim();
     if (!email || !password) {
       return { ok: false, error: "Completá email y contraseña." };
     }
-    if (password.length < 6) {
-      return { ok: false, error: "La contraseña debe tener al menos 6 caracteres." };
+    const strength = validatePasswordStrength(password);
+    if (!strength.ok) return strength;
+    if (
+      input.confirmPassword != null &&
+      password !== input.confirmPassword
+    ) {
+      return { ok: false, error: "Las contraseñas no coinciden." };
+    }
+    if (!phone) {
+      return { ok: false, error: "Indicá tu teléfono celular." };
+    }
+    if (!isValidWhatsAppPhone(phone)) {
+      return {
+        ok: false,
+        error:
+          "Teléfono inválido. Usá código de área (ej. 11 5555-5555 o +54 9 11 …).",
+      };
     }
 
     const existing = await prisma.user.findUnique({ where: { email } });
@@ -43,6 +65,7 @@ export async function registerWithPassword(input: {
         authId: `local:${email}`,
         email,
         passwordHash,
+        phone,
         firstName: input.firstName?.trim() || null,
         lastName: input.lastName?.trim() || null,
         lastSeenAt: new Date(),

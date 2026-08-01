@@ -9,8 +9,10 @@ import {
   listOrganizationUsers,
   listTurneroPuestosForUsers,
 } from "@/features/auth/actions/user-actions";
-import { listPendingBillingPayments } from "@/features/billing/actions/admin-billing-actions";
+import { listAdminBillingPayments } from "@/features/billing/actions/admin-billing-actions";
 import { getAdminMercadoPagoConfig } from "@/features/billing/actions/admin-mercadopago-actions";
+import { getAdminTransferBankConfig } from "@/features/billing/actions/admin-transfer-actions";
+import { getAdminPlanPrices } from "@/features/billing/actions/admin-plan-prices-actions";
 import { listAllFeatureRequestsForAdmin } from "@/features/feature-requests/actions/feature-request-actions";
 import { AdminPanel } from "@/features/auth/components/admin-panel";
 import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
@@ -55,8 +57,10 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     users,
     puestos,
     currentOrg,
-    pendingPayments,
+    billingPayments,
     mercadoPagoConfig,
+    transferBankConfig,
+    planPrices,
     featureRequests,
   ] = await Promise.all([
     listAdminOrganizationsOverview(),
@@ -73,8 +77,10 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           select: { name: true, billingStatus: true },
         })
       : Promise.resolve(null),
-    listPendingBillingPayments(),
+    listAdminBillingPayments(),
     superadmin ? getAdminMercadoPagoConfig() : Promise.resolve(null),
+    superadmin ? getAdminTransferBankConfig() : Promise.resolve(null),
+    superadmin ? getAdminPlanPrices() : Promise.resolve(null),
     superadmin ? listAllFeatureRequestsForAdmin() : Promise.resolve([]),
   ]);
 
@@ -84,6 +90,8 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     params.tab === "connected" ||
     params.tab === "payments" ||
     params.tab === "mercadopago" ||
+    params.tab === "transferBank" ||
+    params.tab === "planPrices" ||
     params.tab === "requests"
       ? params.tab
       : undefined;
@@ -111,12 +119,14 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           (superadmin ? "Sin empresa" : "Empresa actual")
         }
         currentUserId={session.user.id}
-        pendingPayments={pendingPayments}
+        billingPayments={billingPayments}
         canReviewPayments={
           superadmin || currentOrg?.billingStatus === "EXEMPT"
         }
         isPlatformSuperadmin={superadmin}
         mercadoPagoConfig={mercadoPagoConfig}
+        transferBankConfig={transferBankConfig}
+        planPrices={planPrices}
         featureRequests={featureRequests}
         initialTab={initialTab}
       />

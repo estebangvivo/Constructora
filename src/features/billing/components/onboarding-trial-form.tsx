@@ -1,10 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import {
-  BILLING_PLANS,
-  formatPlanPriceLabel,
-} from "@/features/billing/lib/plans";
+import { BILLING_PLANS } from "@/features/billing/lib/plans";
 import { createMercadoPagoSignupIntent } from "@/features/billing/actions/billing-actions";
 
 const fieldClass =
@@ -12,12 +9,13 @@ const fieldClass =
 
 export function OnboardingTrialForm({
   mpConfigured,
+  priceLabel,
 }: {
   mpConfigured: boolean;
+  priceLabel: string;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const priceLabel = formatPlanPriceLabel("TRIAL");
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();

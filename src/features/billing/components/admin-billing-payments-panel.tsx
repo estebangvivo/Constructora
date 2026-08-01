@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   approveBillingPayment,
@@ -8,32 +8,189 @@ import {
 } from "@/features/billing/actions/admin-billing-actions";
 import { formatDateTimeAR } from "@/lib/format-date";
 
-type PendingPayment = {
+type BillingPaymentRow = {
   id: string;
   plan: string;
   method: string;
   currency: string;
   amount: number;
+  amountUsd: number | null;
+  amountArs: number | null;
   fxRateUsed: number | null;
   companyName: string | null;
   organizationName: string | null;
   transferProofUrl: string | null;
   notes: string | null;
+  status: string;
+  mpPaymentId: string | null;
   createdAt: string;
   userEmail: string;
+  userPhone: string | null;
   userName: string;
 };
 
+function formatMoney(currency: string, value: number) {
+  return `${currency} ${value.toLocaleString("es-AR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function AmountCell({ p }: { p: BillingPaymentRow }) {
+  const primary =
+    p.currency === "ARS"
+      ? p.amountArs != null
+        ? formatMoney("ARS", p.amountArs)
+        : formatMoney("ARS", p.amount)
+      : p.amountUsd != null
+        ? formatMoney("USD", p.amountUsd)
+        : formatMoney(p.currency, p.amount);
+
+  const secondary =
+    p.currency === "ARS"
+      ? p.amountUsd != null
+        ? formatMoney("USD", p.amountUsd)
+        : null
+      : p.amountArs != null
+        ? formatMoney("ARS", p.amountArs)
+        : null;
+
+  return (
+    <div>
+      <p className="font-medium">{primary}</p>
+      {secondary && (
+        <p className="text-xs text-muted-foreground">{secondary}</p>
+      )}
+    </div>
+  );
+}
+
+function companyLabel(p: BillingPaymentRow) {
+  return (p.companyName || p.organizationName || "").trim();
+}
+
+function parseAmount(raw: string): number | null {
+  const t = raw.trim().replace(",", ".");
+  if (!t) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+function matchesFilters(
+  p: BillingPaymentRow,
+  filters: {
+    company: string;
+    user: string;
+    amountMin: string;
+    amountMax: string;
+    amountCurrency: "ANY" | "ARS" | "USD";
+  },
+) {
+  const companyQ = filters.company.trim().toLowerCase();
+  if (companyQ) {
+    const hay = companyLabel(p).toLowerCase();
+    if (!hay.includes(companyQ)) return false;
+  }
+
+  const userQ = filters.user.trim().toLowerCase();
+  if (userQ) {
+    const hay = `${p.userName} ${p.userEmail} ${p.userPhone ?? ""}`.toLowerCase();
+    if (!hay.includes(userQ)) return false;
+  }
+
+  const min = parseAmount(filters.amountMin);
+  const max = parseAmount(filters.amountMax);
+  if (min != null || max != null) {
+    const value =
+      filters.amountCurrency === "ARS"
+        ? p.amountArs
+        : filters.amountCurrency === "USD"
+          ? p.amountUsd
+          : p.currency === "ARS"
+            ? p.amountArs ?? p.amount
+            : p.amountUsd ?? p.amount;
+
+    if (value == null) return false;
+    if (min != null && value < min) return false;
+    if (max != null && value > max) return false;
+  }
+
+  return true;
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  PENDING: "Pendiente",
+  APPROVED: "Aprobado",
+  REJECTED: "Rechazado",
+};
+
+const METHOD_LABEL: Record<string, string> = {
+  TRANSFER: "Transferencia",
+  MERCADOPAGO: "Mercado Pago",
+};
+
+const fieldClass =
+  "w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none ring-accent focus:ring-2";
+
 export function AdminBillingPaymentsPanel({
-  payments,
+  pendingTransfers,
+  recent,
 }: {
-  payments: PendingPayment[];
+  pendingTransfers: BillingPaymentRow[];
+  recent: BillingPaymentRow[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [company, setCompany] = useState("");
+  const [user, setUser] = useState("");
+  const [amountMin, setAmountMin] = useState("");
+  const [amountMax, setAmountMax] = useState("");
+  const [amountCurrency, setAmountCurrency] = useState<"ANY" | "ARS" | "USD">(
+    "ANY",
+  );
+
+  const filters = {
+    company,
+    user,
+    amountMin,
+    amountMax,
+    amountCurrency,
+  };
+
+  const filteredPending = useMemo(
+    () => pendingTransfers.filter((p) => matchesFilters(p, filters)),
+    [pendingTransfers, company, user, amountMin, amountMax, amountCurrency],
+  );
+
+  const filteredRecent = useMemo(
+    () => recent.filter((p) => matchesFilters(p, filters)),
+    [recent, company, user, amountMin, amountMax, amountCurrency],
+  );
+
+  const hasActiveFilters = Boolean(
+    company.trim() ||
+      user.trim() ||
+      amountMin.trim() ||
+      amountMax.trim() ||
+      amountCurrency !== "ANY",
+  );
+
+  function clearFilters() {
+    setCompany("");
+    setUser("");
+    setAmountMin("");
+    setAmountMax("");
+    setAmountCurrency("ANY");
+  }
 
   function run(
-    action: () => Promise<{ ok: boolean; error?: string }>,
+    action: () => Promise<{
+      ok: boolean;
+      error?: string;
+      notifyWarning?: string;
+      notifiedWhatsapp?: boolean;
+      notifiedEmail?: boolean;
+    }>,
   ) {
     startTransition(async () => {
       const result = await action();
@@ -41,87 +198,316 @@ export function AdminBillingPaymentsPanel({
         window.alert(result.error ?? "Error");
         return;
       }
+      if (result.notifyWarning) {
+        window.alert(result.notifyWarning);
+      } else if (result.notifiedWhatsapp || result.notifiedEmail) {
+        const via = [
+          result.notifiedWhatsapp ? "WhatsApp" : null,
+          result.notifiedEmail ? "email" : null,
+        ]
+          .filter(Boolean)
+          .join(" y ");
+        window.alert(`Listo. Se intentó avisar al usuario por ${via}.`);
+      }
       router.refresh();
     });
   }
 
-  if (payments.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        No hay transferencias pendientes de revisión.
-      </p>
-    );
-  }
-
   return (
-    <ul className="space-y-4">
-      {payments.map((p) => (
-        <li
-          key={p.id}
-          className="rounded-lg border border-border p-4 text-sm"
-        >
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="font-medium">
-                {p.companyName || p.organizationName || "Renovación"} · {p.plan}
-              </p>
-              <p className="text-muted-foreground">
-                {p.userName} ({p.userEmail}) · {p.currency}{" "}
-                {p.amount.toLocaleString("es-AR")}
-                {p.fxRateUsed ? ` · TC ${p.fxRateUsed}` : ""}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {formatDateTimeAR(p.createdAt)}
-              </p>
-              {p.notes && (
-                <p className="mt-1 text-muted-foreground">{p.notes}</p>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => run(() => approveBillingPayment(p.id))}
-                className="rounded-md bg-accent px-3 py-1.5 text-accent-foreground"
-              >
-                Aprobar
-              </button>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => {
-                  const reason = window.prompt("Motivo del rechazo (opcional)") ?? "";
-                  run(() => rejectBillingPayment(p.id, reason));
-                }}
-                className="rounded-md border border-border px-3 py-1.5"
-              >
-                Rechazar
-              </button>
-            </div>
+    <div className="space-y-8">
+      <section className="space-y-3 rounded-lg border border-border bg-surface/30 p-4">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h3 className="font-medium">Filtros</h3>
+            <p className="text-sm text-muted-foreground">
+              Empresa, usuario y rango de monto (USD o ARS).
+            </p>
           </div>
-          {p.transferProofUrl && (
-            <div className="mt-3">
-              {p.transferProofUrl.startsWith("data:application/pdf") ? (
-                <a
-                  href={p.transferProofUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-accent hover:underline"
-                >
-                  Ver PDF del comprobante
-                </a>
-              ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={p.transferProofUrl}
-                  alt="Comprobante"
-                  className="max-h-64 rounded-md border border-border object-contain"
-                />
-              )}
-            </div>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="text-sm text-accent hover:underline"
+            >
+              Limpiar filtros
+            </button>
           )}
-        </li>
-      ))}
-    </ul>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <label className="block text-sm sm:col-span-1 lg:col-span-1">
+            <span className="mb-1 block text-muted-foreground">Empresa</span>
+            <input
+              value={company}
+              onChange={(e) => setCompany(e.target.value)}
+              placeholder="Nombre o razón social"
+              className={fieldClass}
+            />
+          </label>
+          <label className="block text-sm sm:col-span-1 lg:col-span-1">
+            <span className="mb-1 block text-muted-foreground">Usuario</span>
+            <input
+              value={user}
+              onChange={(e) => setUser(e.target.value)}
+              placeholder="Nombre o email"
+              className={fieldClass}
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-muted-foreground">Moneda</span>
+            <select
+              value={amountCurrency}
+              onChange={(e) =>
+                setAmountCurrency(e.target.value as "ANY" | "ARS" | "USD")
+              }
+              className={fieldClass}
+            >
+              <option value="ANY">Del cobro</option>
+              <option value="ARS">ARS</option>
+              <option value="USD">USD</option>
+            </select>
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-muted-foreground">Monto desde</span>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={amountMin}
+              onChange={(e) => setAmountMin(e.target.value)}
+              placeholder="0"
+              className={fieldClass}
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-muted-foreground">Monto hasta</span>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={amountMax}
+              onChange={(e) => setAmountMax(e.target.value)}
+              placeholder="Sin tope"
+              className={fieldClass}
+            />
+          </label>
+        </div>
+        {hasActiveFilters && (
+          <p className="text-xs text-muted-foreground">
+            Mostrando {filteredPending.length} transferencia
+            {filteredPending.length === 1 ? "" : "s"} pendiente
+            {filteredPending.length === 1 ? "" : "s"} · {filteredRecent.length}{" "}
+            en historial
+            {filteredRecent.length === 1 ? "" : "es"}
+          </p>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <div>
+          <h3 className="font-medium">Transferencias pendientes</h3>
+          <p className="text-sm text-muted-foreground">
+            Comprobantes a revisar para activar o renovar empresas.
+          </p>
+        </div>
+        {pendingTransfers.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No hay transferencias pendientes de revisión.
+          </p>
+        ) : filteredPending.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Ninguna transferencia pendiente coincide con los filtros.
+          </p>
+        ) : (
+          <ul className="space-y-4">
+            {filteredPending.map((p) => (
+              <li
+                key={p.id}
+                className="rounded-lg border border-border p-4 text-sm"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium">
+                      {p.companyName || p.organizationName || "Renovación"} ·{" "}
+                      {p.plan}
+                    </p>
+                    <div className="text-muted-foreground">
+                      <p>
+                        {p.userName} ({p.userEmail})
+                      </p>
+                      {p.userPhone ? (
+                        <p className="text-xs">Cel: {p.userPhone}</p>
+                      ) : (
+                        <p className="text-xs text-amber-800">
+                          Sin teléfono — no se podrá avisar por WhatsApp
+                        </p>
+                      )}
+                      <AmountCell p={p} />
+                      {p.fxRateUsed ? (
+                        <p className="text-xs">TC {p.fxRateUsed}</p>
+                      ) : null}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDateTimeAR(p.createdAt)}
+                    </p>
+                    {p.notes && (
+                      <p className="mt-1 text-muted-foreground">{p.notes}</p>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => run(() => approveBillingPayment(p.id))}
+                      className="rounded-md bg-accent px-3 py-1.5 text-accent-foreground"
+                    >
+                      Aprobar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => {
+                        const reason = window.prompt(
+                          "Motivo del rechazo (obligatorio, se envía al usuario)",
+                        );
+                        if (reason == null) return;
+                        if (!reason.trim()) {
+                          window.alert("Tenés que indicar el motivo.");
+                          return;
+                        }
+                        run(() => rejectBillingPayment(p.id, reason.trim()));
+                      }}
+                      className="rounded-md border border-border px-3 py-1.5"
+                    >
+                      Rechazar
+                    </button>
+                  </div>
+                </div>
+                {p.transferProofUrl && (
+                  <div className="mt-3">
+                    {p.transferProofUrl.startsWith("data:application/pdf") ? (
+                      <a
+                        href={p.transferProofUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-accent hover:underline"
+                      >
+                        Ver PDF del comprobante
+                      </a>
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={p.transferProofUrl}
+                        alt="Comprobante"
+                        className="max-h-64 rounded-md border border-border object-contain"
+                      />
+                    )}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <div>
+          <h3 className="font-medium">Historial reciente</h3>
+          <p className="text-sm text-muted-foreground">
+            Incluye Mercado Pago (aprobación automática) y transferencias.
+          </p>
+        </div>
+        {recent.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Todavía no hay pagos registrados.
+          </p>
+        ) : filteredRecent.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Ningún pago del historial coincide con los filtros.
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="border-b border-border bg-surface/50 text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Fecha</th>
+                  <th className="px-3 py-2 font-medium">Empresa / plan</th>
+                  <th className="px-3 py-2 font-medium">Usuario</th>
+                  <th className="px-3 py-2 font-medium">Método</th>
+                  <th className="px-3 py-2 font-medium">Monto</th>
+                  <th className="px-3 py-2 font-medium">Estado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filteredRecent.map((p) => (
+                  <tr key={p.id}>
+                    <td className="px-3 py-2.5 text-muted-foreground">
+                      {formatDateTimeAR(p.createdAt)}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <p className="font-medium">
+                        {p.companyName || p.organizationName || "—"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{p.plan}</p>
+                      {p.mpPaymentId && (
+                        <p className="text-xs text-muted-foreground">
+                          MP #{p.mpPaymentId}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <p>{p.userName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {p.userEmail}
+                      </p>
+                      {p.userPhone ? (
+                        <a
+                          href={`tel:${p.userPhone.replace(/\s+/g, "")}`}
+                          className="text-xs text-accent hover:underline"
+                        >
+                          {p.userPhone}
+                        </a>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Sin tel.</p>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      {METHOD_LABEL[p.method] ?? p.method}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <AmountCell p={p} />
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span
+                        className={
+                          p.status === "APPROVED"
+                            ? "text-emerald-700"
+                            : p.status === "REJECTED"
+                              ? "text-danger"
+                              : "text-amber-800"
+                        }
+                      >
+                        {STATUS_LABEL[p.status] ?? p.status}
+                      </span>
+                      {p.method === "MERCADOPAGO" && p.status === "PENDING" && (
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={() =>
+                            run(() => approveBillingPayment(p.id))
+                          }
+                          className="ml-2 text-xs text-accent underline"
+                        >
+                          Activar
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </div>
   );
 }

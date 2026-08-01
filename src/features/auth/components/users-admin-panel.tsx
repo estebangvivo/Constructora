@@ -516,13 +516,18 @@ function UserForm({
             className={fieldClass}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            minLength={password ? 6 : undefined}
+            minLength={password ? 8 : undefined}
             placeholder={
               mode === "edit"
                 ? "Dejar vacío para no cambiar"
                 : "Si el email ya existe en otra empresa, se invita sin cambiar su clave"
             }
           />
+          {password ? (
+            <span className="mt-1 block text-xs text-muted-foreground">
+              Mín. 8 caracteres, mayúscula, número y carácter especial.
+            </span>
+          ) : null}
         </label>
         {mode === "edit" && (
           <label className="flex items-center gap-2 text-sm sm:col-span-2">

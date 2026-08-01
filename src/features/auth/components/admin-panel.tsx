@@ -11,6 +11,8 @@ import {
   Banknote,
   CreditCard,
   Lightbulb,
+  DollarSign,
+  Landmark,
 } from "lucide-react";
 import type {
   AdminOrganizationOverview,
@@ -24,7 +26,13 @@ import { createOrganization } from "@/features/auth/actions/organization-actions
 import { normalizeOrgSlug } from "@/features/auth/lib/org-slug";
 import { AdminBillingPaymentsPanel } from "@/features/billing/components/admin-billing-payments-panel";
 import { AdminMercadoPagoPanel } from "@/features/billing/components/admin-mercadopago-panel";
-import type { MercadoPagoConfigPublic } from "@/features/billing/lib/platform-billing-settings";
+import { AdminPlanPricesPanel } from "@/features/billing/components/admin-plan-prices-panel";
+import { AdminTransferBankPanel } from "@/features/billing/components/admin-transfer-bank-panel";
+import type { AdminPlanPriceRow } from "@/features/billing/actions/admin-plan-prices-actions";
+import type {
+  MercadoPagoConfigPublic,
+  TransferBankDetails,
+} from "@/features/billing/lib/platform-billing-settings";
 import {
   AdminSuperadminOrgsPanel,
   OrgBillingBadge,
@@ -56,6 +64,8 @@ type TabId =
   | "companies"
   | "payments"
   | "mercadopago"
+  | "transferBank"
+  | "planPrices"
   | "requests";
 
 const ROLE_LABEL: Record<OrganizationRole, string> = {
@@ -90,12 +100,17 @@ type AdminPanelProps = {
   currentOrganizationId: string;
   currentOrganizationName: string;
   currentUserId: string;
-  pendingPayments: React.ComponentProps<
-    typeof AdminBillingPaymentsPanel
-  >["payments"];
+  billingPayments: {
+    pendingTransfers: React.ComponentProps<
+      typeof AdminBillingPaymentsPanel
+    >["pendingTransfers"];
+    recent: React.ComponentProps<typeof AdminBillingPaymentsPanel>["recent"];
+  };
   canReviewPayments: boolean;
   isPlatformSuperadmin?: boolean;
   mercadoPagoConfig?: MercadoPagoConfigPublic | null;
+  transferBankConfig?: TransferBankDetails | null;
+  planPrices?: AdminPlanPriceRow[] | null;
   featureRequests?: Array<
     FeatureRequestListItem & {
       organizationName: string;
@@ -115,10 +130,12 @@ export function AdminPanel({
   currentOrganizationId,
   currentOrganizationName: _currentOrganizationName,
   currentUserId,
-  pendingPayments,
+  billingPayments,
   canReviewPayments,
   isPlatformSuperadmin = false,
   mercadoPagoConfig = null,
+  transferBankConfig = null,
+  planPrices = null,
   featureRequests = [],
   initialTab,
 }: AdminPanelProps) {
@@ -181,6 +198,16 @@ export function AdminPanel({
                 ? `Mejoras (${featureRequests.length})`
                 : "Mejoras",
             icon: Lightbulb,
+          },
+          {
+            id: "planPrices" as const,
+            label: "Precios",
+            icon: DollarSign,
+          },
+          {
+            id: "transferBank" as const,
+            label: "Transferencia",
+            icon: Landmark,
           },
           {
             id: "mercadopago" as const,
@@ -510,20 +537,34 @@ export function AdminPanel({
       {tab === "payments" && canReviewPayments && (
         <section className="space-y-4">
           <div>
-            <h2 className="font-display text-xl tracking-tight">
-              Pagos por transferencia
-            </h2>
+            <h2 className="font-display text-xl tracking-tight">Pagos</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Aprobá comprobantes para activar o renovar empresas.
+              Transferencias a revisar e historial de Mercado Pago y
+              transferencias.
             </p>
           </div>
-          <AdminBillingPaymentsPanel payments={pendingPayments} />
+          <AdminBillingPaymentsPanel
+            pendingTransfers={billingPayments.pendingTransfers}
+            recent={billingPayments.recent}
+          />
         </section>
       )}
 
       {tab === "requests" && isPlatformSuperadmin && (
         <section>
           <AdminFeatureRequestsPanel requests={featureRequests} />
+        </section>
+      )}
+
+      {tab === "planPrices" && isPlatformSuperadmin && planPrices && (
+        <section>
+          <AdminPlanPricesPanel initialRows={planPrices} />
+        </section>
+      )}
+
+      {tab === "transferBank" && isPlatformSuperadmin && transferBankConfig && (
+        <section>
+          <AdminTransferBankPanel initial={transferBankConfig} />
         </section>
       )}
 

@@ -23,7 +23,9 @@
     "db:studio": "prisma studio",
     "fx:sync-bna": "tsx scripts/sync-bna-rate.ts",
     "manual:screenshots": "node scripts/capture-manual-screenshots.mjs",
-    "manual:pdf": "node scripts/export-manual-pdf.mjs"
+    "manual:pdf": "node scripts/export-manual-pdf.mjs",
+    "test:smoke": "tsx scripts/smoke-system-test.ts",
+    "test:smoke:ui": "node scripts/smoke-ui-playwright.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

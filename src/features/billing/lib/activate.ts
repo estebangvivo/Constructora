@@ -13,12 +13,12 @@ export async function activateBillingPayment(
   paymentId: string,
   opts?: { approvedById?: string; mpPaymentId?: string },
 ) {
-  return prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     const payment = await tx.billingPayment.findUnique({
       where: { id: paymentId },
     });
     if (!payment) throw new Error("Pago no encontrado");
-    if (payment.status === "APPROVED") return payment;
+    if (payment.status === "APPROVED") return { payment, freshlyApproved: false };
     if (payment.status === "REJECTED") {
       throw new Error("El pago fue rechazado");
     }
@@ -62,7 +62,7 @@ export async function activateBillingPayment(
       });
       organizationId = org.id;
 
-      return tx.billingPayment.update({
+      const approved = await tx.billingPayment.update({
         where: { id: payment.id },
         data: {
           status: "APPROVED",
@@ -73,6 +73,7 @@ export async function activateBillingPayment(
           periodEnd,
         },
       });
+      return { payment: approved, freshlyApproved: true };
     }
 
     const org = await tx.organization.findUnique({
@@ -95,7 +96,7 @@ export async function activateBillingPayment(
       },
     });
 
-    return tx.billingPayment.update({
+    const approved = await tx.billingPayment.update({
       where: { id: payment.id },
       data: {
         status: "APPROVED",
@@ -105,7 +106,27 @@ export async function activateBillingPayment(
         periodEnd,
       },
     });
+    return { payment: approved, freshlyApproved: true };
   });
+
+  if (updated.freshlyApproved) {
+    const { notifyBillingPaymentDecision } = await import(
+      "@/features/billing/lib/notify-payment-decision"
+    );
+    // await: en Server Actions / route handlers un void se corta al responder
+    const notified = await notifyBillingPaymentDecision({
+      paymentId: updated.payment.id,
+      decision: "APPROVED",
+    });
+    if (!notified.whatsapp && !notified.email) {
+      console.warn(
+        "activateBillingPayment: aprobado pero no se pudo notificar",
+        { paymentId: updated.payment.id, ...notified },
+      );
+    }
+  }
+
+  return updated.payment;
 }
 
 export async function markOrganizationPastDueIfNeeded(

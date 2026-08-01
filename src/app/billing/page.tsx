@@ -6,16 +6,21 @@ import { logoutLocal } from "@/features/auth/actions/auth-actions";
 import { getMyBillingContext } from "@/features/billing/actions/billing-actions";
 import { getBillingUsdArsRate } from "@/features/billing/lib/fx";
 import {
-  getTransferBankDetails,
+  getMpSurchargePercent,
+  getTransferBankDetailsEffective,
   isMercadoPagoConfigured,
-} from "@/features/billing/lib/transfer-config";
+} from "@/features/billing/lib/platform-billing-settings";
 import { BillingRenewalPanel } from "@/features/billing/components/billing-renewal-panel";
+import { MercadoPagoReturnSync } from "@/features/billing/components/mercadopago-return-sync";
 import { organizationHasAppAccess } from "@/features/billing/lib/access";
 import {
   BILLING_PLANS,
   formatPlanUsersLabel,
   normalizeBillingPlanId,
+  type PaidBillingPlanId,
+  PAID_BILLING_PLANS,
 } from "@/features/billing/lib/plans";
+import { getEffectivePlanPrices } from "@/features/billing/lib/effective-plans";
 import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
 import { formatDateAR } from "@/lib/format-date";
 
@@ -24,7 +29,14 @@ export const dynamic = "force-dynamic";
 export default async function BillingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mp?: string }>;
+  searchParams: Promise<{
+    mp?: string;
+    payment_id?: string;
+    collection_id?: string;
+    external_reference?: string;
+    status?: string;
+    preference_id?: string;
+  }>;
 }) {
   const session = await getSession();
   if (!session) redirect("/sign-in");
@@ -32,12 +44,30 @@ export default async function BillingPage({
 
   const superadmin = isPlatformSuperadmin(session);
   const sp = await searchParams;
-  const [{ organization, payments }, usdArsRate, mpConfigured] =
-    await Promise.all([
-      getMyBillingContext(),
-      getBillingUsdArsRate(),
-      isMercadoPagoConfigured(),
-    ]);
+  const mpReturn =
+    sp.mp === "success" || Boolean(sp.payment_id || sp.collection_id);
+  const [
+    { organization, payments },
+    usdArsRate,
+    mpConfigured,
+    planPrices,
+    bank,
+    mpSurchargePercent,
+  ] = await Promise.all([
+    getMyBillingContext(),
+    getBillingUsdArsRate(),
+    isMercadoPagoConfigured(),
+    getEffectivePlanPrices(),
+    getTransferBankDetailsEffective(),
+    getMpSurchargePercent(),
+  ]);
+
+  const priceUsdByPlan = Object.fromEntries(
+    (Object.keys(PAID_BILLING_PLANS) as PaidBillingPlanId[]).map((id) => [
+      id,
+      planPrices[id].priceUsd,
+    ]),
+  ) as Partial<Record<PaidBillingPlanId, number>>;
 
   const hasAccess =
     superadmin ||
@@ -100,11 +130,21 @@ export default async function BillingPage({
               sistema.
             </p>
           )}
-          {sp.mp === "success" && (
-            <p className="mt-3 rounded-md border border-emerald-700/30 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-              Pago recibido. Si no ves el acceso activo aún, esperá unos segundos
-              y recargá.
-            </p>
+          {mpReturn && (
+            <div className="mt-3 space-y-2">
+              <MercadoPagoReturnSync
+                paymentId={sp.payment_id}
+                collectionId={sp.collection_id}
+                externalReference={sp.external_reference}
+                status={sp.status}
+                preferenceId={sp.preference_id}
+                successHref="/billing"
+              />
+              <p className="rounded-md border border-emerald-700/30 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+                Pago recibido. Si no ves el acceso activo aún, esperá unos
+                segundos y recargá.
+              </p>
+            </div>
           )}
         </div>
 
@@ -139,8 +179,10 @@ export default async function BillingPage({
             )}
             <BillingRenewalPanel
               usdArsRate={usdArsRate}
-              bank={getTransferBankDetails()}
+              bank={bank}
               mpConfigured={mpConfigured}
+              priceUsdByPlan={priceUsdByPlan}
+              mpSurchargePercent={mpSurchargePercent}
             />
           </>
         ) : null}

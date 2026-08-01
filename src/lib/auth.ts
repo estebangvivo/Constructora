@@ -217,11 +217,17 @@ export async function syncClerkUser(authId: string): Promise<User> {
     clerkUser?.emailAddresses[0]?.emailAddress ??
     `${authId}@users.local`;
 
+  const clerkPhone =
+    clerkUser?.primaryPhoneNumber?.phoneNumber ??
+    clerkUser?.phoneNumbers?.[0]?.phoneNumber ??
+    null;
+
   return prisma.user.upsert({
     where: { authId },
     create: {
       authId,
       email,
+      phone: clerkPhone,
       firstName: clerkUser?.firstName ?? null,
       lastName: clerkUser?.lastName ?? null,
       avatarUrl: clerkUser?.imageUrl ?? null,
@@ -231,6 +237,7 @@ export async function syncClerkUser(authId: string): Promise<User> {
       firstName: clerkUser?.firstName ?? null,
       lastName: clerkUser?.lastName ?? null,
       avatarUrl: clerkUser?.imageUrl ?? null,
+      ...(clerkPhone ? { phone: clerkPhone } : {}),
     },
   });
 }

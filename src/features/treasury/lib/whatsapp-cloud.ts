@@ -7,6 +7,77 @@ export function isWhatsAppCloudConfigured(): boolean {
   );
 }
 
+/**
+ * Mensaje de texto por WhatsApp Cloud API.
+ * Fuera de la ventana de 24 h Meta puede exigir una plantilla aprobada.
+ */
+export async function sendWhatsAppTextMessage(input: {
+  toPhone: string;
+  body: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const token = process.env.WHATSAPP_ACCESS_TOKEN?.trim();
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
+  if (!token || !phoneNumberId) {
+    return {
+      ok: false,
+      error:
+        "WhatsApp Business API no está configurada (WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID).",
+    };
+  }
+
+  const to = normalizeWhatsAppPhone(input.toPhone);
+  if (!to || to.length < 10) {
+    return { ok: false, error: "Indicá un teléfono válido con código de área." };
+  }
+
+  const body = input.body.trim().slice(0, 4096);
+  if (!body) {
+    return { ok: false, error: "El mensaje está vacío." };
+  }
+
+  const version = apiVersion();
+  try {
+    const sendRes = await fetch(
+      `https://graph.facebook.com/${version}/${phoneNumberId}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to,
+          type: "text",
+          text: { preview_url: false, body },
+        }),
+      },
+    );
+    const sendJson = (await sendRes.json().catch(() => null)) as {
+      error?: { message?: string; error_data?: { details?: string } };
+    } | null;
+
+    if (!sendRes.ok) {
+      const detail =
+        sendJson?.error?.error_data?.details ||
+        sendJson?.error?.message ||
+        `WhatsApp rechazó el envío (${sendRes.status}).`;
+      return { ok: false, error: detail };
+    }
+    return { ok: true };
+  } catch (error) {
+    console.error("sendWhatsAppTextMessage", error);
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Error al enviar el mensaje de WhatsApp.",
+    };
+  }
+}
+
 function apiVersion() {
   return process.env.WHATSAPP_API_VERSION?.trim() || "v21.0";
 }

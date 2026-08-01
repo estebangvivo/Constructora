@@ -1,9 +1,9 @@
 import {
   BILLING_PLANS,
-  planCheckoutCharge,
   planIsMonthlyCycle,
   type BillingPlanId,
 } from "@/features/billing/lib/plans";
+import { planMercadoPagoChargeEffective } from "@/features/billing/lib/effective-plans";
 import {
   getMercadoPagoAccessToken,
   isMercadoPagoConfigured,
@@ -54,7 +54,7 @@ export async function createMercadoPagoCheckout(input: {
 
   const token = await mpToken();
   const base = appBaseUrl();
-  const charge = planCheckoutCharge(input.plan);
+  const charge = await planMercadoPagoChargeEffective(input.plan);
   const plan = BILLING_PLANS[input.plan];
   const successUrl = input.successUrl ?? `${base}/billing?mp=success`;
   const failureUrl = input.failureUrl ?? `${base}/onboarding/pago?mp=failure`;

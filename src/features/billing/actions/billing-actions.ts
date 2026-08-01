@@ -7,16 +7,19 @@ import { normalizeOrgSlug } from "@/features/auth/lib/org-slug";
 import {
   BILLING_PLANS,
   isPaidBillingPlan,
-  planPriceUsd,
-  planCheckoutCharge,
   addBillingPeriod,
   type PaidBillingPlanId,
   type BillingPlanId,
   normalizeBillingPlanId,
 } from "@/features/billing/lib/plans";
+import {
+  planCheckoutChargeEffective,
+  planMercadoPagoChargeEffective,
+} from "@/features/billing/lib/effective-plans";
 import { getBillingUsdArsRate } from "@/features/billing/lib/fx";
 import { activateBillingPayment } from "@/features/billing/lib/activate";
 import { organizationHasAppAccess } from "@/features/billing/lib/access";
+import { ensureUserPhone } from "@/features/auth/lib/ensure-user-phone";
 
 export type BillingActionResult =
   | { ok: true; paymentId?: string; organizationId?: string }
@@ -41,12 +44,16 @@ function parseCheckoutPlan(raw: string): BillingPlanId | null {
 export async function startTrialSignup(input: {
   companyName: string;
   companySlug?: string;
+  phone?: string;
 }): Promise<BillingActionResult> {
   try {
     const session = await requireAuthSession();
     if (session.organizationId) {
       return { ok: false, error: "Ya tenés una empresa asociada." };
     }
+
+    const phoneOk = await ensureUserPhone(session.user.id, input.phone);
+    if (!phoneOk.ok) return phoneOk;
 
     const companyName = input.companyName.trim();
     if (companyName.length < 2) {
@@ -143,6 +150,47 @@ export async function startTrialSignup(input: {
   }
 }
 
+async function resolveTransferAmount(
+  plan: BillingPlanId,
+  currency: "USD" | "ARS",
+): Promise<
+  | { ok: true; amount: number; currency: "USD" | "ARS"; fxRateUsed: number | null }
+  | { ok: false; error: string }
+> {
+  const charge = await planCheckoutChargeEffective(plan);
+  // Planes con precio fijo en ARS (ej. TRIAL $1): transferencia en ARS sin FX.
+  if (charge.currency === "ARS") {
+    return {
+      ok: true,
+      amount: charge.amount,
+      currency: "ARS",
+      fxRateUsed: null,
+    };
+  }
+  if (currency === "USD") {
+    return {
+      ok: true,
+      amount: charge.amount,
+      currency: "USD",
+      fxRateUsed: null,
+    };
+  }
+  const rate = await getBillingUsdArsRate();
+  if (!rate) {
+    return {
+      ok: false,
+      error:
+        "No hay tipo de cambio USD→ARS disponible. Pagá en USD o reintentá más tarde.",
+    };
+  }
+  return {
+    ok: true,
+    amount: Math.round(charge.amount * rate * 100) / 100,
+    currency: "ARS",
+    fxRateUsed: rate,
+  };
+}
+
 /** Alta: crea pago PENDING por transferencia y deja pendiente de revisión. */
 export async function submitTransferSignup(input: {
   plan: string;
@@ -151,11 +199,31 @@ export async function submitTransferSignup(input: {
   companySlug?: string;
   proofDataUrl: string;
   notes?: string;
+  phone?: string;
 }): Promise<BillingActionResult> {
   try {
     const session = await requireAuthSession();
-    const plan = parsePaidPlan(input.plan);
+    const plan = parseCheckoutPlan(input.plan);
     if (!plan) return { ok: false, error: "Plan inválido." };
+
+    const phoneOk = await ensureUserPhone(session.user.id, input.phone);
+    if (!phoneOk.ok) return phoneOk;
+
+    if (plan === "TRIAL") {
+      const existingTrial = await prisma.billingPayment.findFirst({
+        where: {
+          userId: session.user.id,
+          plan: "TRIAL",
+          status: "APPROVED",
+        },
+      });
+      if (existingTrial) {
+        return {
+          ok: false,
+          error: "Ya usaste la prueba. Elegí un plan de pago.",
+        };
+      }
+    }
 
     const companyName = input.companyName.trim();
     if (companyName.length < 2) {
@@ -169,21 +237,8 @@ export async function submitTransferSignup(input: {
       return { ok: false, error: "El comprobante no puede superar ~2.5 MB." };
     }
 
-    const priceUsd = planPriceUsd(plan);
-    let amount = priceUsd;
-    let fxRateUsed: number | null = null;
-    if (input.currency === "ARS") {
-      const rate = await getBillingUsdArsRate();
-      if (!rate) {
-        return {
-          ok: false,
-          error:
-            "No hay tipo de cambio USD→ARS disponible. Pagá en USD o reintentá más tarde.",
-        };
-      }
-      fxRateUsed = rate;
-      amount = Math.round(priceUsd * rate * 100) / 100;
-    }
+    const resolved = await resolveTransferAmount(plan, input.currency);
+    if (!resolved.ok) return resolved;
 
     const payment = await prisma.billingPayment.create({
       data: {
@@ -193,9 +248,9 @@ export async function submitTransferSignup(input: {
         companySlug: normalizeOrgSlug(input.companySlug || companyName),
         plan,
         method: "TRANSFER",
-        currency: input.currency,
-        amount,
-        fxRateUsed,
+        currency: resolved.currency,
+        amount: resolved.amount,
+        fxRateUsed: resolved.fxRateUsed,
         status: "PENDING",
         transferProofUrl: input.proofDataUrl,
         notes: input.notes?.trim() || null,
@@ -217,33 +272,24 @@ export async function submitTransferRenewal(input: {
   currency: "USD" | "ARS";
   proofDataUrl: string;
   notes?: string;
+  phone?: string;
 }): Promise<BillingActionResult> {
   try {
     const session = await requireAuthSession();
     if (!session.organizationId) {
       return { ok: false, error: "No tenés una empresa activa." };
     }
-    const plan = parsePaidPlan(input.plan);
+    const phoneOk = await ensureUserPhone(session.user.id, input.phone);
+    if (!phoneOk.ok) return phoneOk;
+    const plan = parseCheckoutPlan(input.plan);
     if (!plan) return { ok: false, error: "Plan inválido." };
 
     if (!input.proofDataUrl.startsWith("data:")) {
       return { ok: false, error: "Subí el comprobante de transferencia." };
     }
 
-    const priceUsd = planPriceUsd(plan);
-    let amount = priceUsd;
-    let fxRateUsed: number | null = null;
-    if (input.currency === "ARS") {
-      const rate = await getBillingUsdArsRate();
-      if (!rate) {
-        return {
-          ok: false,
-          error: "No hay tipo de cambio USD→ARS disponible.",
-        };
-      }
-      fxRateUsed = rate;
-      amount = Math.round(priceUsd * rate * 100) / 100;
-    }
+    const resolved = await resolveTransferAmount(plan, input.currency);
+    if (!resolved.ok) return resolved;
 
     const payment = await prisma.billingPayment.create({
       data: {
@@ -251,9 +297,9 @@ export async function submitTransferRenewal(input: {
         organizationId: session.organizationId,
         plan,
         method: "TRANSFER",
-        currency: input.currency,
-        amount,
-        fxRateUsed,
+        currency: resolved.currency,
+        amount: resolved.amount,
+        fxRateUsed: resolved.fxRateUsed,
         status: "PENDING",
         transferProofUrl: input.proofDataUrl,
         notes: input.notes?.trim() || null,
@@ -279,11 +325,15 @@ export async function createMercadoPagoSignupIntent(input: {
   plan: string;
   companyName: string;
   companySlug?: string;
+  phone?: string;
 }): Promise<BillingActionResult & { preferenceId?: string; initPoint?: string }> {
   try {
     const session = await requireAuthSession();
     const plan = parseCheckoutPlan(input.plan);
     if (!plan) return { ok: false, error: "Plan inválido." };
+
+    const phoneOk = await ensureUserPhone(session.user.id, input.phone);
+    if (!phoneOk.ok) return phoneOk;
 
     if (plan === "TRIAL") {
       const existingTrial = await prisma.billingPayment.findFirst({
@@ -310,7 +360,7 @@ export async function createMercadoPagoSignupIntent(input: {
       "@/features/billing/lib/mercadopago"
     );
 
-    const charge = planCheckoutCharge(plan);
+    const charge = await planMercadoPagoChargeEffective(plan);
     const payment = await prisma.billingPayment.create({
       data: {
         userId: session.user.id,
@@ -321,10 +371,14 @@ export async function createMercadoPagoSignupIntent(input: {
         currency: charge.currency,
         amount: charge.amount,
         status: "PENDING",
-        notes:
-          plan === "TRIAL"
-            ? "Prueba 30 días — cobro de prueba $1 ARS (Mercado Pago)"
+        notes: [
+          plan === "TRIAL" ? "Prueba 30 días (Mercado Pago)" : null,
+          charge.surchargePercent > 0
+            ? `Incluye recargo MP ${charge.surchargePercent}% (base ${charge.currency} ${charge.baseAmount})`
             : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
       },
     });
 
@@ -365,12 +419,15 @@ export async function createMercadoPagoSignupIntent(input: {
 
 export async function createMercadoPagoRenewalIntent(input: {
   plan: string;
+  phone?: string;
 }): Promise<BillingActionResult & { initPoint?: string }> {
   try {
     const session = await requireAuthSession();
     if (!session.organizationId) {
       return { ok: false, error: "No tenés una empresa activa." };
     }
+    const phoneOk = await ensureUserPhone(session.user.id, input.phone);
+    if (!phoneOk.ok) return phoneOk;
     const plan = parseCheckoutPlan(input.plan);
     if (!plan) return { ok: false, error: "Plan inválido." };
 
@@ -383,7 +440,7 @@ export async function createMercadoPagoRenewalIntent(input: {
       "@/features/billing/lib/mercadopago"
     );
 
-    const charge = planCheckoutCharge(plan);
+    const charge = await planMercadoPagoChargeEffective(plan);
     const payment = await prisma.billingPayment.create({
       data: {
         userId: session.user.id,
@@ -393,6 +450,10 @@ export async function createMercadoPagoRenewalIntent(input: {
         currency: charge.currency,
         amount: charge.amount,
         status: "PENDING",
+        notes:
+          charge.surchargePercent > 0
+            ? `Incluye recargo MP ${charge.surchargePercent}% (base ${charge.currency} ${charge.baseAmount})`
+            : null,
       },
     });
 
@@ -424,6 +485,136 @@ export async function createMercadoPagoRenewalIntent(input: {
         error instanceof Error
           ? error.message
           : "No se pudo iniciar el pago con Mercado Pago.",
+    };
+  }
+}
+
+/**
+ * Al volver de Mercado Pago (back_url), confirma el pago si el webhook no llegó.
+ * MP suele enviar payment_id / collection_id / external_reference / status.
+ */
+export async function syncMercadoPagoCheckoutReturn(input: {
+  paymentId?: string | null;
+  collectionId?: string | null;
+  externalReference?: string | null;
+  status?: string | null;
+  preferenceId?: string | null;
+}): Promise<BillingActionResult & { activated?: boolean }> {
+  try {
+    const session = await requireAuthSession();
+    const status = (input.status ?? "").toLowerCase();
+    const mpId = (input.paymentId || input.collectionId || "").trim();
+    const externalRef = (input.externalReference ?? "").trim();
+    const preferenceId = (input.preferenceId ?? "").trim();
+
+    if (status && status !== "approved") {
+      return { ok: true, activated: false };
+    }
+
+    let billingPaymentId: string | null = externalRef || null;
+
+    if (mpId) {
+      try {
+        const { fetchMercadoPagoPayment } = await import(
+          "@/features/billing/lib/mercadopago"
+        );
+        const mpPayment = await fetchMercadoPagoPayment(mpId);
+        if (mpPayment.status !== "approved") {
+          return { ok: true, activated: false };
+        }
+        if (mpPayment.external_reference) {
+          billingPaymentId = mpPayment.external_reference;
+        }
+      } catch (error) {
+        console.warn("syncMercadoPagoCheckoutReturn fetch", error);
+      }
+    }
+
+    if (!billingPaymentId && preferenceId) {
+      const byPref = await prisma.billingPayment.findFirst({
+        where: {
+          userId: session.user.id,
+          method: "MERCADOPAGO",
+          status: "PENDING",
+          OR: [
+            { mpPreferenceId: preferenceId },
+            { mpPreapprovalId: preferenceId },
+          ],
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      billingPaymentId = byPref?.id ?? null;
+    }
+
+    if (!billingPaymentId) {
+      const latest = await prisma.billingPayment.findFirst({
+        where: {
+          userId: session.user.id,
+          method: "MERCADOPAGO",
+          status: "PENDING",
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      billingPaymentId = latest?.id ?? null;
+    }
+
+    if (!billingPaymentId) {
+      return { ok: true, activated: false };
+    }
+
+    const existing = await prisma.billingPayment.findUnique({
+      where: { id: billingPaymentId },
+    });
+    if (!existing || existing.userId !== session.user.id) {
+      return { ok: false, error: "Pago no encontrado." };
+    }
+    if (existing.status === "APPROVED") {
+      if (existing.organizationId) {
+        const { signLocalSession, setLocalSessionCookie } = await import(
+          "@/features/auth/lib/session"
+        );
+        const token = await signLocalSession({
+          userId: session.user.id,
+          organizationId: existing.organizationId,
+        });
+        await setLocalSessionCookie(token);
+      }
+      return { ok: true, activated: true, organizationId: existing.organizationId ?? undefined };
+    }
+
+    const updated = await activateBillingPayment(billingPaymentId, {
+      mpPaymentId: mpId || undefined,
+    });
+
+    if (updated.organizationId) {
+      const { signLocalSession, setLocalSessionCookie } = await import(
+        "@/features/auth/lib/session"
+      );
+      const token = await signLocalSession({
+        userId: session.user.id,
+        organizationId: updated.organizationId,
+      });
+      await setLocalSessionCookie(token);
+    }
+
+    revalidatePath("/", "layout");
+    revalidatePath("/billing");
+    revalidatePath("/admin");
+    revalidatePath("/onboarding/planes");
+    return {
+      ok: true,
+      activated: true,
+      paymentId: updated.id,
+      organizationId: updated.organizationId ?? undefined,
+    };
+  } catch (error) {
+    console.error("syncMercadoPagoCheckoutReturn", error);
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo confirmar el pago de Mercado Pago.",
     };
   }
 }

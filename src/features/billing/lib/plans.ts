@@ -24,14 +24,14 @@ export const BILLING_PLANS = {
     id: "TRIAL",
     label: "Prueba 30 días",
     priceUsd: 0,
-    /** $1 ARS para probar Mercado Pago sin cobro real significativo. */
-    priceArs: 1,
+    /** Precio editable en Administración → Precios. 0 = gratis. */
+    priceArs: 0,
     days: 30,
     cycle: "MONTHLY",
     tier: "TRIAL",
     maxUsers: 1,
     description:
-      "30 días con 1 usuario. Costo de prueba: $1 ARS vía Mercado Pago. Para sumar personas, contratá un plan de pago.",
+      "30 días con 1 usuario. Para sumar personas, contratá un plan de pago.",
     isTrial: true,
   },
   SOLO_MONTHLY: {
@@ -191,6 +191,7 @@ export function planCheckoutCharge(plan: BillingPlanId): {
 
 export function formatPlanPriceLabel(plan: BillingPlanId): string {
   const charge = planCheckoutCharge(plan);
+  if (charge.amount <= 0) return "Gratis";
   if (charge.currency === "ARS") {
     return `$ ${charge.amount.toLocaleString("es-AR")} ARS`;
   }
