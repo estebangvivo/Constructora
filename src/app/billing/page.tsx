@@ -17,6 +17,7 @@ import {
   normalizeBillingPlanId,
 } from "@/features/billing/lib/plans";
 import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
+import { formatDateAR } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 
@@ -123,7 +124,7 @@ export default async function BillingPage({
           <p>
             <span className="text-muted-foreground">Vigente hasta:</span>{" "}
             {organization?.paidUntil
-              ? new Date(organization.paidUntil).toLocaleDateString("es-AR")
+              ? formatDateAR(organization.paidUntil)
               : "—"}
           </p>
         </div>
@@ -160,8 +161,7 @@ export default async function BillingPage({
                   {p.amount.toLocaleString("es-AR")}
                 </span>
                 <span className="text-muted-foreground">
-                  {p.status} ·{" "}
-                  {new Date(p.createdAt).toLocaleDateString("es-AR")}
+                  {p.status} · {formatDateAR(p.createdAt)}
                 </span>
               </li>
             ))}

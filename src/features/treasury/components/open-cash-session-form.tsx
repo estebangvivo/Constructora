@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { openDailyCashSession } from "@/features/treasury/actions/cash-actions";
+import { DateInput } from "@/components/ui/date-input";
 import { toDateInputValue } from "@/lib/format-date";
 
 const fieldClass =
@@ -46,12 +47,11 @@ export function OpenCashSessionForm({ currency = "ARS" }: Props) {
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm">
           <span className="mb-1 block text-muted-foreground">Fecha</span>
-          <input
-            type="date"
+          <DateInput
             required
             value={businessDate}
-            onChange={(e) => setBusinessDate(e.target.value)}
-            className={fieldClass}
+            onChange={setBusinessDate}
+            className="w-full bg-surface"
           />
         </label>
         <label className="block text-sm">

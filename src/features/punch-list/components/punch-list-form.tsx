@@ -8,6 +8,7 @@ import {
 } from "@/features/punch-list/actions/punch-list-actions";
 import type { PunchListMember } from "@/features/punch-list/queries/list-punch-list";
 import type { PunchListPriority } from "@prisma/client";
+import { DateInput } from "@/components/ui/date-input";
 
 const fieldClass =
   "w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none ring-accent focus:ring-2";
@@ -125,10 +126,9 @@ export function PunchListForm({
         </label>
         <label className="block space-y-1.5">
           <span className="text-sm font-medium">Vence</span>
-          <input
-            type="date"
+          <DateInput
             name="dueDate"
-            className={fieldClass}
+            className="w-full bg-surface"
             defaultValue={initial?.dueDate}
           />
         </label>

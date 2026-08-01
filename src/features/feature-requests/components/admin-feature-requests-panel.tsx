@@ -6,6 +6,7 @@ import type { FeatureRequestStatus } from "@prisma/client";
 import type { FeatureRequestListItem } from "@/features/feature-requests/components/feature-request-list";
 import { FEATURE_REQUEST_STATUS_LABEL } from "@/features/feature-requests/lib/labels";
 import { cn } from "@/lib/utils";
+import { formatDateTimeAR } from "@/lib/format-date";
 
 type AdminItem = FeatureRequestListItem & {
   organizationName: string;
@@ -98,8 +99,7 @@ export function AdminFeatureRequestsPanel({
                       {item.createdByEmail})
                     </p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      Actualizada{" "}
-                      {new Date(item.updatedAt).toLocaleString("es-AR")} ·{" "}
+                      Actualizada {formatDateTimeAR(item.updatedAt)} ·{" "}
                       {item.messageCount} mensajes
                       {item.quoteAmount != null && item.quoteCurrency
                         ? ` · ${item.quoteCurrency} ${item.quoteAmount.toLocaleString("es-AR")}`

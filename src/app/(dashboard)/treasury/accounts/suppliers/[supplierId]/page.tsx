@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { getSupplierAccountStatement } from "@/features/treasury/queries/account-statements";
 import { formatMoney } from "@/features/treasury/lib/labels";
+import { formatDateAR } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 
@@ -77,7 +78,7 @@ export default async function SupplierAccountPage({ params }: PageProps) {
             {stmt.movements.map((m) => (
               <tr key={m.id}>
                 <td className="py-3 pr-3 tabular-nums text-muted-foreground">
-                  {new Date(`${m.date}T12:00:00`).toLocaleDateString("es-AR")}
+                  {formatDateAR(m.date)}
                 </td>
                 <td className="py-3 pr-3">
                   <Link

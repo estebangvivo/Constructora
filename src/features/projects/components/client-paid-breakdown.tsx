@@ -9,6 +9,7 @@ import {
   PAYMENT_METHOD_LABEL,
 } from "@/features/treasury/lib/labels";
 import type { ProjectClientPaidDocument } from "@/features/projects/queries/list-project-client-paid";
+import { formatDateAR } from "@/lib/format-date";
 
 type ClientPaidBreakdownProps = {
   totalByCurrency: Record<string, number>;
@@ -110,9 +111,7 @@ export function ClientPaidBreakdown({
                               {doc.number}
                             </Link>
                             <p className="mt-0.5 text-sm text-muted-foreground">
-                              {new Date(
-                                `${doc.issueDate}T12:00:00`,
-                              ).toLocaleDateString("es-AR")}
+                              {formatDateAR(doc.issueDate)}
                               {" · "}
                               {PAYMENT_METHOD_LABEL[doc.paymentMethod]}
                               {doc.partyName ? ` · ${doc.partyName}` : ""}

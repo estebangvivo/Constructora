@@ -6,6 +6,7 @@ import { RefreshCw } from "lucide-react";
 import { upsertExchangeRate } from "@/features/settings/actions/exchange-rate-actions";
 import { syncBnaExchangeRateAction } from "@/features/settings/actions/sync-bna-rate-action";
 import type { ExchangeRateView } from "@/features/settings/queries/exchange-rates";
+import { DateInput } from "@/components/ui/date-input";
 
 type ExchangeRateFormProps = {
   enabledCurrencies: string[];
@@ -160,12 +161,11 @@ export function ExchangeRateForm({
         </label>
         <label className="block text-sm">
           <span className="mb-1 block text-muted-foreground">Vigencia</span>
-          <input
-            type="date"
+          <DateInput
             required
             value={effectiveAt}
-            onChange={(e) => setEffectiveAt(e.target.value)}
-            className={fieldClass}
+            onChange={setEffectiveAt}
+            className="w-full bg-surface"
           />
         </label>
         <div className="flex items-end sm:col-span-4">

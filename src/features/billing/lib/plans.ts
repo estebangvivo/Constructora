@@ -8,6 +8,8 @@ type PlanDef = {
   id: string;
   label: string;
   priceUsd: number;
+  /** Precio fijo en ARS (p. ej. prueba de pasarela). Si está, el checkout usa ARS. */
+  priceArs?: number;
   days: number;
   cycle: BillingCycle;
   tier: BillingTierId | "TRIAL";
@@ -22,12 +24,14 @@ export const BILLING_PLANS = {
     id: "TRIAL",
     label: "Prueba 30 días",
     priceUsd: 0,
+    /** $1 ARS para probar Mercado Pago sin cobro real significativo. */
+    priceArs: 1,
     days: 30,
     cycle: "MONTHLY",
     tier: "TRIAL",
     maxUsers: 1,
     description:
-      "Usá el sistema gratis 30 días (un solo usuario). Para sumar personas, contratá un plan de pago.",
+      "30 días con 1 usuario. Costo de prueba: $1 ARS vía Mercado Pago. Para sumar personas, contratá un plan de pago.",
     isTrial: true,
   },
   SOLO_MONTHLY: {
@@ -168,6 +172,29 @@ export function planDays(plan: BillingPlanId): number {
 
 export function planPriceUsd(plan: BillingPlanId): number {
   return BILLING_PLANS[plan].priceUsd;
+}
+
+export function planPriceArs(plan: BillingPlanId): number | null {
+  const def = BILLING_PLANS[plan] as PlanDef;
+  return typeof def.priceArs === "number" ? def.priceArs : null;
+}
+
+/** Monto y moneda para checkout (MP / transferencia). */
+export function planCheckoutCharge(plan: BillingPlanId): {
+  currency: "USD" | "ARS";
+  amount: number;
+} {
+  const ars = planPriceArs(plan);
+  if (ars != null) return { currency: "ARS", amount: ars };
+  return { currency: "USD", amount: planPriceUsd(plan) };
+}
+
+export function formatPlanPriceLabel(plan: BillingPlanId): string {
+  const charge = planCheckoutCharge(plan);
+  if (charge.currency === "ARS") {
+    return `$ ${charge.amount.toLocaleString("es-AR")} ARS`;
+  }
+  return `USD ${charge.amount}`;
 }
 
 export function planMaxUsers(plan: BillingPlanId): number | null {

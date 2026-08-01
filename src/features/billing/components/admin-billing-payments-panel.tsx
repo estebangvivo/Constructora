@@ -6,6 +6,7 @@ import {
   approveBillingPayment,
   rejectBillingPayment,
 } from "@/features/billing/actions/admin-billing-actions";
+import { formatDateTimeAR } from "@/lib/format-date";
 
 type PendingPayment = {
   id: string;
@@ -70,7 +71,7 @@ export function AdminBillingPaymentsPanel({
                 {p.fxRateUsed ? ` · TC ${p.fxRateUsed}` : ""}
               </p>
               <p className="text-xs text-muted-foreground">
-                {new Date(p.createdAt).toLocaleString("es-AR")}
+                {formatDateTimeAR(p.createdAt)}
               </p>
               {p.notes && (
                 <p className="mt-1 text-muted-foreground">{p.notes}</p>

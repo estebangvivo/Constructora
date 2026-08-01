@@ -18,6 +18,7 @@ import {
 } from "@/features/feature-requests/lib/labels";
 import { FeatureRequestMediaGallery } from "@/features/feature-requests/components/feature-request-media-gallery";
 import { cn } from "@/lib/utils";
+import { formatDateTimeAR } from "@/lib/format-date";
 
 const fieldClass =
   "w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none ring-accent focus:ring-2";
@@ -54,14 +55,7 @@ export type FeatureRequestDetailView = {
 };
 
 function formatMailDate(iso: string) {
-  return new Date(iso).toLocaleString("es-AR", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatDateTimeAR(iso);
 }
 
 export function FeatureRequestDetail({

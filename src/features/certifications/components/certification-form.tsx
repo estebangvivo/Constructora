@@ -9,6 +9,7 @@ import {
 } from "@/features/certifications/actions/certification-actions";
 import type { CertifiableBudgetItem } from "@/features/certifications/queries/list-certifications";
 import { formatCertMoney, round2, roundPct } from "@/features/certifications/lib/labels";
+import { DateInput } from "@/components/ui/date-input";
 
 type LineState = {
   budgetItemId: string;
@@ -172,24 +173,22 @@ export function CertificationForm({
           <span className="mb-1 block text-muted-foreground">
             Inicio del período
           </span>
-          <input
-            type="date"
+          <DateInput
             required
             value={periodStart}
-            onChange={(e) => setPeriodStart(e.target.value)}
-            className={fieldClass}
+            onChange={setPeriodStart}
+            className="w-full bg-surface"
           />
         </label>
         <label className="block text-sm">
           <span className="mb-1 block text-muted-foreground">
             Fin del período
           </span>
-          <input
-            type="date"
+          <DateInput
             required
             value={periodEnd}
-            onChange={(e) => setPeriodEnd(e.target.value)}
-            className={fieldClass}
+            onChange={setPeriodEnd}
+            className="w-full bg-surface"
           />
         </label>
         <label className="block text-sm">

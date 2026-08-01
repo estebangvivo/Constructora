@@ -8,8 +8,10 @@ import {
   BILLING_PLANS,
   isPaidBillingPlan,
   planPriceUsd,
+  planCheckoutCharge,
   addBillingPeriod,
   type PaidBillingPlanId,
+  type BillingPlanId,
   normalizeBillingPlanId,
 } from "@/features/billing/lib/plans";
 import { getBillingUsdArsRate } from "@/features/billing/lib/fx";
@@ -24,6 +26,14 @@ function parsePaidPlan(raw: string): PaidBillingPlanId | null {
   const normalized = normalizeBillingPlanId(raw);
   if (normalized && isPaidBillingPlan(normalized)) return normalized;
   if (isPaidBillingPlan(raw)) return raw;
+  return null;
+}
+
+/** Planes cobrables por MP/transferencia (incluye TRIAL a $1 ARS). */
+function parseCheckoutPlan(raw: string): BillingPlanId | null {
+  const normalized = normalizeBillingPlanId(raw);
+  if (!normalized) return null;
+  if (normalized === "TRIAL" || isPaidBillingPlan(normalized)) return normalized;
   return null;
 }
 
@@ -272,8 +282,24 @@ export async function createMercadoPagoSignupIntent(input: {
 }): Promise<BillingActionResult & { preferenceId?: string; initPoint?: string }> {
   try {
     const session = await requireAuthSession();
-    const plan = parsePaidPlan(input.plan);
+    const plan = parseCheckoutPlan(input.plan);
     if (!plan) return { ok: false, error: "Plan inválido." };
+
+    if (plan === "TRIAL") {
+      const existingTrial = await prisma.billingPayment.findFirst({
+        where: {
+          userId: session.user.id,
+          plan: "TRIAL",
+          status: "APPROVED",
+        },
+      });
+      if (existingTrial) {
+        return {
+          ok: false,
+          error: "Ya usaste la prueba. Elegí un plan de pago.",
+        };
+      }
+    }
 
     const companyName = input.companyName.trim();
     if (companyName.length < 2) {
@@ -284,6 +310,7 @@ export async function createMercadoPagoSignupIntent(input: {
       "@/features/billing/lib/mercadopago"
     );
 
+    const charge = planCheckoutCharge(plan);
     const payment = await prisma.billingPayment.create({
       data: {
         userId: session.user.id,
@@ -291,9 +318,13 @@ export async function createMercadoPagoSignupIntent(input: {
         companySlug: normalizeOrgSlug(input.companySlug || companyName),
         plan,
         method: "MERCADOPAGO",
-        currency: "USD",
-        amount: planPriceUsd(plan),
+        currency: charge.currency,
+        amount: charge.amount,
         status: "PENDING",
+        notes:
+          plan === "TRIAL"
+            ? "Prueba 30 días — cobro de prueba $1 ARS (Mercado Pago)"
+            : null,
       },
     });
 
@@ -340,7 +371,7 @@ export async function createMercadoPagoRenewalIntent(input: {
     if (!session.organizationId) {
       return { ok: false, error: "No tenés una empresa activa." };
     }
-    const plan = parsePaidPlan(input.plan);
+    const plan = parseCheckoutPlan(input.plan);
     if (!plan) return { ok: false, error: "Plan inválido." };
 
     const org = await prisma.organization.findUnique({
@@ -352,14 +383,15 @@ export async function createMercadoPagoRenewalIntent(input: {
       "@/features/billing/lib/mercadopago"
     );
 
+    const charge = planCheckoutCharge(plan);
     const payment = await prisma.billingPayment.create({
       data: {
         userId: session.user.id,
         organizationId: session.organizationId,
         plan,
         method: "MERCADOPAGO",
-        currency: "USD",
-        amount: planPriceUsd(plan),
+        currency: charge.currency,
+        amount: charge.amount,
         status: "PENDING",
       },
     });

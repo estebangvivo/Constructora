@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { BILLING_PLANS, BILLING_TIERS } from "@/features/billing/lib/plans";
+import {
+  BILLING_PLANS,
+  BILLING_TIERS,
+  formatPlanPriceLabel,
+} from "@/features/billing/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { organizationHasAppAccess } from "@/features/billing/lib/access";
 import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
@@ -33,14 +37,17 @@ export default async function OnboardingPlanesPage() {
       <div>
         <h1 className="font-display text-3xl tracking-tight">Elegí tu plan</h1>
         <p className="mt-2 text-muted-foreground">
-          Empezá con 30 días de prueba, o contratá según cuántos usuarios
-          necesitás.
+          Empezá con 30 días de prueba ({formatPlanPriceLabel("TRIAL")} vía
+          Mercado Pago), o contratá según cuántos usuarios necesitás.
         </p>
       </div>
 
       <div className="rounded-lg border border-border bg-surface p-5 sm:flex sm:items-center sm:justify-between sm:gap-6">
         <div>
           <h2 className="font-display text-xl">{BILLING_PLANS.TRIAL.label}</h2>
+          <p className="mt-1 text-2xl font-semibold tracking-tight">
+            {formatPlanPriceLabel("TRIAL")}
+          </p>
           <p className="mt-1 text-sm text-muted-foreground">
             {BILLING_PLANS.TRIAL.description}
           </p>
@@ -49,7 +56,7 @@ export default async function OnboardingPlanesPage() {
           href="/onboarding/pago?plan=TRIAL"
           className="mt-4 inline-flex shrink-0 justify-center rounded-md border border-border px-4 py-2.5 text-sm font-medium sm:mt-0"
         >
-          Empezar prueba gratis
+          Empezar prueba · {formatPlanPriceLabel("TRIAL")}
         </Link>
       </div>
 

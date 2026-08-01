@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { consumeInventoryItems } from "@/features/inventory/actions/inventory-actions";
 import type { InventoryCategoryGroup } from "@/features/inventory/queries/list-inventory";
 import { formatQty } from "@/features/inventory/lib/labels";
+import { DateInput } from "@/components/ui/date-input";
 import { toDateInputValue } from "@/lib/format-date";
 
 const fieldClass =
@@ -71,12 +72,11 @@ export function ConsumeInventoryForm({ projectId, groups, canManage }: Props) {
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm">
           <span className="mb-1 block text-muted-foreground">Fecha</span>
-          <input
-            type="date"
+          <DateInput
             required
             value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className={fieldClass}
+            onChange={setDate}
+            className="w-full bg-surface"
           />
         </label>
         <label className="block text-sm">

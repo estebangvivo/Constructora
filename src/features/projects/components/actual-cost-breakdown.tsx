@@ -9,6 +9,7 @@ import {
   PAYMENT_METHOD_LABEL,
 } from "@/features/treasury/lib/labels";
 import type { ProjectCostDocument } from "@/features/projects/queries/list-project-cost-documents";
+import { formatDateAR } from "@/lib/format-date";
 
 type ActualCostBreakdownProps = {
   totalByCurrency: Record<string, number>;
@@ -115,7 +116,7 @@ export function ActualCostBreakdown({
                               {doc.number}
                             </Link>
                             <p className="mt-0.5 text-sm text-muted-foreground">
-                              {formatDate(doc.issueDate)}
+                              {formatDateAR(doc.issueDate)}
                               {" · "}
                               {PAYMENT_METHOD_LABEL[doc.paymentMethod]}
                               {doc.partyName ? ` · ${doc.partyName}` : ""}
@@ -139,7 +140,7 @@ export function ActualCostBreakdown({
                               {doc.description}
                             </p>
                             <p className="mt-0.5 text-sm text-muted-foreground">
-                              {formatDate(doc.issueDate)}
+                              {formatDateAR(doc.issueDate)}
                               {" · Cheque "}
                               {doc.checkNumber} · {doc.checkBank}
                             </p>
@@ -180,8 +181,4 @@ export function ActualCostBreakdown({
       )}
     </>
   );
-}
-
-function formatDate(isoDate: string) {
-  return new Date(`${isoDate}T12:00:00`).toLocaleDateString("es-AR");
 }

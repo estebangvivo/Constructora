@@ -9,6 +9,7 @@ import {
   listInventoryByCategory,
 } from "@/features/inventory/queries/list-inventory";
 import { ConsumeInventoryForm } from "@/features/inventory/components/consume-inventory-form";
+import { DateInput } from "@/components/ui/date-input";
 import { formatQty } from "@/features/inventory/lib/labels";
 import { formatDateAR, toDateInputValue } from "@/lib/format-date";
 import { formatBudgetMoney } from "@/features/budget/lib/labels";
@@ -147,11 +148,10 @@ export default async function InventoryPage({
                 Consumos del {formatDateAR(date)}
               </h3>
               <form method="get" className="flex gap-2">
-                <input
-                  type="date"
+                <DateInput
                   name="date"
                   defaultValue={date}
-                  className="rounded-md border border-border bg-surface px-2 py-1.5 text-sm"
+                  className="w-full bg-surface"
                 />
                 <button
                   type="submit"

@@ -7,6 +7,7 @@ import { getCashOverview } from "@/features/treasury/queries/cash-queries";
 import { getEnabledCurrencies } from "@/features/settings/queries/get-organization";
 import { BankDepositForm } from "@/features/treasury/components/bank-deposit-form";
 import { formatMoney } from "@/features/treasury/lib/labels";
+import { formatDateAR } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 
@@ -84,9 +85,7 @@ export default async function BankDepositPage({ searchParams }: PageProps) {
             bank: c.bank,
             amount: c.amount,
             currency: c.currency,
-            dueDate: c.dueDate
-              ? c.dueDate.toLocaleDateString("es-AR")
-              : null,
+            dueDate: c.dueDate ? formatDateAR(c.dueDate) : null,
             label: `${c.number} · ${c.bank} · ${formatMoney(c.amount, c.currency)}`,
           }))}
         />

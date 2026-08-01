@@ -6,6 +6,7 @@ import type { FeatureRequestStatus } from "@prisma/client";
 import { FEATURE_REQUEST_STATUS_LABEL } from "@/features/feature-requests/lib/labels";
 import { CreateFeatureRequestButton } from "@/features/feature-requests/components/create-feature-request-button";
 import { cn } from "@/lib/utils";
+import { formatDateTimeAR } from "@/lib/format-date";
 
 export type FeatureRequestListItem = {
   id: string;
@@ -87,8 +88,7 @@ export function FeatureRequestList({
                   </p>
                 )}
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Actualizada{" "}
-                  {new Date(item.updatedAt).toLocaleString("es-AR")} ·{" "}
+                  Actualizada {formatDateTimeAR(item.updatedAt)} ·{" "}
                   {item.messageCount} mensaje
                   {item.messageCount === 1 ? "" : "s"}
                   {(item.attachmentCount ?? 0) > 0

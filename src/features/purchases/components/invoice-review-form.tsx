@@ -13,6 +13,7 @@ import { formatPurchaseMoney } from "@/features/purchases/lib/labels";
 import { toDateInputValue } from "@/lib/format-date";
 import { formatFileSize } from "@/lib/format-file-size";
 import { INVENTORY_CATEGORY_SUGGESTIONS } from "@/features/inventory/lib/labels";
+import { DateInput } from "@/components/ui/date-input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 
 const fieldClass =
@@ -217,20 +218,18 @@ export function InvoiceReviewForm({ invoice, suppliers, canManage }: Props) {
         </label>
         <label className="block text-sm">
           <span className="mb-1 block text-muted-foreground">Fecha emisión</span>
-          <input
-            type="date"
+          <DateInput
             value={issueDate}
-            onChange={(e) => setIssueDate(e.target.value)}
-            className={fieldClass}
+            onChange={setIssueDate}
+            className="w-full bg-surface"
           />
         </label>
         <label className="block text-sm">
           <span className="mb-1 block text-muted-foreground">Vencimiento</span>
-          <input
-            type="date"
+          <DateInput
             value={dueDate}
-            onChange={(e) => setDueDate(e.target.value)}
-            className={fieldClass}
+            onChange={setDueDate}
+            className="w-full bg-surface"
           />
         </label>
         <label className="block text-sm">
@@ -288,11 +287,10 @@ export function InvoiceReviewForm({ invoice, suppliers, canManage }: Props) {
         </label>
         <label className="block text-sm">
           <span className="mb-1 block text-muted-foreground">Vto. CAE</span>
-          <input
-            type="date"
+          <DateInput
             value={caeDueDate}
-            onChange={(e) => setCaeDueDate(e.target.value)}
-            className={fieldClass}
+            onChange={setCaeDueDate}
+            className="w-full bg-surface"
           />
         </label>
         <label className="block text-sm sm:col-span-2 lg:col-span-3">

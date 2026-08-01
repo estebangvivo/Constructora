@@ -8,6 +8,7 @@ import {
   deleteMilestone,
 } from "@/features/schedule/actions/schedule-actions";
 import type { ScheduleMilestone } from "@/features/schedule/queries/get-project-schedule";
+import { DateInput } from "@/components/ui/date-input";
 import { toDateInputValue } from "@/lib/format-date";
 
 const fieldClass =
@@ -109,11 +110,10 @@ export function MilestoneForm({
           </label>
           <label className="block text-sm">
             <span className="mb-1 block text-muted-foreground">Fecha</span>
-            <input
-              type="date"
+            <DateInput
               value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className={fieldClass}
+              onChange={setDueDate}
+              className="w-full bg-surface"
             />
           </label>
           {initial && (

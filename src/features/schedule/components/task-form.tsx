@@ -13,6 +13,7 @@ import type {
   ScheduleTask,
 } from "@/features/schedule/queries/get-project-schedule";
 import { TASK_STATUS_LABEL } from "@/features/schedule/lib/labels";
+import { DateInput } from "@/components/ui/date-input";
 import { toDateInputValue } from "@/lib/format-date";
 
 const fieldClass =
@@ -131,20 +132,18 @@ export function TaskForm({
           </label>
           <label className="block text-sm">
             <span className="mb-1 block text-muted-foreground">Inicio</span>
-            <input
-              type="date"
+            <DateInput
               value={plannedStart}
-              onChange={(e) => setPlannedStart(e.target.value)}
-              className={fieldClass}
+              onChange={setPlannedStart}
+              className="w-full bg-surface"
             />
           </label>
           <label className="block text-sm">
             <span className="mb-1 block text-muted-foreground">Fin</span>
-            <input
-              type="date"
+            <DateInput
               value={plannedEnd}
-              onChange={(e) => setPlannedEnd(e.target.value)}
-              className={fieldClass}
+              onChange={setPlannedEnd}
+              className="w-full bg-surface"
             />
           </label>
           <label className="block text-sm">

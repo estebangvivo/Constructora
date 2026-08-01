@@ -9,6 +9,7 @@ import {
   type ChecksDueAlert,
 } from "@/features/treasury/queries/list-checks";
 import { countProjectsByScope } from "@/features/projects/queries/get-projects";
+import { formatDateAR } from "@/lib/format-date";
 
 export type HomeDashboardData = {
   periodLabel: string;
@@ -82,8 +83,7 @@ function rangeLabel(start: Date, end: Date) {
     return monthLabel(start);
   }
 
-  const fmt = new Intl.DateTimeFormat("es-AR");
-  return `${fmt.format(start)} al ${fmt.format(end)}`;
+  return `${formatDateAR(start)} al ${formatDateAR(end)}`;
 }
 
 function netByCurrency(

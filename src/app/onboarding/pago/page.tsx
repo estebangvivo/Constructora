@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getSession } from "@/lib/auth";
 import {
   BILLING_PLANS,
+  formatPlanPriceLabel,
   isPaidBillingPlan,
   type PaidBillingPlanId,
 } from "@/features/billing/lib/plans";
@@ -29,6 +30,7 @@ export default async function OnboardingPagoPage({
   const planRaw = sp.plan;
 
   if (planRaw === "TRIAL") {
+    const mpConfigured = await isMercadoPagoConfigured();
     return (
       <div className="space-y-6">
         <div>
@@ -39,10 +41,18 @@ export default async function OnboardingPagoPage({
             ← Volver a planes
           </Link>
           <h1 className="mt-2 font-display text-3xl tracking-tight">
-            Prueba gratis
+            Prueba — {formatPlanPriceLabel("TRIAL")}
           </h1>
+          <p className="mt-1 text-muted-foreground">
+            Cobro de prueba para validar la pasarela de Mercado Pago.
+          </p>
+          {sp.mp === "failure" && (
+            <p className="mt-3 rounded-md border border-red-700/40 bg-red-50 px-3 py-2 text-sm text-red-800">
+              El pago en Mercado Pago no se completó. Podés reintentar.
+            </p>
+          )}
         </div>
-        <OnboardingTrialForm />
+        <OnboardingTrialForm mpConfigured={mpConfigured} />
       </div>
     );
   }

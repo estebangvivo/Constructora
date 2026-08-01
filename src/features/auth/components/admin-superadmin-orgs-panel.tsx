@@ -12,6 +12,8 @@ import {
   BILLING_PLANS,
   normalizeBillingPlanId,
 } from "@/features/billing/lib/plans";
+import { DateInput } from "@/components/ui/date-input";
+import { formatDateAR, toDateInputValue } from "@/lib/format-date";
 import { cn } from "@/lib/utils";
 
 const ROLE_LABEL: Record<OrganizationRole, string> = {
@@ -44,13 +46,6 @@ function planLabel(plan: string | null): string {
   const id = normalizeBillingPlanId(plan);
   if (!id) return plan ?? "—";
   return BILLING_PLANS[id].label;
-}
-
-function toDateInputValue(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toISOString().slice(0, 10);
 }
 
 type AdminSuperadminOrgsPanelProps = {
@@ -150,9 +145,7 @@ export function AdminSuperadminOrgsPanel({
                     {org.billingStatus}
                     {" · "}
                     <span className="text-muted-foreground">Hasta:</span>{" "}
-                    {org.paidUntil
-                      ? new Date(org.paidUntil).toLocaleDateString("es-AR")
-                      : "—"}
+                    {org.paidUntil ? formatDateAR(org.paidUntil) : "—"}
                   </p>
                 )}
               </div>
@@ -235,11 +228,10 @@ export function AdminSuperadminOrgsPanel({
                   <span className="mb-1 block text-muted-foreground">
                     Vigente hasta
                   </span>
-                  <input
-                    type="date"
+                  <DateInput
                     value={paidUntil}
-                    onChange={(e) => setPaidUntil(e.target.value)}
-                    className={fieldClass}
+                    onChange={setPaidUntil}
+                    className="w-full"
                   />
                 </label>
               </div>
@@ -305,9 +297,7 @@ export function OrgBillingBadge({
   return (
     <p className={cn("text-xs text-muted-foreground")}>
       {planLabel(billingPlan)} · {billingStatus}
-      {paidUntil
-        ? ` · hasta ${new Date(paidUntil).toLocaleDateString("es-AR")}`
-        : ""}
+      {paidUntil ? ` · hasta ${formatDateAR(paidUntil)}` : ""}
     </p>
   );
 }

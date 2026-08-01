@@ -233,9 +233,7 @@ export default async function ChecksPage({ searchParams }: PageProps) {
                             : "text-muted-foreground"
                       }`}
                     >
-                      {c.dueDate
-                        ? c.dueDate.toLocaleDateString("es-AR")
-                        : "—"}
+                      {c.dueDate ? formatDateAR(c.dueDate) : "—"}
                       {overdue
                         ? " · vencido"
                         : dueSoon

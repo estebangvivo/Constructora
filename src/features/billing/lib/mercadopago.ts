@@ -1,8 +1,8 @@
 import {
   BILLING_PLANS,
-  type PaidBillingPlanId,
+  planCheckoutCharge,
   planIsMonthlyCycle,
-  planPriceUsd,
+  type BillingPlanId,
 } from "@/features/billing/lib/plans";
 import {
   getMercadoPagoAccessToken,
@@ -34,12 +34,13 @@ async function mpToken() {
 
 /**
  * Checkout MP:
- * - ciclo anual → Preference one-shot
+ * - TRIAL / precio ARS → Preference one-shot en ARS
+ * - ciclo anual → Preference one-shot USD
  * - ciclo mensual → Preapproval (suscripción) si hay auto_recurring; fallback preference
  */
 export async function createMercadoPagoCheckout(input: {
   paymentId: string;
-  plan: PaidBillingPlanId;
+  plan: BillingPlanId;
   title: string;
   payerEmail: string;
   successUrl?: string;
@@ -53,12 +54,17 @@ export async function createMercadoPagoCheckout(input: {
 
   const token = await mpToken();
   const base = appBaseUrl();
-  const amount = planPriceUsd(input.plan);
+  const charge = planCheckoutCharge(input.plan);
   const plan = BILLING_PLANS[input.plan];
   const successUrl = input.successUrl ?? `${base}/billing?mp=success`;
   const failureUrl = input.failureUrl ?? `${base}/onboarding/pago?mp=failure`;
 
-  if (planIsMonthlyCycle(input.plan)) {
+  const useSubscription =
+    charge.currency === "USD" &&
+    planIsMonthlyCycle(input.plan) &&
+    !plan.isTrial;
+
+  if (useSubscription) {
     const body = {
       reason: input.title,
       external_reference: input.paymentId,
@@ -66,8 +72,8 @@ export async function createMercadoPagoCheckout(input: {
       auto_recurring: {
         frequency: 1,
         frequency_type: "months",
-        transaction_amount: amount,
-        currency_id: "USD",
+        transaction_amount: charge.amount,
+        currency_id: charge.currency,
       },
       back_url: successUrl,
       status: "pending",
@@ -109,8 +115,8 @@ export async function createMercadoPagoCheckout(input: {
         title: input.title,
         description: plan.description,
         quantity: 1,
-        currency_id: "USD",
-        unit_price: amount,
+        currency_id: charge.currency,
+        unit_price: charge.amount,
       },
     ],
     external_reference: input.paymentId,

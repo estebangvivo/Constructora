@@ -12,6 +12,7 @@ import {
 import { getBudgetItemsAction } from "@/features/treasury/actions/get-budget-items";
 import type { PaymentMethod } from "@prisma/client";
 import type { TreasuryProjectOption } from "@/features/treasury/queries/list-projects-for-treasury";
+import { DateInput } from "@/components/ui/date-input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { formatMoney, PAYMENT_METHOD_LABEL } from "@/features/treasury/lib/labels";
 
@@ -327,12 +328,11 @@ export function TreasuryDocumentForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm">
           <span className="mb-1 block text-muted-foreground">Fecha</span>
-          <input
-            type="date"
+          <DateInput
             required
             value={issueDate}
-            onChange={(e) => setIssueDate(e.target.value)}
-            className="w-full rounded-md border border-border bg-background px-3 py-2.5 outline-none ring-accent focus:ring-2"
+            onChange={setIssueDate}
+            className="w-full"
           />
         </label>
         <label className="block text-sm">
@@ -865,16 +865,15 @@ export function TreasuryDocumentForm({
                         <span className="mb-1 block text-muted-foreground">
                           Vencimiento
                         </span>
-                        <input
+                        <DateInput
                           required
-                          type="date"
                           value={payment.checkDueDate ?? ""}
-                          onChange={(e) =>
+                          onChange={(iso) =>
                             updatePayment(payment.key, {
-                              checkDueDate: e.target.value,
+                              checkDueDate: iso,
                             })
                           }
-                          className="w-full rounded-md border border-border bg-background px-3 py-2 outline-none ring-accent focus:ring-2"
+                          className="w-full"
                         />
                       </label>
                       <p className="text-xs text-muted-foreground sm:col-span-2">
@@ -922,30 +921,28 @@ export function TreasuryDocumentForm({
                     <span className="mb-1 block text-muted-foreground">
                       Emisión
                     </span>
-                    <input
-                      type="date"
+                    <DateInput
                       value={payment.checkIssueDate ?? ""}
-                      onChange={(e) =>
+                      onChange={(iso) =>
                         updatePayment(payment.key, {
-                          checkIssueDate: e.target.value,
+                          checkIssueDate: iso,
                         })
                       }
-                      className="w-full rounded-md border border-border bg-background px-3 py-2 outline-none ring-accent focus:ring-2"
+                      className="w-full"
                     />
                   </label>
                   <label className="block text-sm">
                     <span className="mb-1 block text-muted-foreground">
                       Vencimiento
                     </span>
-                    <input
-                      type="date"
+                    <DateInput
                       value={payment.checkDueDate ?? ""}
-                      onChange={(e) =>
+                      onChange={(iso) =>
                         updatePayment(payment.key, {
-                          checkDueDate: e.target.value,
+                          checkDueDate: iso,
                         })
                       }
-                      className="w-full rounded-md border border-border bg-background px-3 py-2 outline-none ring-accent focus:ring-2"
+                      className="w-full"
                     />
                   </label>
                   <label className="block text-sm sm:col-span-2">

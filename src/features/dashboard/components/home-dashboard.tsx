@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { formatMoneyByCurrency } from "@/config/currencies";
+import { DateInput } from "@/components/ui/date-input";
 import { formatDateAR } from "@/lib/format-date";
 import { formatMoney } from "@/features/treasury/lib/labels";
 import { formatCashMoney } from "@/features/treasury/lib/cash-labels";
@@ -25,22 +26,20 @@ export function HomeDashboard({ data }: HomeDashboardProps) {
           <span className="block text-xs uppercase tracking-wider text-muted-foreground">
             Desde
           </span>
-          <input
-            type="date"
+          <DateInput
             name="from"
             defaultValue={data.dateFrom}
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none ring-accent focus:ring-2"
+            className="w-full"
           />
         </label>
         <label className="min-w-36 space-y-1">
           <span className="block text-xs uppercase tracking-wider text-muted-foreground">
             Hasta
           </span>
-          <input
-            type="date"
+          <DateInput
             name="to"
             defaultValue={data.dateTo}
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none ring-accent focus:ring-2"
+            className="w-full"
           />
         </label>
         <button

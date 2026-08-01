@@ -26,6 +26,7 @@ import {
   WEATHER_LABEL,
   WEATHER_OPTIONS,
 } from "@/features/daily-report/lib/labels";
+import { DateInput } from "@/components/ui/date-input";
 import { toDateInputValue } from "@/lib/format-date";
 
 const fieldClass =
@@ -171,12 +172,11 @@ export function DailyReportForm({ projectId, initial }: Props) {
       <section className="grid gap-3 sm:grid-cols-3">
         <label className="block text-sm">
           <span className="mb-1 block text-muted-foreground">Fecha</span>
-          <input
-            type="date"
+          <DateInput
             required
             value={reportDate}
-            onChange={(e) => setReportDate(e.target.value)}
-            className={fieldClass}
+            onChange={setReportDate}
+            className="w-full bg-surface"
           />
         </label>
         <label className="block text-sm sm:col-span-2">

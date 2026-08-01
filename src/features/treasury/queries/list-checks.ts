@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import type { CheckStatus } from "@prisma/client";
 import { backfillMissingChecksFromPostedReceipts } from "@/features/treasury/lib/check-portfolio";
+import { formatDateAR } from "@/lib/format-date";
 
 export type CheckAllocationTarget = {
   projectId: string;
@@ -169,7 +170,7 @@ export async function listPortfolioChecksForPayment(): Promise<
     label: `${c.number} · ${c.bank} · ${c.amount.toLocaleString("es-AR", {
       style: "currency",
       currency: c.currency,
-    })}${c.dueDate ? ` · vto ${c.dueDate.toLocaleDateString("es-AR")}` : ""}`,
+    })}${c.dueDate ? ` · vto ${formatDateAR(c.dueDate)}` : ""}`,
   }));
 }
 

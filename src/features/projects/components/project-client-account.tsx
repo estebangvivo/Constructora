@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { AccountStatement } from "@/features/treasury/queries/account-statements";
 import { formatMoney } from "@/features/treasury/lib/labels";
 import { projectHref } from "@/config/navigation";
+import { formatDateAR } from "@/lib/format-date";
 
 type ProjectClientAccountProps = {
   projectId: string;
@@ -119,7 +120,7 @@ export function ProjectClientAccount({
                 return (
                   <tr key={m.id}>
                     <td className="py-3 pr-3 tabular-nums text-muted-foreground">
-                      {new Date(`${m.date}T12:00:00`).toLocaleDateString("es-AR")}
+                      {formatDateAR(m.date)}
                     </td>
                     <td className="py-3 pr-3">
                       <Link
