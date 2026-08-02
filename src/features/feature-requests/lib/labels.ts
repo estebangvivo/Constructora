@@ -24,3 +24,17 @@ export const FEATURE_REQUEST_STATUS_OPTIONS: FeatureRequestStatus[] = [
   "IMPLEMENTED",
   "CLOSED",
 ];
+
+/** Pendientes / en curso (no cerradas ni rechazadas). */
+export const FEATURE_REQUEST_ACTIVE_STATUSES: FeatureRequestStatus[] = [
+  "OPEN",
+  "IN_REVIEW",
+  "AWAITING_USER",
+  "QUOTED",
+];
+
+export function isFeatureRequestActive(
+  status: FeatureRequestStatus,
+): boolean {
+  return FEATURE_REQUEST_ACTIVE_STATUSES.includes(status);
+}

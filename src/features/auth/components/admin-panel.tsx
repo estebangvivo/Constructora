@@ -40,6 +40,7 @@ import {
 } from "@/features/auth/components/admin-superadmin-orgs-panel";
 import { AdminFeatureRequestsPanel } from "@/features/feature-requests/components/admin-feature-requests-panel";
 import type { FeatureRequestListItem } from "@/features/feature-requests/components/feature-request-list";
+import { isFeatureRequestActive } from "@/features/feature-requests/lib/labels";
 import { AdminSystemExpensesPanel } from "@/features/platform-expenses/components/admin-system-expenses-panel";
 import type { PlatformExpenseListResult } from "@/features/platform-expenses/actions/platform-expense-actions";
 import { cn } from "@/lib/utils";
@@ -188,6 +189,12 @@ export function AdminPanel({
   const totalOnline = overview.reduce((s, o) => s + o.onlineCount, 0);
   const totalMembers = overview.reduce((s, o) => s + o.memberCount, 0);
 
+  const activeFeatureRequests = useMemo(
+    () =>
+      featureRequests.filter((r) => isFeatureRequestActive(r.status)).length,
+    [featureRequests],
+  );
+
   const tabs: { id: TabId; label: string; icon: typeof Users }[] = [
     { id: "connected", label: "Usuarios por empresa", icon: Circle },
     { id: "users", label: "Alta y permisos", icon: Users },
@@ -200,8 +207,8 @@ export function AdminPanel({
           {
             id: "requests" as const,
             label:
-              featureRequests.length > 0
-                ? `Mejoras (${featureRequests.length})`
+              activeFeatureRequests > 0
+                ? `Mejoras (${activeFeatureRequests})`
                 : "Mejoras",
             icon: Lightbulb,
           },

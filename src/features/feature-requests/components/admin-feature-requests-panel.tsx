@@ -4,7 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import type { FeatureRequestStatus } from "@prisma/client";
 import type { FeatureRequestListItem } from "@/features/feature-requests/components/feature-request-list";
-import { FEATURE_REQUEST_STATUS_LABEL } from "@/features/feature-requests/lib/labels";
+import {
+  FEATURE_REQUEST_STATUS_LABEL,
+  FEATURE_REQUEST_ACTIVE_STATUSES,
+  isFeatureRequestActive,
+} from "@/features/feature-requests/lib/labels";
 import { cn } from "@/lib/utils";
 import { formatDateTimeAR } from "@/lib/format-date";
 
@@ -31,7 +35,7 @@ function matchesFilter(
   if (filter === "done") {
     return ["APPROVED", "REJECTED", "IMPLEMENTED", "CLOSED"].includes(status);
   }
-  return ["OPEN", "IN_REVIEW", "AWAITING_USER", "QUOTED"].includes(status);
+  return FEATURE_REQUEST_ACTIVE_STATUSES.includes(status);
 }
 
 export function AdminFeatureRequestsPanel({
@@ -41,6 +45,9 @@ export function AdminFeatureRequestsPanel({
 }) {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["id"]>("all");
   const filtered = requests.filter((r) => matchesFilter(r.status, filter));
+  const activeCount = requests.filter((r) =>
+    isFeatureRequestActive(r.status),
+  ).length;
 
   return (
     <div className="space-y-4">
@@ -51,9 +58,11 @@ export function AdminFeatureRequestsPanel({
         <p className="mt-1 text-sm text-muted-foreground">
           Revisá pedidos de usuarios, cotizá, consultá o aprobá la
           implementación. Abrí cada solicitud para el detalle y el hilo.
-          {requests.length > 0
-            ? ` · ${requests.length} en total`
-            : ""}
+          {activeCount > 0
+            ? ` · ${activeCount} activa${activeCount === 1 ? "" : "s"}`
+            : requests.length > 0
+              ? " · sin activas"
+              : ""}
         </p>
       </div>
 
