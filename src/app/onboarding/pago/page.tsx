@@ -8,6 +8,7 @@ import {
   type BillingPlanId,
 } from "@/features/billing/lib/plans";
 import {
+  getEffectivePlanPrices,
   planCheckoutChargeEffective,
   planMercadoPagoChargeEffective,
 } from "@/features/billing/lib/effective-plans";
@@ -17,6 +18,7 @@ import {
   isMercadoPagoConfigured,
 } from "@/features/billing/lib/platform-billing-settings";
 import { OnboardingPagoForm } from "@/features/billing/components/onboarding-pago-form";
+import { PlanSpecialDiscountBadge } from "@/features/billing/components/plan-special-discount-badge";
 
 export const dynamic = "force-dynamic";
 
@@ -39,14 +41,16 @@ export default async function OnboardingPagoPage({
         ? planRaw
         : "TEAM_MONTHLY";
 
-  const [usdArsRate, bank, mpConfigured, transferQuote, mpQuote] =
+  const [usdArsRate, bank, mpConfigured, transferQuote, mpQuote, planPrices] =
     await Promise.all([
       getBillingUsdArsRate(),
       getTransferBankDetailsEffective(),
       isMercadoPagoConfigured(),
       planCheckoutChargeEffective(plan),
       planMercadoPagoChargeEffective(plan),
+      getEffectivePlanPrices(),
     ]);
+  const planPrice = planPrices[plan];
 
   const transferArsFromUsd =
     transferQuote.currency === "USD" && usdArsRate
@@ -70,6 +74,13 @@ export default async function OnboardingPagoPage({
             ? "Completá los datos de tu empresa para activar la prueba."
             : "Elegí Mercado Pago o transferencia bancaria y completá los datos de tu empresa."}
         </p>
+        <div className="mt-3">
+          <PlanSpecialDiscountBadge
+            discountPercent={planPrice.discountPercent}
+            discountUntil={planPrice.discountUntil}
+            discountPromoMonths={planPrice.discountPromoMonths}
+          />
+        </div>
         {sp.mp === "failure" && (
           <p className="mt-3 rounded-md border border-red-700/40 bg-red-50 px-3 py-2 text-sm text-red-800">
             El pago en Mercado Pago no se completó. Podés reintentar o usar

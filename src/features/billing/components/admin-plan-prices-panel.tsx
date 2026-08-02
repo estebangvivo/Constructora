@@ -17,6 +17,9 @@ type RowState = {
   isTrial: boolean;
   priceUsd: string;
   priceArs: string;
+  discountPercent: string;
+  discountUntil: string;
+  discountPromoMonths: string;
   defaultPriceUsd: number;
   defaultPriceArs: number | null;
 };
@@ -28,6 +31,11 @@ function toState(rows: AdminPlanPriceRow[]): RowState[] {
     isTrial: r.isTrial,
     priceUsd: String(r.priceUsd),
     priceArs: r.priceArs != null ? String(r.priceArs) : "",
+    discountPercent:
+      r.discountPercent != null ? String(r.discountPercent) : "",
+    discountUntil: r.discountUntil ?? "",
+    discountPromoMonths:
+      r.discountPromoMonths != null ? String(r.discountPromoMonths) : "",
     defaultPriceUsd: r.defaultPriceUsd,
     defaultPriceArs: r.defaultPriceArs,
   }));
@@ -46,7 +54,16 @@ export function AdminPlanPricesPanel({
 
   function updateRow(
     id: string,
-    patch: Partial<Pick<RowState, "priceUsd" | "priceArs">>,
+    patch: Partial<
+      Pick<
+        RowState,
+        | "priceUsd"
+        | "priceArs"
+        | "discountPercent"
+        | "discountUntil"
+        | "discountPromoMonths"
+      >
+    >,
   ) {
     setRows((prev) =>
       prev.map((r) => (r.id === id ? { ...r, ...patch } : r)),
@@ -63,7 +80,21 @@ export function AdminPlanPricesPanel({
         const arsRaw = r.priceArs.trim();
         const priceArs =
           arsRaw === "" ? null : Number(arsRaw.replace(",", "."));
-        return { id: r.id, priceUsd, priceArs };
+        const discRaw = r.discountPercent.trim();
+        const discountPercent =
+          discRaw === "" ? null : Number(discRaw.replace(",", "."));
+        const discountUntil = r.discountUntil.trim() || null;
+        const monthsRaw = r.discountPromoMonths.trim();
+        const discountPromoMonths =
+          monthsRaw === "" ? null : Number(monthsRaw.replace(",", "."));
+        return {
+          id: r.id,
+          priceUsd,
+          priceArs,
+          discountPercent,
+          discountUntil,
+          discountPromoMonths,
+        };
       });
       const result = await saveAdminPlanPrices({ prices });
       if (!result.ok) {
@@ -82,6 +113,9 @@ export function AdminPlanPricesPanel({
         priceUsd: String(r.defaultPriceUsd),
         priceArs:
           r.defaultPriceArs != null ? String(r.defaultPriceArs) : "",
+        discountPercent: "",
+        discountUntil: "",
+        discountPromoMonths: "",
       })),
     );
     setOk(false);
@@ -89,26 +123,31 @@ export function AdminPlanPricesPanel({
   }
 
   return (
-    <form onSubmit={onSave} className="max-w-3xl space-y-6">
+    <form onSubmit={onSave} className="max-w-6xl space-y-6">
       <div>
         <h2 className="inline-flex items-center gap-2 font-display text-xl tracking-tight">
           <DollarSign className="size-5" aria-hidden />
           Precios de planes
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Estos valores se usan en onboarding, renovación, transferencia y
-          Mercado Pago. Si un plan tiene precio ARS, el checkout cobra en
-          pesos; si no, en USD.
+          Descuento % + fecha límite para contratar + meses de duración en
+          planes mensuales. Solo aplica a empresas nuevas (alta / primera
+          contratación). Exentas y clientes que ya pagaron un plan no reciben
+          la campaña. Quien contrate antes de la fecha goza ese % durante N
+          meses; después renueva al precio de lista.
         </p>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full min-w-[520px] text-left text-sm">
+        <table className="w-full min-w-[920px] text-left text-sm">
           <thead className="border-b border-border bg-surface/50 text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-3 py-2 font-medium">Plan</th>
               <th className="px-3 py-2 font-medium">USD</th>
               <th className="px-3 py-2 font-medium">ARS (opcional)</th>
+              <th className="px-3 py-2 font-medium">Desc. %</th>
+              <th className="px-3 py-2 font-medium">Contratar hasta</th>
+              <th className="px-3 py-2 font-medium">Meses promo</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -144,6 +183,46 @@ export function AdminPlanPricesPanel({
                     className={fieldClass}
                   />
                 </td>
+                <td className="px-3 py-3">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="0.01"
+                    placeholder="—"
+                    value={r.discountPercent}
+                    onChange={(e) =>
+                      updateRow(r.id, { discountPercent: e.target.value })
+                    }
+                    className={fieldClass}
+                  />
+                </td>
+                <td className="px-3 py-3">
+                  <input
+                    type="date"
+                    value={r.discountUntil}
+                    onChange={(e) =>
+                      updateRow(r.id, { discountUntil: e.target.value })
+                    }
+                    className={fieldClass}
+                  />
+                </td>
+                <td className="px-3 py-3">
+                  <input
+                    type="number"
+                    min={1}
+                    max={36}
+                    step={1}
+                    placeholder="ej. 6"
+                    value={r.discountPromoMonths}
+                    onChange={(e) =>
+                      updateRow(r.id, {
+                        discountPromoMonths: e.target.value,
+                      })
+                    }
+                    className={fieldClass}
+                  />
+                </td>
               </tr>
             ))}
           </tbody>
@@ -160,7 +239,7 @@ export function AdminPlanPricesPanel({
       )}
       {ok && (
         <p className="rounded-md border border-emerald-700/30 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-          Precios guardados.
+          Precios y descuentos guardados.
         </p>
       )}
 

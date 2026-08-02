@@ -4,10 +4,36 @@ import { normalizeOrgSlug } from "@/features/auth/lib/org-slug";
 import {
   addBillingPeriod,
   normalizeBillingPlanId,
+  planIsMonthlyCycle,
   type BillingPlanId,
 } from "@/features/billing/lib/plans";
+import {
+  getPaymentPromoMeta,
+  lockOrgBillingPromo,
+} from "@/features/billing/lib/billing-promo-org";
 
 type Tx = Prisma.TransactionClient;
+
+async function applyPromoLockFromPayment(
+  paymentId: string,
+  organizationId: string,
+  plan: BillingPlanId,
+) {
+  if (!planIsMonthlyCycle(plan)) return;
+  const meta = await getPaymentPromoMeta(paymentId);
+  if (
+    meta.discountPercent == null ||
+    meta.promoMonths == null ||
+    meta.promoMonths < 1
+  ) {
+    return;
+  }
+  await lockOrgBillingPromo({
+    organizationId,
+    percent: meta.discountPercent,
+    months: meta.promoMonths,
+  });
+}
 
 export async function activateBillingPayment(
   paymentId: string,
@@ -109,7 +135,16 @@ export async function activateBillingPayment(
     return { payment: approved, freshlyApproved: true };
   });
 
-  if (updated.freshlyApproved) {
+  if (updated.freshlyApproved && updated.payment.organizationId) {
+    const plan =
+      normalizeBillingPlanId(updated.payment.plan) ??
+      ("TEAM_MONTHLY" as BillingPlanId);
+    await applyPromoLockFromPayment(
+      updated.payment.id,
+      updated.payment.organizationId,
+      plan,
+    );
+
     const { notifyBillingPaymentDecision } = await import(
       "@/features/billing/lib/notify-payment-decision"
     );

@@ -16,6 +16,7 @@ type MobileNavProps = {
   organizationName?: string | null;
   logoUrl?: string | null;
   userEmail?: string | null;
+  isPlatformSuperadmin?: boolean;
 };
 
 export function MobileNav({
@@ -24,10 +25,15 @@ export function MobileNav({
   organizationName,
   logoUrl,
   userEmail,
+  isPlatformSuperadmin = false,
 }: MobileNavProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const items = filterNavByAccess(SIDEBAR_NAV, { role, modules });
+  const items = filterNavByAccess(SIDEBAR_NAV, {
+    role,
+    modules,
+    isPlatformSuperadmin,
+  });
 
   return (
     <div className="border-b border-border bg-sidebar text-sidebar-foreground print:hidden md:hidden">

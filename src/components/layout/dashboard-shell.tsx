@@ -13,6 +13,7 @@ type DashboardShellProps = {
   organizationName?: string | null;
   logoUrl?: string | null;
   userEmail?: string | null;
+  isPlatformSuperadmin?: boolean;
 };
 
 export function DashboardShell({
@@ -22,6 +23,7 @@ export function DashboardShell({
   organizationName,
   logoUrl,
   userEmail,
+  isPlatformSuperadmin = false,
 }: DashboardShellProps) {
   const pathname = usePathname();
 
@@ -34,6 +36,7 @@ export function DashboardShell({
         organizationName={organizationName}
         logoUrl={logoUrl}
         userEmail={userEmail}
+        isPlatformSuperadmin={isPlatformSuperadmin}
       />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <MobileNav
@@ -42,6 +45,7 @@ export function DashboardShell({
           organizationName={organizationName}
           logoUrl={logoUrl}
           userEmail={userEmail}
+          isPlatformSuperadmin={isPlatformSuperadmin}
         />
         <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-0">
           {children}

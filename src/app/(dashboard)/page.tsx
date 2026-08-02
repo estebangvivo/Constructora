@@ -54,6 +54,9 @@ export default async function HomePage({ searchParams }: PageProps) {
     {
       role: session?.role ?? null,
       modules: session?.allowedModules ?? null,
+      isPlatformSuperadmin: session
+        ? isPlatformSuperadmin(session)
+        : false,
     },
   );
 

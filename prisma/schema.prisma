@@ -176,6 +176,16 @@ enum BillingPaymentStatus {
   REJECTED
 }
 
+enum PlatformSystemExpenseCategory {
+  HOSTING
+  DEVELOPMENT
+  TOOLS
+  DOMAIN
+  MARKETING
+  SUPPORT
+  OTHER
+}
+
 model Organization {
   id                String   @id @default(cuid())
   name              String /// Nombre comercial
@@ -209,6 +219,10 @@ model Organization {
   billingStatus     BillingStatus @default(PENDING_PAYMENT)
   billingPlan       BillingPlan?
   paidUntil         DateTime?
+  /// % de descuento promocional locked (planes mensuales) hasta billingPromoUntil.
+  billingPromoPercent Decimal?  @db.Decimal(5, 2)
+  /// Hasta cuándo las renovaciones mensuales cobran el % promocional.
+  billingPromoUntil   DateTime?
   mpPreapprovalId   String?
   mpCustomerId      String?
   createdAt         DateTime @default(now())
@@ -303,6 +317,7 @@ model User {
   featureRequestsQuoted   FeatureRequest[]  @relation("FeatureRequestQuoter")
   featureRequestsDecided  FeatureRequest[]  @relation("FeatureRequestDecider")
   featureRequestMessages  FeatureRequestMessage[]
+  platformSystemExpenses  PlatformSystemExpense[] @relation("PlatformSystemExpenseCreator")
 
   @@map("users")
 }
@@ -320,6 +335,10 @@ model BillingPayment {
   currency         String               /// USD | ARS
   amount           Decimal              @db.Decimal(14, 2)
   fxRateUsed       Decimal?             @db.Decimal(18, 6)
+  /// % de descuento aplicado en este pago (campaña u org).
+  discountPercent  Decimal?             @db.Decimal(5, 2)
+  /// Meses de promo a lockear en la org (solo alta/renovación con campaña, mensuales).
+  promoMonths      Int?
   status           BillingPaymentStatus @default(PENDING)
   mpPreferenceId   String?
   mpPaymentId      String?
@@ -350,7 +369,7 @@ model PlatformBillingSettings {
   mpPublicKey     String?
   /// Recargo % sobre el plan al pagar con Mercado Pago (default 4).
   mpSurchargePercent Decimal @default(4) @db.Decimal(6, 2)
-  /// Overrides de precios SaaS: { "SOLO_MONTHLY": { "priceUsd": 59 }, "TRIAL": { "priceArs": 1 } }
+  /// Overrides de precios SaaS: { "SOLO_MONTHLY": { "priceUsd": 59, "discountPercent": 20, "discountUntil": "2026-12-31", "discountPromoMonths": 6 }, "TRIAL": { "priceArs": 1 } }
   planPrices      Json?
   /// Datos de transferencia (DB pisa env).
   transferAccountName   String?
@@ -365,6 +384,29 @@ model PlatformBillingSettings {
   updatedByUserId String?
 
   @@map("platform_billing_settings")
+}
+
+/// Gasto de mantenimiento / operación del SaaS (solo plataforma).
+model PlatformSystemExpense {
+  id              String                        @id @default(cuid())
+  date            DateTime                      @db.Date
+  category        PlatformSystemExpenseCategory
+  title           String
+  notes           String?
+  /// ARS o USD
+  currency        String                        @default("ARS")
+  amount          Decimal                       @db.Decimal(14, 2)
+  hours           Decimal?                      @db.Decimal(8, 2)
+  vendor          String?
+  createdByUserId String?
+  createdAt       DateTime                      @default(now())
+  updatedAt       DateTime                      @updatedAt
+
+  createdBy User? @relation("PlatformSystemExpenseCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([date])
+  @@index([category])
+  @@map("platform_system_expenses")
 }
 
 /// Membresía del usuario en una organización + rol global en esa org.

@@ -14,6 +14,7 @@ import { getAdminMercadoPagoConfig } from "@/features/billing/actions/admin-merc
 import { getAdminTransferBankConfig } from "@/features/billing/actions/admin-transfer-actions";
 import { getAdminPlanPrices } from "@/features/billing/actions/admin-plan-prices-actions";
 import { listAllFeatureRequestsForAdmin } from "@/features/feature-requests/actions/feature-request-actions";
+import { listPlatformExpenses } from "@/features/platform-expenses/actions/platform-expense-actions";
 import { AdminPanel } from "@/features/auth/components/admin-panel";
 import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
 import { prisma } from "@/lib/prisma";
@@ -29,10 +30,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   if (!session) redirect("/sign-in");
 
   const superadmin = isPlatformSuperadmin(session);
-  if (!superadmin && !session.organizationId) {
-    redirect("/onboarding/planes");
-  }
-  if (!superadmin && session.organizationRole !== "ADMIN") {
+  if (!superadmin) {
     redirect("/");
   }
 
@@ -61,6 +59,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     mercadoPagoConfig,
     transferBankConfig,
     planPrices,
+    systemExpenses,
     featureRequests,
   ] = await Promise.all([
     listAdminOrganizationsOverview(),
@@ -81,6 +80,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     superadmin ? getAdminMercadoPagoConfig() : Promise.resolve(null),
     superadmin ? getAdminTransferBankConfig() : Promise.resolve(null),
     superadmin ? getAdminPlanPrices() : Promise.resolve(null),
+    superadmin ? listPlatformExpenses({}) : Promise.resolve(null),
     superadmin ? listAllFeatureRequestsForAdmin() : Promise.resolve([]),
   ]);
 
@@ -92,6 +92,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     params.tab === "mercadopago" ||
     params.tab === "transferBank" ||
     params.tab === "planPrices" ||
+    params.tab === "expenses" ||
     params.tab === "requests"
       ? params.tab
       : undefined;
@@ -101,9 +102,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       <div className="mb-8">
         <h1 className="font-display text-3xl tracking-tight">Administración</h1>
         <p className="mt-1 text-muted-foreground">
-          {superadmin
-            ? `Superadmin (${session.user.email}): elegí la empresa en Alta y permisos o Empresas para gestionar usuarios y perfiles sin cambiar de sesión.`
-            : "Usuarios por empresa, presencia en línea, alta de cuentas, configuración y revisión de pagos SaaS."}
+          {`Superadmin (${session.user.email}): elegí la empresa en Alta y permisos o Empresas para gestionar usuarios y perfiles sin cambiar de sesión.`}
         </p>
       </div>
       <AdminPanel
@@ -114,19 +113,16 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
         organizations={organizations}
         currentOrganizationId={targetOrganizationId}
         currentOrganizationName={
-          targetOrgName ??
-          currentOrg?.name ??
-          (superadmin ? "Sin empresa" : "Empresa actual")
+          targetOrgName ?? currentOrg?.name ?? "Sin empresa"
         }
         currentUserId={session.user.id}
         billingPayments={billingPayments}
-        canReviewPayments={
-          superadmin || currentOrg?.billingStatus === "EXEMPT"
-        }
-        isPlatformSuperadmin={superadmin}
+        canReviewPayments
+        isPlatformSuperadmin
         mercadoPagoConfig={mercadoPagoConfig}
         transferBankConfig={transferBankConfig}
         planPrices={planPrices}
+        systemExpenses={systemExpenses}
         featureRequests={featureRequests}
         initialTab={initialTab}
       />

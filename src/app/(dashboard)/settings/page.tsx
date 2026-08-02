@@ -15,6 +15,8 @@ import { UsersAdminPanel } from "@/features/auth/components/users-admin-panel";
 import { hasModule } from "@/features/auth/lib/modules";
 import { listBankAccounts } from "@/features/treasury/queries/bank-queries";
 import { organizationIsOnTrial } from "@/features/billing/lib/seats";
+import { OrganizationPlanCard } from "@/features/billing/components/organization-plan-card";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -46,18 +48,34 @@ export default async function SettingsPage() {
     session.organizationRole,
   );
 
-  const [latestUsdArs, recentRates, users, puestos, organizations, bankAccounts, trialBlocksNewUsers] =
-    await Promise.all([
-      getLatestExchangeRate("USD", "ARS"),
-      listRecentExchangeRates(14),
-      canManageUsers ? listOrganizationUsers() : Promise.resolve([]),
-      canManageUsers ? listTurneroPuestosForUsers() : Promise.resolve([]),
-      canManageUsers
-        ? listManageableOrganizationsForUsers()
-        : Promise.resolve([]),
-      listBankAccounts(),
-      organizationIsOnTrial(session.organizationId),
-    ]);
+  const [
+    latestUsdArs,
+    recentRates,
+    users,
+    puestos,
+    organizations,
+    bankAccounts,
+    trialBlocksNewUsers,
+    billing,
+  ] = await Promise.all([
+    getLatestExchangeRate("USD", "ARS"),
+    listRecentExchangeRates(14),
+    canManageUsers ? listOrganizationUsers() : Promise.resolve([]),
+    canManageUsers ? listTurneroPuestosForUsers() : Promise.resolve([]),
+    canManageUsers
+      ? listManageableOrganizationsForUsers()
+      : Promise.resolve([]),
+    listBankAccounts(),
+    organizationIsOnTrial(session.organizationId),
+    prisma.organization.findUnique({
+      where: { id: session.organizationId },
+      select: {
+        billingPlan: true,
+        billingStatus: true,
+        paidUntil: true,
+      },
+    }),
+  ]);
 
   return (
     <div className="px-4 py-6 lg:px-6">
@@ -75,6 +93,13 @@ export default async function SettingsPage() {
       </div>
       <div className="space-y-10">
         <OrganizationSettingsForm organization={organization} />
+        {billing ? (
+          <OrganizationPlanCard
+            billingPlan={billing.billingPlan}
+            billingStatus={billing.billingStatus}
+            paidUntil={billing.paidUntil}
+          />
+        ) : null}
         <BanksSettingsPanel
           accounts={bankAccounts}
           enabledCurrencies={organization.enabledCurrencies}

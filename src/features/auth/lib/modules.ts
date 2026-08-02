@@ -174,10 +174,16 @@ export const APP_MODULES: AppModuleDef[] = [
   },
 ];
 
+/** Módulos asignables a miembros de empresa (excluye panel de plataforma). */
+export const ORG_MODULE_KEYS: AppModuleKey[] = APP_MODULE_KEYS.filter(
+  (k) => k !== "admin",
+);
+
 /** Defaults por rol cuando allowedModules está vacío. */
+
 export const ROLE_DEFAULT_MODULES: Record<OrganizationRole, AppModuleKey[]> = {
-  ADMIN: [...APP_MODULE_KEYS],
-  DIRECTOR: APP_MODULE_KEYS.filter((k) => k !== "admin"),
+  ADMIN: [...ORG_MODULE_KEYS],
+  DIRECTOR: [...ORG_MODULE_KEYS],
   RESIDENT: [
     "home",
     "projects",
@@ -226,10 +232,10 @@ export function resolveAllowedModules(
   role: OrganizationRole | AppRole,
   stored: string[] | null | undefined,
 ): AppModuleKey[] {
-  if (role === "ADMIN") return [...APP_MODULE_KEYS];
+  if (role === "ADMIN") return [...ORG_MODULE_KEYS];
   if (stored && stored.length > 0) {
     const set = new Set(stored);
-    return APP_MODULE_KEYS.filter((k) => set.has(k));
+    return ORG_MODULE_KEYS.filter((k) => set.has(k));
   }
   return [...ROLE_DEFAULT_MODULES[role as OrganizationRole]];
 }

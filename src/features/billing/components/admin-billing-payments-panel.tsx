@@ -76,6 +76,8 @@ function parseAmount(raw: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+type StatusFilter = "ANY" | "PENDING" | "APPROVED" | "REJECTED";
+
 function matchesFilters(
   p: BillingPaymentRow,
   filters: {
@@ -84,6 +86,7 @@ function matchesFilters(
     amountMin: string;
     amountMax: string;
     amountCurrency: "ANY" | "ARS" | "USD";
+    status: StatusFilter;
   },
 ) {
   const companyQ = filters.company.trim().toLowerCase();
@@ -96,6 +99,10 @@ function matchesFilters(
   if (userQ) {
     const hay = `${p.userName} ${p.userEmail} ${p.userPhone ?? ""}`.toLowerCase();
     if (!hay.includes(userQ)) return false;
+  }
+
+  if (filters.status !== "ANY" && p.status !== filters.status) {
+    return false;
   }
 
   const min = parseAmount(filters.amountMin);
@@ -148,6 +155,7 @@ export function AdminBillingPaymentsPanel({
   const [amountCurrency, setAmountCurrency] = useState<"ANY" | "ARS" | "USD">(
     "ANY",
   );
+  const [status, setStatus] = useState<StatusFilter>("ANY");
 
   const filters = {
     company,
@@ -155,16 +163,17 @@ export function AdminBillingPaymentsPanel({
     amountMin,
     amountMax,
     amountCurrency,
+    status,
   };
 
   const filteredPending = useMemo(
     () => pendingTransfers.filter((p) => matchesFilters(p, filters)),
-    [pendingTransfers, company, user, amountMin, amountMax, amountCurrency],
+    [pendingTransfers, company, user, amountMin, amountMax, amountCurrency, status],
   );
 
   const filteredRecent = useMemo(
     () => recent.filter((p) => matchesFilters(p, filters)),
-    [recent, company, user, amountMin, amountMax, amountCurrency],
+    [recent, company, user, amountMin, amountMax, amountCurrency, status],
   );
 
   const hasActiveFilters = Boolean(
@@ -172,7 +181,8 @@ export function AdminBillingPaymentsPanel({
       user.trim() ||
       amountMin.trim() ||
       amountMax.trim() ||
-      amountCurrency !== "ANY",
+      amountCurrency !== "ANY" ||
+      status !== "ANY",
   );
 
   function clearFilters() {
@@ -181,6 +191,7 @@ export function AdminBillingPaymentsPanel({
     setAmountMin("");
     setAmountMax("");
     setAmountCurrency("ANY");
+    setStatus("ANY");
   }
 
   function run(
@@ -220,7 +231,7 @@ export function AdminBillingPaymentsPanel({
           <div>
             <h3 className="font-medium">Filtros</h3>
             <p className="text-sm text-muted-foreground">
-              Empresa, usuario y rango de monto (USD o ARS).
+              Empresa, usuario, estado y rango de monto (USD o ARS).
             </p>
           </div>
           {hasActiveFilters && (
@@ -233,7 +244,7 @@ export function AdminBillingPaymentsPanel({
             </button>
           )}
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <label className="block text-sm sm:col-span-1 lg:col-span-1">
             <span className="mb-1 block text-muted-foreground">Empresa</span>
             <input
@@ -251,6 +262,19 @@ export function AdminBillingPaymentsPanel({
               placeholder="Nombre o email"
               className={fieldClass}
             />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-muted-foreground">Estado</span>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as StatusFilter)}
+              className={fieldClass}
+            >
+              <option value="ANY">Todos</option>
+              <option value="PENDING">Pendiente</option>
+              <option value="APPROVED">Aprobado</option>
+              <option value="REJECTED">Rechazado</option>
+            </select>
           </label>
           <label className="block text-sm">
             <span className="mb-1 block text-muted-foreground">Moneda</span>

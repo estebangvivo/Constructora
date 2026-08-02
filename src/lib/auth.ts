@@ -305,14 +305,11 @@ export async function requireAuthSession(): Promise<SessionContext> {
 }
 
 /**
- * Admin de org con empresa activa, o superadmin de plataforma (con o sin empresa).
+ * Solo superadmin de plataforma (panel /admin).
  */
 export async function requireAdminPanelSession(): Promise<SessionContext> {
   const session = await requireAuthSession();
-  if (isPlatformSuperadminEmail(session.user.email)) {
-    return session;
-  }
-  if (!hasOrganization(session) || session.organizationRole !== "ADMIN") {
+  if (!isPlatformSuperadminEmail(session.user.email)) {
     throw new Error("FORBIDDEN");
   }
   return session;

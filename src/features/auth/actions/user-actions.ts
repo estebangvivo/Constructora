@@ -13,7 +13,7 @@ import {
   validatePasswordStrength,
 } from "@/features/auth/lib/password";
 import {
-  APP_MODULE_KEYS,
+  ORG_MODULE_KEYS,
   ROLE_DEFAULT_MODULES,
   type AppModuleKey,
 } from "@/features/auth/lib/modules";
@@ -194,9 +194,9 @@ function sanitizeModules(
   role: OrganizationRole,
   modules: string[],
 ): AppModuleKey[] {
-  if (role === "ADMIN") return [...APP_MODULE_KEYS];
+  if (role === "ADMIN") return [...ORG_MODULE_KEYS];
   const set = new Set(modules);
-  return APP_MODULE_KEYS.filter((k) => set.has(k));
+  return ORG_MODULE_KEYS.filter((k) => set.has(k));
 }
 
 async function resolveTurneroPuestoId(

@@ -342,7 +342,7 @@ function UserForm({
   );
 
   const globalMods = useMemo(
-    () => APP_MODULES.filter((m) => m.group === "global"),
+    () => APP_MODULES.filter((m) => m.group === "global" && m.key !== "admin"),
     [],
   );
   const obraMods = useMemo(

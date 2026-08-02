@@ -73,8 +73,6 @@ export async function listAdminOrganizationsOverview(): Promise<
   AdminOrganizationOverview[]
 > {
   const session = await requireAdminPanelSession();
-  const superadmin = isPlatformSuperadmin(session);
-  if (!superadmin && session.organizationRole !== "ADMIN") return [];
 
   const orgIds = await orgIdsForAdminActor(
     session.user.id,

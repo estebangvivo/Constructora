@@ -38,6 +38,8 @@ export type NavItem = {
   roles?: AppRole[];
   fieldPriority?: boolean;
   module?: AppModuleKey;
+  /** Solo visible para superadmin de plataforma (no rol Admin de empresa). */
+  platformSuperadminOnly?: boolean;
 };
 
 export const SIDEBAR_NAV: NavItem[] = [
@@ -85,8 +87,8 @@ export const SIDEBAR_NAV: NavItem[] = [
     title: "Administración",
     href: "/admin",
     icon: Shield,
-    description: "Usuarios por empresa, alta y configuración multi-empresa",
-    roles: ["ADMIN"],
+    description: "Panel de plataforma: empresas, billing y gastos de sistema",
+    platformSuperadminOnly: true,
     module: "admin",
   },
   {
@@ -211,12 +213,17 @@ export function filterNavByAccess(
   opts: {
     role?: AppRole | null;
     modules?: AppModuleKey[] | string[] | null;
+    isPlatformSuperadmin?: boolean;
   },
 ): NavItem[] {
-  const byRole = filterNavByRole(items, opts.role);
+  const byRole = filterNavByRole(items, opts.role).filter((item) => {
+    if (!item.platformSuperadminOnly) return true;
+    return Boolean(opts.isPlatformSuperadmin);
+  });
   if (!opts.modules || opts.modules.length === 0) return byRole;
   const set = new Set(opts.modules);
   return byRole.filter((item) => {
+    if (item.platformSuperadminOnly) return true;
     const mod =
       item.module ??
       SIDEBAR_MODULE_BY_HREF[item.href] ??

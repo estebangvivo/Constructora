@@ -14,6 +14,7 @@ import {
   submitTransferRenewal,
 } from "@/features/billing/actions/billing-actions";
 import type { TransferBankDetails } from "@/features/billing/lib/platform-billing-settings";
+import { PlanSpecialDiscountBadge } from "@/features/billing/components/plan-special-discount-badge";
 import { cn } from "@/lib/utils";
 
 const fieldClass =
@@ -26,12 +27,24 @@ function formatMoney(currency: string, amount: number) {
   })}`;
 }
 
+export type RenewalPlanPrice = {
+  priceUsd: number;
+  listPriceUsd: number;
+  discountPercent: number | null;
+  discountUntil: string | null;
+  discountPromoMonths: number | null;
+  discountSource?: "none" | "campaign" | "org";
+};
+
 type BillingRenewalPanelProps = {
   usdArsRate: number | null;
   bank: TransferBankDetails;
   mpConfigured: boolean;
   priceUsdByPlan: Partial<Record<PaidBillingPlanId, number>>;
+  planPricesById?: Partial<Record<PaidBillingPlanId, RenewalPlanPrice>>;
   mpSurchargePercent: number;
+  heading?: string;
+  description?: string;
 };
 
 export function BillingRenewalPanel({
@@ -39,7 +52,10 @@ export function BillingRenewalPanel({
   bank,
   mpConfigured,
   priceUsdByPlan,
+  planPricesById,
   mpSurchargePercent,
+  heading = "Renovar acceso",
+  description,
 }: BillingRenewalPanelProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -58,12 +74,28 @@ export function BillingRenewalPanel({
     cycle === "MONTHLY"
       ? BILLING_TIERS[tier].monthly
       : BILLING_TIERS[tier].annual;
-  const priceUsd = priceUsdByPlan[plan] ?? BILLING_PLANS[plan].priceUsd;
+  const planMeta = planPricesById?.[plan];
+  const priceUsd =
+    planMeta?.priceUsd ??
+    priceUsdByPlan[plan] ??
+    BILLING_PLANS[plan].priceUsd;
+  const listPriceUsd = planMeta?.listPriceUsd ?? priceUsd;
+  const hasDiscount =
+    planMeta?.discountPercent != null && planMeta.discountPercent > 0;
   const amountArs = usdArsRate
     ? Math.round(priceUsd * usdArsRate * 100) / 100
     : null;
   const mpAmount =
     Math.round(priceUsd * (1 + mpSurchargePercent / 100) * 100) / 100;
+
+  function planPriceLabel(planId: PaidBillingPlanId) {
+    const meta = planPricesById?.[planId];
+    const amount =
+      meta?.priceUsd ??
+      priceUsdByPlan[planId] ??
+      BILLING_PLANS[planId].priceUsd;
+    return formatMoney("USD", amount);
+  }
 
   function onFile(file: File | null) {
     if (!file) {
@@ -125,7 +157,31 @@ export function BillingRenewalPanel({
       onSubmit={onSubmit}
       className="space-y-4 rounded-lg border border-border p-4"
     >
-      <h2 className="font-display text-lg">Renovar acceso</h2>
+      <div>
+        <h2 className="font-display text-lg">{heading}</h2>
+        {description ? (
+          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
+
+      {hasDiscount && planMeta?.discountSource === "org" ? (
+        <div className="rounded-md border border-amber-700/35 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-950">
+          <p className="font-semibold tracking-tight">
+            Descuento especial activo · {planMeta.discountPercent}% OFF
+          </p>
+          <p className="mt-0.5 opacity-90">
+            Tu promo de plan mensual sigue vigente. Cuando termine, la
+            renovación vuelve al precio completo.
+          </p>
+        </div>
+      ) : null}
+      {hasDiscount && planMeta?.discountSource !== "org" ? (
+        <PlanSpecialDiscountBadge
+          discountPercent={planMeta?.discountPercent}
+          discountUntil={planMeta?.discountUntil}
+          discountPromoMonths={planMeta?.discountPromoMonths}
+        />
+      ) : null}
 
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">Nivel</p>
@@ -159,12 +215,7 @@ export function BillingRenewalPanel({
                 : "border-border",
             )}
           >
-            Mensual ·{" "}
-            {formatMoney(
-              "USD",
-              priceUsdByPlan[BILLING_TIERS[tier].monthly] ??
-                BILLING_PLANS[BILLING_TIERS[tier].monthly].priceUsd,
-            )}
+            Mensual · {planPriceLabel(BILLING_TIERS[tier].monthly)}
           </button>
           <button
             type="button"
@@ -176,12 +227,7 @@ export function BillingRenewalPanel({
                 : "border-border",
             )}
           >
-            Anual ·{" "}
-            {formatMoney(
-              "USD",
-              priceUsdByPlan[BILLING_TIERS[tier].annual] ??
-                BILLING_PLANS[BILLING_TIERS[tier].annual].priceUsd,
-            )}
+            Anual · {planPriceLabel(BILLING_TIERS[tier].annual)}
           </button>
         </div>
       </div>
@@ -202,6 +248,16 @@ export function BillingRenewalPanel({
             >
               <p className="font-medium text-foreground">Mercado Pago</p>
               <p className="mt-1 text-lg font-semibold text-foreground">
+                {hasDiscount && listPriceUsd !== priceUsd ? (
+                  <span className="mr-2 text-sm font-normal text-muted-foreground line-through">
+                    {formatMoney(
+                      "USD",
+                      Math.round(
+                        listPriceUsd * (1 + mpSurchargePercent / 100) * 100,
+                      ) / 100,
+                    )}
+                  </span>
+                ) : null}
                 {formatMoney("USD", mpAmount)}
               </p>
               {mpSurchargePercent > 0 && (
@@ -226,6 +282,11 @@ export function BillingRenewalPanel({
               Transferencia bancaria
             </p>
             <p className="mt-1 text-lg font-semibold text-foreground">
+              {hasDiscount && listPriceUsd !== priceUsd ? (
+                <span className="mr-2 text-sm font-normal text-muted-foreground line-through">
+                  {formatMoney("USD", listPriceUsd)}
+                </span>
+              ) : null}
               {formatMoney("USD", priceUsd)}
             </p>
             <p className="mt-1 text-xs text-foreground/65">Sin recargo</p>

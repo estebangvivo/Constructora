@@ -3,7 +3,7 @@ import {
   planIsMonthlyCycle,
   type BillingPlanId,
 } from "@/features/billing/lib/plans";
-import { planMercadoPagoChargeEffective } from "@/features/billing/lib/effective-plans";
+import { prisma } from "@/lib/prisma";
 import {
   getMercadoPagoAccessToken,
   isMercadoPagoConfigured,
@@ -54,7 +54,20 @@ export async function createMercadoPagoCheckout(input: {
 
   const token = await mpToken();
   const base = appBaseUrl();
-  const charge = await planMercadoPagoChargeEffective(input.plan);
+  const payment = await prisma.billingPayment.findUnique({
+    where: { id: input.paymentId },
+    select: { amount: true, currency: true },
+  });
+  if (!payment) {
+    throw new Error("Pago no encontrado para checkout Mercado Pago.");
+  }
+  const charge = {
+    currency: (payment.currency === "ARS" ? "ARS" : "USD") as "USD" | "ARS",
+    amount: Number(payment.amount),
+  };
+  if (!Number.isFinite(charge.amount) || charge.amount < 0) {
+    throw new Error("Monto de pago inválido para Mercado Pago.");
+  }
   const plan = BILLING_PLANS[input.plan];
   const successUrl = input.successUrl ?? `${base}/billing?mp=success`;
   const failureUrl = input.failureUrl ?? `${base}/onboarding/pago?mp=failure`;

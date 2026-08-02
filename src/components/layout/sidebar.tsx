@@ -17,6 +17,7 @@ type SidebarProps = {
   logoUrl?: string | null;
   userEmail?: string | null;
   showLogout?: boolean;
+  isPlatformSuperadmin?: boolean;
 };
 
 export function Sidebar({
@@ -27,8 +28,13 @@ export function Sidebar({
   logoUrl,
   userEmail,
   showLogout = true,
+  isPlatformSuperadmin = false,
 }: SidebarProps) {
-  const items = filterNavByAccess(SIDEBAR_NAV, { role, modules });
+  const items = filterNavByAccess(SIDEBAR_NAV, {
+    role,
+    modules,
+    isPlatformSuperadmin,
+  });
 
   return (
     <aside className="hidden h-full w-60 shrink-0 flex-col overflow-hidden border-r border-border bg-sidebar text-sidebar-foreground print:hidden md:flex">

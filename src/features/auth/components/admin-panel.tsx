@@ -13,6 +13,7 @@ import {
   Lightbulb,
   DollarSign,
   Landmark,
+  Wallet,
 } from "lucide-react";
 import type {
   AdminOrganizationOverview,
@@ -39,6 +40,8 @@ import {
 } from "@/features/auth/components/admin-superadmin-orgs-panel";
 import { AdminFeatureRequestsPanel } from "@/features/feature-requests/components/admin-feature-requests-panel";
 import type { FeatureRequestListItem } from "@/features/feature-requests/components/feature-request-list";
+import { AdminSystemExpensesPanel } from "@/features/platform-expenses/components/admin-system-expenses-panel";
+import type { PlatformExpenseListResult } from "@/features/platform-expenses/actions/platform-expense-actions";
 import { cn } from "@/lib/utils";
 
 type UserRow = {
@@ -66,6 +69,7 @@ type TabId =
   | "mercadopago"
   | "transferBank"
   | "planPrices"
+  | "expenses"
   | "requests";
 
 const ROLE_LABEL: Record<OrganizationRole, string> = {
@@ -111,6 +115,7 @@ type AdminPanelProps = {
   mercadoPagoConfig?: MercadoPagoConfigPublic | null;
   transferBankConfig?: TransferBankDetails | null;
   planPrices?: AdminPlanPriceRow[] | null;
+  systemExpenses?: PlatformExpenseListResult | null;
   featureRequests?: Array<
     FeatureRequestListItem & {
       organizationName: string;
@@ -136,6 +141,7 @@ export function AdminPanel({
   mercadoPagoConfig = null,
   transferBankConfig = null,
   planPrices = null,
+  systemExpenses = null,
   featureRequests = [],
   initialTab,
 }: AdminPanelProps) {
@@ -203,6 +209,11 @@ export function AdminPanel({
             id: "planPrices" as const,
             label: "Precios",
             icon: DollarSign,
+          },
+          {
+            id: "expenses" as const,
+            label: "Gastos",
+            icon: Wallet,
           },
           {
             id: "transferBank" as const,
@@ -559,6 +570,12 @@ export function AdminPanel({
       {tab === "planPrices" && isPlatformSuperadmin && planPrices && (
         <section>
           <AdminPlanPricesPanel initialRows={planPrices} />
+        </section>
+      )}
+
+      {tab === "expenses" && isPlatformSuperadmin && systemExpenses && (
+        <section>
+          <AdminSystemExpensesPanel initial={systemExpenses} />
         </section>
       )}
 

@@ -15,7 +15,9 @@ import {
 import {
   planCheckoutChargeEffective,
   planMercadoPagoChargeEffective,
+  resolvePlanQuote,
 } from "@/features/billing/lib/effective-plans";
+import { setPaymentPromoMeta } from "@/features/billing/lib/billing-promo-org";
 import { getBillingUsdArsRate } from "@/features/billing/lib/fx";
 import { activateBillingPayment } from "@/features/billing/lib/activate";
 import { organizationHasAppAccess } from "@/features/billing/lib/access";
@@ -153,11 +155,20 @@ export async function startTrialSignup(input: {
 async function resolveTransferAmount(
   plan: BillingPlanId,
   currency: "USD" | "ARS",
+  organizationId?: string | null,
 ): Promise<
-  | { ok: true; amount: number; currency: "USD" | "ARS"; fxRateUsed: number | null }
+  | {
+      ok: true;
+      amount: number;
+      currency: "USD" | "ARS";
+      fxRateUsed: number | null;
+      discountPercent: number | null;
+      grantPromoMonths: number | null;
+    }
   | { ok: false; error: string }
 > {
-  const charge = await planCheckoutChargeEffective(plan);
+  const quote = await resolvePlanQuote({ plan, organizationId });
+  const charge = await planCheckoutChargeEffective(plan, organizationId);
   // Planes con precio fijo en ARS (ej. TRIAL $1): transferencia en ARS sin FX.
   if (charge.currency === "ARS") {
     return {
@@ -165,6 +176,8 @@ async function resolveTransferAmount(
       amount: charge.amount,
       currency: "ARS",
       fxRateUsed: null,
+      discountPercent: quote.discountPercent,
+      grantPromoMonths: quote.grantPromoMonths,
     };
   }
   if (currency === "USD") {
@@ -173,6 +186,8 @@ async function resolveTransferAmount(
       amount: charge.amount,
       currency: "USD",
       fxRateUsed: null,
+      discountPercent: quote.discountPercent,
+      grantPromoMonths: quote.grantPromoMonths,
     };
   }
   const rate = await getBillingUsdArsRate();
@@ -188,6 +203,8 @@ async function resolveTransferAmount(
     amount: Math.round(charge.amount * rate * 100) / 100,
     currency: "ARS",
     fxRateUsed: rate,
+    discountPercent: quote.discountPercent,
+    grantPromoMonths: quote.grantPromoMonths,
   };
 }
 
@@ -237,7 +254,7 @@ export async function submitTransferSignup(input: {
       return { ok: false, error: "El comprobante no puede superar ~2.5 MB." };
     }
 
-    const resolved = await resolveTransferAmount(plan, input.currency);
+    const resolved = await resolveTransferAmount(plan, input.currency, null);
     if (!resolved.ok) return resolved;
 
     const payment = await prisma.billingPayment.create({
@@ -255,6 +272,11 @@ export async function submitTransferSignup(input: {
         transferProofUrl: input.proofDataUrl,
         notes: input.notes?.trim() || null,
       },
+    });
+    await setPaymentPromoMeta({
+      paymentId: payment.id,
+      discountPercent: resolved.discountPercent,
+      promoMonths: resolved.grantPromoMonths,
     });
 
     revalidatePath("/onboarding/pago");
@@ -288,7 +310,11 @@ export async function submitTransferRenewal(input: {
       return { ok: false, error: "Subí el comprobante de transferencia." };
     }
 
-    const resolved = await resolveTransferAmount(plan, input.currency);
+    const resolved = await resolveTransferAmount(
+      plan,
+      input.currency,
+      session.organizationId,
+    );
     if (!resolved.ok) return resolved;
 
     const payment = await prisma.billingPayment.create({
@@ -304,6 +330,11 @@ export async function submitTransferRenewal(input: {
         transferProofUrl: input.proofDataUrl,
         notes: input.notes?.trim() || null,
       },
+    });
+    await setPaymentPromoMeta({
+      paymentId: payment.id,
+      discountPercent: resolved.discountPercent,
+      promoMonths: resolved.grantPromoMonths,
     });
 
     await prisma.organization.update({
@@ -360,7 +391,8 @@ export async function createMercadoPagoSignupIntent(input: {
       "@/features/billing/lib/mercadopago"
     );
 
-    const charge = await planMercadoPagoChargeEffective(plan);
+    const quote = await resolvePlanQuote({ plan, organizationId: null });
+    const charge = await planMercadoPagoChargeEffective(plan, null);
     const payment = await prisma.billingPayment.create({
       data: {
         userId: session.user.id,
@@ -380,6 +412,11 @@ export async function createMercadoPagoSignupIntent(input: {
           .filter(Boolean)
           .join(" · "),
       },
+    });
+    await setPaymentPromoMeta({
+      paymentId: payment.id,
+      discountPercent: quote.discountPercent,
+      promoMonths: quote.grantPromoMonths,
     });
 
     const checkout = await createMercadoPagoCheckout({
@@ -440,7 +477,14 @@ export async function createMercadoPagoRenewalIntent(input: {
       "@/features/billing/lib/mercadopago"
     );
 
-    const charge = await planMercadoPagoChargeEffective(plan);
+    const quote = await resolvePlanQuote({
+      plan,
+      organizationId: session.organizationId,
+    });
+    const charge = await planMercadoPagoChargeEffective(
+      plan,
+      session.organizationId,
+    );
     const payment = await prisma.billingPayment.create({
       data: {
         userId: session.user.id,
@@ -455,6 +499,11 @@ export async function createMercadoPagoRenewalIntent(input: {
             ? `Incluye recargo MP ${charge.surchargePercent}% (base ${charge.currency} ${charge.baseAmount})`
             : null,
       },
+    });
+    await setPaymentPromoMeta({
+      paymentId: payment.id,
+      discountPercent: quote.discountPercent,
+      promoMonths: quote.grantPromoMonths,
     });
 
     const checkout = await createMercadoPagoCheckout({

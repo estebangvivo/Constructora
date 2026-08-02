@@ -74,6 +74,7 @@ export default async function DashboardLayout({
           organizationName="Plataforma"
           logoUrl={null}
           userEmail={session.user.email}
+          isPlatformSuperadmin={superadmin}
         >
           {children}
         </DashboardShell>
@@ -145,6 +146,7 @@ export default async function DashboardLayout({
         organizationName={organization.name}
         logoUrl={logoUrl}
         userEmail={session.user.email}
+        isPlatformSuperadmin={superadmin}
       >
         <TrialAlertBanner />
         <ChecksDueAlertBanner />

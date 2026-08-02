@@ -20,7 +20,10 @@ import {
   type PaidBillingPlanId,
   PAID_BILLING_PLANS,
 } from "@/features/billing/lib/plans";
-import { getEffectivePlanPrices } from "@/features/billing/lib/effective-plans";
+import {
+  getEffectivePlanPrices,
+  resolvePlanQuote,
+} from "@/features/billing/lib/effective-plans";
 import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
 import { formatDateAR } from "@/lib/format-date";
 
@@ -62,12 +65,53 @@ export default async function BillingPage({
     getMpSurchargePercent(),
   ]);
 
+  const paidIds = Object.keys(PAID_BILLING_PLANS) as PaidBillingPlanId[];
+  const orgQuotes = await Promise.all(
+    paidIds.map(async (id) => {
+      const quote = await resolvePlanQuote({
+        plan: id,
+        organizationId: session.organizationId,
+      });
+      return [id, quote] as const;
+    }),
+  );
   const priceUsdByPlan = Object.fromEntries(
-    (Object.keys(PAID_BILLING_PLANS) as PaidBillingPlanId[]).map((id) => [
-      id,
-      planPrices[id].priceUsd,
-    ]),
+    orgQuotes.map(([id, quote]) => [id, quote.priceUsd]),
   ) as Partial<Record<PaidBillingPlanId, number>>;
+  const planPricesById = Object.fromEntries(
+    orgQuotes.map(([id, quote]) => {
+      const campaign = planPrices[id];
+      return [
+        id,
+        {
+          priceUsd: quote.priceUsd,
+          listPriceUsd: quote.listPriceUsd,
+          discountPercent: quote.discountPercent,
+          discountUntil:
+            quote.source === "campaign"
+              ? quote.discountUntil
+              : campaign.discountUntil,
+          discountPromoMonths:
+            quote.source === "campaign"
+              ? quote.discountPromoMonths
+              : campaign.discountPromoMonths,
+          discountSource: quote.source,
+        },
+      ];
+    }),
+  ) as Partial<
+    Record<
+      PaidBillingPlanId,
+      {
+        priceUsd: number;
+        listPriceUsd: number;
+        discountPercent: number | null;
+        discountUntil: string | null;
+        discountPromoMonths: number | null;
+        discountSource: "none" | "campaign" | "org";
+      }
+    >
+  >;
 
   const hasAccess =
     superadmin ||
@@ -117,9 +161,12 @@ export default async function BillingPage({
             Estado de pago y renovación de {organization?.name ?? "tu empresa"}.
           </p>
           {hasAccess && (
-            <p className="mt-2 text-sm">
+            <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
               <Link href="/" className="text-accent hover:underline">
                 ← Volver al sistema
+              </Link>
+              <Link href="/settings" className="text-accent hover:underline">
+                Ir a configuración
               </Link>
             </p>
           )}
@@ -169,23 +216,28 @@ export default async function BillingPage({
           </p>
         </div>
 
-        {!hasAccess || wasTrial ? (
-          <>
-            {hasAccess && wasTrial && (
-              <p className="mb-4 text-sm text-muted-foreground">
-                Estás en prueba. Elegí un plan para seguir después de los 30 días
-                y para poder dar de alta más usuarios.
-              </p>
-            )}
-            <BillingRenewalPanel
-              usdArsRate={usdArsRate}
-              bank={bank}
-              mpConfigured={mpConfigured}
-              priceUsdByPlan={priceUsdByPlan}
-              mpSurchargePercent={mpSurchargePercent}
-            />
-          </>
-        ) : null}
+        <BillingRenewalPanel
+          usdArsRate={usdArsRate}
+          bank={bank}
+          mpConfigured={mpConfigured}
+          priceUsdByPlan={priceUsdByPlan}
+          planPricesById={planPricesById}
+          mpSurchargePercent={mpSurchargePercent}
+          heading={
+            hasAccess && !wasTrial
+              ? "Cambiar o renovar plan"
+              : "Renovar acceso"
+          }
+          description={
+            organization?.billingStatus === "EXEMPT"
+              ? "Esta empresa está exenta. Si elegís un plan de pago, se aplicará al aprobar el pago."
+              : hasAccess && wasTrial
+                ? "Estás en prueba. Elegí un plan para seguir después de los 30 días y para poder dar de alta más usuarios."
+                : hasAccess
+                  ? "Podés subir de plan, bajar o renovar el periodo actual. El nuevo plan se aplica al aprobar el pago."
+                  : undefined
+          }
+        />
 
         <section className="mt-10">
           <h2 className="font-display text-lg">Historial</h2>

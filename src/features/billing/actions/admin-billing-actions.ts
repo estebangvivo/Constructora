@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
@@ -11,17 +11,8 @@ import {
 import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
 import { getBillingUsdArsRate } from "@/features/billing/lib/fx";
 
-async function assertPlatformBillingAdmin(userId: string, email: string) {
-  if (isPlatformSuperadmin({ user: { email } })) return;
-
-  const membership = await prisma.organizationMember.findFirst({
-    where: {
-      userId,
-      role: "ADMIN",
-      organization: { billingStatus: "EXEMPT" },
-    },
-  });
-  if (!membership) {
+function assertPlatformBillingAdmin(email: string) {
+  if (!isPlatformSuperadmin({ user: { email } })) {
     throw new Error("FORBIDDEN");
   }
 }
@@ -104,7 +95,7 @@ const paymentInclude = {
   organization: { select: { id: true, name: true } },
 } as const;
 
-/** @deprecated Usá listAdminBillingPayments. */
+/** @deprecated UsÃ¡ listAdminBillingPayments. */
 export async function listPendingBillingPayments() {
   const data = await listAdminBillingPayments();
   return data.pendingTransfers;
@@ -118,7 +109,7 @@ export async function listAdminBillingPayments(): Promise<{
   const empty = { pendingTransfers: [], recent: [] };
   const session = await requireAuthSession();
   try {
-    await assertPlatformBillingAdmin(session.user.id, session.user.email);
+    assertPlatformBillingAdmin(session.user.email);
   } catch {
     return empty;
   }
@@ -159,7 +150,7 @@ function notifyWarning(notified: {
 }): string | undefined {
   if (notified.email || notified.whatsapp) return undefined;
   return (
-    "El pago se registró, pero no se envió aviso: configurá WhatsApp " +
+    "El pago se registrÃ³, pero no se enviÃ³ aviso: configurÃ¡ WhatsApp " +
     "(WHATSAPP_ACCESS_TOKEN + WHATSAPP_PHONE_NUMBER_ID) y/o email " +
     "(RESEND_API_KEY + EMAIL_FROM) en el .env del servidor."
   );
@@ -170,14 +161,14 @@ export async function approveBillingPayment(
 ): Promise<BillingReviewResult> {
   try {
     const session = await requireAuthSession();
-    await assertPlatformBillingAdmin(session.user.id, session.user.email);
+    assertPlatformBillingAdmin(session.user.email);
 
     const updated = await activateBillingPayment(paymentId, {
       approvedById: session.user.id,
     });
 
     // Si el aprobador no es el pagador, no tocamos su cookie.
-    // Si el pagador está logueado en otro lado, al refrescar verá la org.
+    // Si el pagador estÃ¡ logueado en otro lado, al refrescar verÃ¡ la org.
     if (updated.organizationId && updated.userId === session.user.id) {
       const token = await signLocalSession({
         userId: session.user.id,
@@ -220,7 +211,7 @@ export async function rejectBillingPayment(
 ): Promise<BillingReviewResult> {
   try {
     const session = await requireAuthSession();
-    await assertPlatformBillingAdmin(session.user.id, session.user.email);
+    assertPlatformBillingAdmin(session.user.email);
 
     const payment = await prisma.billingPayment.findUnique({
       where: { id: paymentId },
@@ -233,7 +224,7 @@ export async function rejectBillingPayment(
     if (!trimmedReason) {
       return {
         ok: false,
-        error: "Indicá el motivo del rechazo (se le enviará al usuario).",
+        error: "IndicÃ¡ el motivo del rechazo (se le enviarÃ¡ al usuario).",
       };
     }
 

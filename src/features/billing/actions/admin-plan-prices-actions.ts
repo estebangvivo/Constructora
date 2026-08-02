@@ -5,6 +5,9 @@ import { requireAuthSession } from "@/lib/auth";
 import { requirePlatformSuperadmin } from "@/features/auth/lib/platform-admin";
 import {
   getAdminPlanPricesEditor,
+  normalizeDiscountPercent,
+  normalizeDiscountPromoMonths,
+  normalizeDiscountUntil,
   upsertPlanPrices,
   type PlanPricesMap,
 } from "@/features/billing/lib/effective-plans";
@@ -29,6 +32,9 @@ export async function saveAdminPlanPrices(input: {
     id: string;
     priceUsd: number;
     priceArs: number | null;
+    discountPercent: number | null;
+    discountUntil: string | null;
+    discountPromoMonths: number | null;
   }>;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
@@ -47,9 +53,83 @@ export async function saveAdminPlanPrices(input: {
       ) {
         return { ok: false, error: `Precio ARS inválido en ${row.id}.` };
       }
+
+      const discountPercent =
+        row.discountPercent == null || row.discountPercent === 0
+          ? null
+          : normalizeDiscountPercent(row.discountPercent);
+      if (
+        row.discountPercent != null &&
+        row.discountPercent !== 0 &&
+        discountPercent == null
+      ) {
+        return {
+          ok: false,
+          error: `Descuento inválido en ${row.id} (usá 1–100).`,
+        };
+      }
+
+      const discountUntil =
+        row.discountUntil == null || row.discountUntil.trim() === ""
+          ? null
+          : normalizeDiscountUntil(row.discountUntil);
+      if (
+        row.discountUntil != null &&
+        row.discountUntil.trim() !== "" &&
+        discountUntil == null
+      ) {
+        return {
+          ok: false,
+          error: `Fecha de descuento inválida en ${row.id} (AAAA-MM-DD).`,
+        };
+      }
+
+      const discountPromoMonths =
+        row.discountPromoMonths == null || row.discountPromoMonths === 0
+          ? null
+          : normalizeDiscountPromoMonths(row.discountPromoMonths);
+      if (
+        row.discountPromoMonths != null &&
+        row.discountPromoMonths !== 0 &&
+        discountPromoMonths == null
+      ) {
+        return {
+          ok: false,
+          error: `Meses de promo inválidos en ${row.id} (1–36).`,
+        };
+      }
+
+      if (discountPercent != null && !discountUntil) {
+        return {
+          ok: false,
+          error: `${row.id}: si hay descuento, indicá la fecha límite para contratarlo.`,
+        };
+      }
+      if (discountUntil && discountPercent == null) {
+        return {
+          ok: false,
+          error: `${row.id}: si hay fecha límite, indicá el % de descuento.`,
+        };
+      }
+      if (discountPercent != null && discountPromoMonths == null) {
+        return {
+          ok: false,
+          error: `${row.id}: indicá por cuántos meses dura la promo (planes mensuales).`,
+        };
+      }
+      if (discountPromoMonths != null && discountPercent == null) {
+        return {
+          ok: false,
+          error: `${row.id}: si hay meses de promo, indicá el % de descuento.`,
+        };
+      }
+
       map[row.id as BillingPlanId] = {
         priceUsd: row.priceUsd,
         priceArs: row.priceArs,
+        discountPercent,
+        discountUntil,
+        discountPromoMonths,
       };
     }
 
