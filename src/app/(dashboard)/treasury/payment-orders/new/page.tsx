@@ -10,19 +10,21 @@ import {
 import { listPortfolioChecksForPayment } from "@/features/treasury/queries/list-checks";
 import { listActiveBankAccountsForPayment } from "@/features/treasury/queries/bank-queries";
 import { listOpenPurchaseInvoices } from "@/features/treasury/queries/account-statements";
+import { getCertificationById } from "@/features/certifications/queries/list-certifications";
 import { TreasuryDocumentForm } from "@/features/treasury/components/treasury-document-form";
 
 export const dynamic = "force-dynamic";
 
 type PageProps = {
-  searchParams: Promise<{ projectId?: string }>;
+  searchParams: Promise<{ projectId?: string; certificationId?: string }>;
 };
 
 export default async function NewPaymentOrderPage({ searchParams }: PageProps) {
   const session = await getSession();
   if (!session) redirect("/sign-in");
 
-  const { projectId } = await searchParams;
+  const { projectId, certificationId } = await searchParams;
+  const certId = certificationId?.trim() || "";
 
   const [
     projects,
@@ -32,6 +34,7 @@ export default async function NewPaymentOrderPage({ searchParams }: PageProps) {
     portfolioChecks,
     bankAccounts,
     openInvoices,
+    cert,
   ] = await Promise.all([
     listProjectsForTreasury(),
     listActiveSuppliers(),
@@ -39,13 +42,27 @@ export default async function NewPaymentOrderPage({ searchParams }: PageProps) {
     getEnabledCurrencies(),
     listPortfolioChecksForPayment(),
     listActiveBankAccountsForPayment(),
-    listOpenPurchaseInvoices(
-      projectId ? { projectId } : undefined,
-    ),
+    listOpenPurchaseInvoices(projectId ? { projectId } : undefined),
+    certId ? getCertificationById(certId) : Promise.resolve(null),
   ]);
 
   const defaultProjectId =
-    projectId && projects.some((p) => p.id === projectId) ? projectId : "";
+    (cert?.projectId && projects.some((p) => p.id === cert.projectId)
+      ? cert.projectId
+      : null) ||
+    (projectId && projects.some((p) => p.id === projectId) ? projectId : "");
+
+  const fromCert =
+    cert &&
+    (!defaultProjectId || cert.projectId === defaultProjectId)
+      ? cert
+      : null;
+
+  const defaultConcept = fromCert
+    ? `Pago mano de obra · certificación ${fromCert.number}`
+    : "";
+  const defaultAmount = fromCert ? fromCert.netAmount : 0;
+  const defaultCurrency = fromCert?.currency || currency;
 
   return (
     <div className="px-4 py-6 lg:px-6">
@@ -60,11 +77,24 @@ export default async function NewPaymentOrderPage({ searchParams }: PageProps) {
       <h1 className="mb-6 font-display text-3xl tracking-tight">
         Nueva orden de pago
       </h1>
+      {fromCert ? (
+        <p className="mb-4 rounded-md border border-border bg-surface/40 px-3 py-2 text-sm text-muted-foreground">
+          Prefill desde certificación{" "}
+          <span className="font-medium text-foreground">{fromCert.number}</span>
+          {" · "}
+          neto sugerido{" "}
+          {fromCert.netAmount.toLocaleString("es-AR", {
+            style: "currency",
+            currency: fromCert.currency,
+          })}
+          . Elegí proveedor o escribí el nombre del obrero / cuadrilla.
+        </p>
+      ) : null}
       <TreasuryDocumentForm
         kind="payment-order"
         projects={projects}
         parties={suppliers.map((s) => ({ id: s.id, name: s.name }))}
-        defaultCurrency={currency}
+        defaultCurrency={defaultCurrency}
         enabledCurrencies={enabledCurrencies}
         defaultProjectId={defaultProjectId}
         portfolioChecks={portfolioChecks}
@@ -75,6 +105,9 @@ export default async function NewPaymentOrderPage({ searchParams }: PageProps) {
           balance: i.balance,
           currency: i.currency,
         }))}
+        defaultConcept={defaultConcept}
+        defaultAmount={defaultAmount}
+        defaultPartyId={fromCert ? "" : undefined}
       />
     </div>
   );

@@ -10,6 +10,7 @@ import {
   syncBudgetItemsFromTreasury,
 } from "@/features/treasury/lib/helpers";
 import {
+  NoOpenCashError,
   postCashMovementFromTreasuryDoc,
   reverseCashMovementsForTreasuryDoc,
 } from "@/features/treasury/lib/cash-from-treasury";
@@ -94,11 +95,41 @@ export type CreatePaymentOrderInput = {
 };
 
 export type ActionResult =
-  | { ok: true; id: string; number: string }
-  | { ok: false; error: string };
+  | {
+      ok: true;
+      id: string;
+      number: string;
+      postError?: string;
+      postCode?: "NO_OPEN_CASH";
+      postCurrency?: string;
+    }
+  | {
+      ok: false;
+      error: string;
+      code?: "NO_OPEN_CASH";
+      currency?: string;
+    };
 
 function canManage(role: string) {
   return ["ADMIN", "DIRECTOR", "RESIDENT"].includes(role);
+}
+
+function failFromError(
+  error: unknown,
+  fallback: string,
+): Extract<ActionResult, { ok: false }> {
+  if (error instanceof NoOpenCashError) {
+    return {
+      ok: false,
+      error: error.message,
+      code: "NO_OPEN_CASH",
+      currency: error.currency,
+    };
+  }
+  return {
+    ok: false,
+    error: error instanceof Error ? error.message : fallback,
+  };
 }
 
 function resolvePayments(
@@ -205,6 +236,19 @@ export async function createReceipt(
     if (lines.length === 0) {
       return { ok: false, error: "Agregá al menos una línea con monto." };
     }
+    if (lines.some((l) => !l.projectId?.trim())) {
+      return {
+        ok: false,
+        error: "Cada línea del recibo debe tener una obra.",
+      };
+    }
+    if (lines.some((l) => !l.budgetItemId?.trim())) {
+      return {
+        ok: false,
+        error:
+          "Cada línea del recibo debe tener una partida del presupuesto para imputar.",
+      };
+    }
 
     await assertProjectsInOrg(
       session.organizationId,
@@ -277,6 +321,22 @@ export async function createReceipt(
       kind: "receipt",
       id: receipt.id,
     });
+
+    // Al aceptar el alta, imputar automáticamente al presupuesto (POSTED).
+    const posted = await postReceipt(receipt.id);
+    if (!posted.ok) {
+      return {
+        ok: true,
+        id: receipt.id,
+        number: receipt.number,
+        postError:
+          posted.error ??
+          "El recibo quedó en borrador: no se pudo imputar al presupuesto.",
+        postCode: posted.code,
+        postCurrency: posted.currency,
+      };
+    }
+
     return { ok: true, id: receipt.id, number: receipt.number };
   } catch (error) {
     console.error("createReceipt", error);
@@ -305,6 +365,19 @@ export async function createPaymentOrder(
     );
     if (lines.length === 0) {
       return { ok: false, error: "Agregá al menos una línea con monto." };
+    }
+    if (lines.some((l) => !l.projectId?.trim())) {
+      return {
+        ok: false,
+        error: "Cada línea de la orden de pago debe tener una obra.",
+      };
+    }
+    if (lines.some((l) => !l.budgetItemId?.trim())) {
+      return {
+        ok: false,
+        error:
+          "Cada línea de la orden de pago debe tener una partida del presupuesto para imputar.",
+      };
     }
 
     await assertProjectsInOrg(
@@ -429,6 +502,22 @@ export async function createPaymentOrder(
       kind: "payment-order",
       id: order.id,
     });
+
+    // Al aceptar el alta, imputar automáticamente al presupuesto (POSTED).
+    const posted = await postPaymentOrder(order.id);
+    if (!posted.ok) {
+      return {
+        ok: true,
+        id: order.id,
+        number: order.number,
+        postError:
+          posted.error ??
+          "La orden quedó en borrador: no se pudo imputar al presupuesto.",
+        postCode: posted.code,
+        postCurrency: posted.currency,
+      };
+    }
+
     return { ok: true, id: order.id, number: order.number };
   } catch (error) {
     console.error("createPaymentOrder", error);
@@ -588,11 +677,7 @@ export async function postReceipt(id: string): Promise<ActionResult> {
     return { ok: true, id, number: result.number };
   } catch (error) {
     console.error("postReceipt", error);
-    return {
-      ok: false,
-      error:
-        error instanceof Error ? error.message : "No se pudo imputar el recibo.",
-    };
+    return failFromError(error, "No se pudo imputar el recibo.");
   }
 }
 
@@ -804,13 +889,7 @@ export async function postPaymentOrder(id: string): Promise<ActionResult> {
     return { ok: true, id, number: result.number };
   } catch (error) {
     console.error("postPaymentOrder", error);
-    return {
-      ok: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "No se pudo imputar la orden de pago.",
-    };
+    return failFromError(error, "No se pudo imputar la orden de pago.");
   }
 }
 
@@ -988,12 +1067,6 @@ export async function syncPostedDocumentToCash(
     return { ok: true, id: result.id, number: result.number };
   } catch (error) {
     console.error("syncPostedDocumentToCash", error);
-    return {
-      ok: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "No se pudo registrar el movimiento en caja.",
-    };
+    return failFromError(error, "No se pudo registrar el movimiento en caja.");
   }
 }

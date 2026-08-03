@@ -4,6 +4,20 @@ import { round2 } from "@/features/treasury/lib/cash-labels";
 
 type Tx = Prisma.TransactionClient;
 
+export class NoOpenCashError extends Error {
+  readonly code = "NO_OPEN_CASH" as const;
+  readonly currency: string;
+
+  constructor(currency: string) {
+    const c = (currency || "ARS").toUpperCase();
+    super(
+      `No hay caja diaria abierta en ${c}. Abrí la caja en Tesorería → Caja antes de imputar efectivo.`,
+    );
+    this.name = "NoOpenCashError";
+    this.currency = c;
+  }
+}
+
 /**
  * Al imputar un recibo/OP en efectivo, registra el movimiento en la caja diaria
  * abierta de la misma moneda. Exige sesión OPEN.
@@ -36,9 +50,7 @@ export async function postCashMovementFromTreasuryDoc(
   });
 
   if (!openSession) {
-    throw new Error(
-      `No hay caja diaria abierta en ${currency}. Abrí la caja en Tesorería → Caja antes de imputar efectivo.`,
-    );
+    throw new NoOpenCashError(currency);
   }
 
   const signed = input.kind === "INCOME" ? abs : -abs;

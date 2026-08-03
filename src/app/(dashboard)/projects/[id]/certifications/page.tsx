@@ -29,7 +29,12 @@ export default async function CertificationsPage({
   const currency = project.currency ?? "ARS";
 
   const approvedNet = certifications
-    .filter((c) => c.status === "APPROVED" || c.status === "PAID")
+    .filter(
+      (c) =>
+        c.status === "SUBMITTED" ||
+        c.status === "APPROVED" ||
+        c.status === "PAID",
+    )
     .reduce((a, c) => a + c.netAmount, 0);
 
   return (
@@ -57,7 +62,7 @@ export default async function CertificationsPage({
       <dl className="grid gap-4 sm:grid-cols-2">
         <div className="border-l-2 border-accent pl-3">
           <dt className="text-xs uppercase tracking-wider text-muted-foreground">
-            Neto aprobado / liquidado
+            Neto presentado / liquidado
           </dt>
           <dd className="mt-1 font-display text-xl">
             {formatCertMoney(approvedNet, currency)}

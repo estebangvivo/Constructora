@@ -211,11 +211,11 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     steps: [
       "Obra → Certificaciones → Nueva certificación.",
       "Definí período, retención de garantía (%) y marcá las partidas con el % acumulado del período.",
-      "Guardá → Presentar → Aprobar → opcionalmente Marcar liquidada.",
+      "Guardá → Presentar → opcionalmente Marcar liquidada (y emitir OP / reporte).",
       "Podés rechazar o eliminar borradores según el estado.",
     ],
     tips: [
-      "Estados: Borrador → Presentada → Aprobada → Liquidada (o Rechazada).",
+      "Estados: Borrador → Presentada → Liquidada (o Rechazada).",
       "El neto = bruto − retención.",
     ],
     shots: [

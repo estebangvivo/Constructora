@@ -1,6 +1,10 @@
-import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import type { PlatformExpenseCategory } from "@/features/platform-expenses/lib/categories";
+import type {
+  PlatformSystemExpense,
+  PlatformSystemExpenseCategory,
+  Prisma,
+} from "@prisma/client";
 
 export type PlatformExpenseRow = {
   id: string;
@@ -17,26 +21,16 @@ export type PlatformExpenseRow = {
   updatedAt: string;
 };
 
-type DbRow = {
-  id: string;
-  date: Date;
-  category: string;
-  title: string;
-  notes: string | null;
-  currency: string;
-  amount: unknown;
-  hours: unknown;
-  vendor: string | null;
-  createdByUserId: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
-function newId() {
-  return `c${randomBytes(12).toString("hex")}`;
-}
-
-function toIsoDate(d: Date): string {
+function toIsoDate(d: Date | string): string {
+  if (typeof d === "string") {
+    const m = /^(\d{4}-\d{2}-\d{2})/.exec(d);
+    if (m) return m[1];
+    const parsed = new Date(d);
+    if (!Number.isNaN(parsed.getTime())) {
+      return toIsoDate(parsed);
+    }
+    return d.slice(0, 10);
+  }
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
   const day = String(d.getUTCDate()).padStart(2, "0");
@@ -44,10 +38,15 @@ function toIsoDate(d: Date): string {
 }
 
 function num(v: unknown): number {
-  return typeof v === "number" ? v : Number(v);
+  if (typeof v === "number") return v;
+  if (v != null && typeof v === "object" && "toNumber" in v) {
+    const n = (v as { toNumber: () => number }).toNumber();
+    return Number.isFinite(n) ? n : Number(v);
+  }
+  return Number(v);
 }
 
-function mapRow(r: DbRow): PlatformExpenseRow {
+function mapRow(r: PlatformSystemExpense): PlatformExpenseRow {
   return {
     id: r.id,
     date: toIsoDate(r.date),
@@ -74,40 +73,29 @@ export type ExpenseListFilters = {
 export async function dbListPlatformExpenses(
   filters: ExpenseListFilters,
 ): Promise<PlatformExpenseRow[]> {
-  const clauses: string[] = ["1=1"];
-  const params: unknown[] = [];
-  let i = 1;
+  const where: Prisma.PlatformSystemExpenseWhereInput = {};
 
-  if (filters.from?.trim()) {
-    clauses.push(`date >= $${i}::date`);
-    params.push(filters.from.trim());
-    i++;
-  }
-  if (filters.to?.trim()) {
-    clauses.push(`date <= $${i}::date`);
-    params.push(filters.to.trim());
-    i++;
+  if (filters.from?.trim() || filters.to?.trim()) {
+    where.date = {};
+    if (filters.from?.trim()) {
+      where.date.gte = new Date(`${filters.from.trim()}T00:00:00.000Z`);
+    }
+    if (filters.to?.trim()) {
+      where.date.lte = new Date(`${filters.to.trim()}T00:00:00.000Z`);
+    }
   }
   if (filters.category?.trim() && filters.category !== "ANY") {
-    clauses.push(`category = $${i}::"PlatformSystemExpenseCategory"`);
-    params.push(filters.category.trim());
-    i++;
+    where.category = filters.category.trim() as PlatformSystemExpenseCategory;
   }
   if (filters.currency?.trim() && filters.currency !== "ANY") {
-    clauses.push(`currency = $${i}`);
-    params.push(filters.currency.trim().toUpperCase());
-    i++;
+    where.currency = filters.currency.trim().toUpperCase();
   }
 
-  const rows = await prisma.$queryRawUnsafe<DbRow[]>(
-    `SELECT id, date, category, title, notes, currency, amount, hours, vendor,
-            "createdByUserId", "createdAt", "updatedAt"
-     FROM "platform_system_expenses"
-     WHERE ${clauses.join(" AND ")}
-     ORDER BY date DESC, "createdAt" DESC
-     LIMIT 500`,
-    ...params,
-  );
+  const rows = await prisma.platformSystemExpense.findMany({
+    where,
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+    take: 500,
+  });
   return rows.map(mapRow);
 }
 
@@ -122,27 +110,20 @@ export async function dbCreatePlatformExpense(input: {
   vendor: string | null;
   createdByUserId: string | null;
 }): Promise<PlatformExpenseRow> {
-  const id = newId();
-  const rows = await prisma.$queryRawUnsafe<DbRow[]>(
-    `INSERT INTO "platform_system_expenses"
-       (id, date, category, title, notes, currency, amount, hours, vendor, "createdByUserId", "createdAt", "updatedAt")
-     VALUES
-       ($1, $2::date, $3::"PlatformSystemExpenseCategory", $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
-     RETURNING id, date, category, title, notes, currency, amount, hours, vendor,
-               "createdByUserId", "createdAt", "updatedAt"`,
-    id,
-    input.date,
-    input.category,
-    input.title,
-    input.notes,
-    input.currency,
-    input.amount,
-    input.hours,
-    input.vendor,
-    input.createdByUserId,
-  );
-  if (!rows[0]) throw new Error("No se pudo crear el gasto.");
-  return mapRow(rows[0]);
+  const row = await prisma.platformSystemExpense.create({
+    data: {
+      date: new Date(`${input.date}T00:00:00.000Z`),
+      category: input.category as PlatformSystemExpenseCategory,
+      title: input.title,
+      notes: input.notes,
+      currency: input.currency,
+      amount: input.amount,
+      hours: input.hours,
+      vendor: input.vendor,
+      createdByUserId: input.createdByUserId,
+    },
+  });
+  return mapRow(row);
 }
 
 export async function dbUpdatePlatformExpense(input: {
@@ -156,39 +137,33 @@ export async function dbUpdatePlatformExpense(input: {
   hours: number | null;
   vendor: string | null;
 }): Promise<PlatformExpenseRow | null> {
-  const rows = await prisma.$queryRawUnsafe<DbRow[]>(
-    `UPDATE "platform_system_expenses"
-     SET date = $2::date,
-         category = $3::"PlatformSystemExpenseCategory",
-         title = $4,
-         notes = $5,
-         currency = $6,
-         amount = $7,
-         hours = $8,
-         vendor = $9,
-         "updatedAt" = NOW()
-     WHERE id = $1
-     RETURNING id, date, category, title, notes, currency, amount, hours, vendor,
-               "createdByUserId", "createdAt", "updatedAt"`,
-    input.id,
-    input.date,
-    input.category,
-    input.title,
-    input.notes,
-    input.currency,
-    input.amount,
-    input.hours,
-    input.vendor,
-  );
-  return rows[0] ? mapRow(rows[0]) : null;
+  try {
+    const row = await prisma.platformSystemExpense.update({
+      where: { id: input.id },
+      data: {
+        date: new Date(`${input.date}T00:00:00.000Z`),
+        category: input.category as PlatformSystemExpenseCategory,
+        title: input.title,
+        notes: input.notes,
+        currency: input.currency,
+        amount: input.amount,
+        hours: input.hours,
+        vendor: input.vendor,
+      },
+    });
+    return mapRow(row);
+  } catch {
+    return null;
+  }
 }
 
 export async function dbDeletePlatformExpense(id: string): Promise<boolean> {
-  const n = await prisma.$executeRawUnsafe(
-    `DELETE FROM "platform_system_expenses" WHERE id = $1`,
-    id,
-  );
-  return n > 0;
+  try {
+    await prisma.platformSystemExpense.delete({ where: { id } });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function computeExpenseTotals(rows: PlatformExpenseRow[]) {

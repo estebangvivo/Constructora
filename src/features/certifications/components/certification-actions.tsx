@@ -2,6 +2,8 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { FileText } from "lucide-react";
 import type { CertificationStatus } from "@prisma/client";
 import {
   deleteCertification,
@@ -15,6 +17,10 @@ type CertificationActionsProps = {
   canManage: boolean;
 };
 
+function isPresented(status: CertificationStatus) {
+  return status === "SUBMITTED" || status === "APPROVED";
+}
+
 export function CertificationActions({
   certificationId,
   projectId,
@@ -24,11 +30,17 @@ export function CertificationActions({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
-  if (!canManage) return null;
+  const reportHref = `/projects/${projectId}/certifications/${certificationId}/print`;
+  const showReport = isPresented(status) || status === "PAID";
+
+  if (!canManage && !showReport) return null;
 
   function run(
     action: () => Promise<{ ok: boolean; error?: string }>,
-    redirectToList = false,
+    opts?: {
+      redirectToList?: boolean;
+      onSuccess?: () => void;
+    },
   ) {
     startTransition(async () => {
       const result = await action();
@@ -36,7 +48,11 @@ export function CertificationActions({
         window.alert(result.error ?? "No se pudo completar.");
         return;
       }
-      if (redirectToList) {
+      if (opts?.onSuccess) {
+        opts.onSuccess();
+        return;
+      }
+      if (opts?.redirectToList) {
         router.push(`/projects/${projectId}/certifications`);
       }
       router.refresh();
@@ -45,26 +61,16 @@ export function CertificationActions({
 
   return (
     <div className="flex flex-wrap gap-2">
-      {(status === "DRAFT" || status === "REJECTED") && (
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() =>
-            run(() =>
-              setCertificationStatus({
-                certificationId,
-                status: "SUBMITTED",
-              }),
-            )
-          }
-          className="rounded-md border border-border px-3 py-2 text-sm hover:bg-surface disabled:opacity-60"
+      {showReport && (
+        <Link
+          href={reportHref}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm hover:bg-surface"
         >
-          Presentar
-        </button>
+          <FileText className="size-4" aria-hidden />
+          Reporte cliente
+        </Link>
       )}
-      {(status === "DRAFT" ||
-        status === "SUBMITTED" ||
-        status === "REJECTED") && (
+      {canManage && (status === "DRAFT" || status === "REJECTED") && (
         <button
           type="button"
           disabled={pending}
@@ -78,19 +84,45 @@ export function CertificationActions({
           }
           className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground disabled:opacity-60"
         >
-          Aprobar
+          Presentar
         </button>
       )}
-      {status === "APPROVED" && (
+      {canManage && isPresented(status) && (
         <button
           type="button"
           disabled={pending}
           onClick={() =>
-            run(() =>
-              setCertificationStatus({
-                certificationId,
-                status: "PAID",
-              }),
+            run(
+              () =>
+                setCertificationStatus({
+                  certificationId,
+                  status: "PAID",
+                }),
+              {
+                onSuccess: () => {
+                  const emitPaymentOrder = window.confirm(
+                    "Certificación liquidada.\n\n¿Deseás emitir una orden de pago para los obreros?",
+                  );
+                  if (emitPaymentOrder) {
+                    const params = new URLSearchParams({
+                      projectId,
+                      certificationId,
+                    });
+                    router.push(
+                      `/treasury/payment-orders/new?${params.toString()}`,
+                    );
+                    return;
+                  }
+                  const openReport = window.confirm(
+                    "¿Generar el reporte para enviarle al cliente?",
+                  );
+                  if (openReport) {
+                    router.push(reportHref);
+                    return;
+                  }
+                  router.refresh();
+                },
+              },
             )
           }
           className="rounded-md border border-border px-3 py-2 text-sm hover:bg-surface disabled:opacity-60"
@@ -98,7 +130,7 @@ export function CertificationActions({
           Marcar liquidada
         </button>
       )}
-      {(status === "SUBMITTED" || status === "APPROVED") && (
+      {canManage && isPresented(status) && (
         <button
           type="button"
           disabled={pending}
@@ -115,13 +147,15 @@ export function CertificationActions({
           Rechazar
         </button>
       )}
-      {(status === "DRAFT" || status === "REJECTED") && (
+      {canManage && (status === "DRAFT" || status === "REJECTED") && (
         <button
           type="button"
           disabled={pending}
           onClick={() => {
             if (!window.confirm("¿Eliminar esta certificación?")) return;
-            run(() => deleteCertification(certificationId), true);
+            run(() => deleteCertification(certificationId), {
+              redirectToList: true,
+            });
           }}
           className="rounded-md px-3 py-2 text-sm text-danger hover:bg-danger/10 disabled:opacity-60"
         >

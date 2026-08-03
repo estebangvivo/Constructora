@@ -12,6 +12,7 @@ import {
   postReceipt,
   syncPostedDocumentToCash,
 } from "@/features/treasury/actions/treasury-actions";
+import { withOpenCashRetry } from "@/features/treasury/lib/with-open-cash-retry";
 
 type TreasuryDocActionsProps = {
   kind: "receipt" | "payment-order";
@@ -33,10 +34,18 @@ export function TreasuryDocActions({
   const [pending, startTransition] = useTransition();
 
   function run(
-    action: (id: string) => Promise<{ ok: boolean; error?: string }>,
+    action: (id: string) => Promise<{
+      ok: boolean;
+      error?: string;
+      code?: "NO_OPEN_CASH";
+      currency?: string;
+    }>,
+    opts?: { withCashRetry?: boolean },
   ) {
     startTransition(async () => {
-      const result = await action(id);
+      const result = opts?.withCashRetry
+        ? await withOpenCashRetry(() => action(id))
+        : await action(id);
       if (!result.ok) {
         window.alert(result.error ?? "No se pudo completar la acción.");
         return;
@@ -71,7 +80,9 @@ export function TreasuryDocActions({
           type="button"
           disabled={pending}
           onClick={() =>
-            run(kind === "receipt" ? postReceipt : postPaymentOrder)
+            run(kind === "receipt" ? postReceipt : postPaymentOrder, {
+              withCashRetry: true,
+            })
           }
           className="rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-60"
         >
@@ -93,7 +104,9 @@ export function TreasuryDocActions({
               return;
             }
             startTransition(async () => {
-              const result = await syncPostedDocumentToCash(kind, id);
+              const result = await withOpenCashRetry(() =>
+                syncPostedDocumentToCash(kind, id),
+              );
               if (!result.ok) {
                 window.alert(result.error ?? "No se pudo sincronizar con caja.");
                 return;

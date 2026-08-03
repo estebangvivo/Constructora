@@ -180,7 +180,7 @@ export async function mapClientBalances(): Promise<Map<string, PartyBalance>> {
   const [certs, receipts] = await Promise.all([
     prisma.certification.findMany({
       where: {
-        status: { in: ["APPROVED", "PAID"] },
+        status: { in: ["SUBMITTED", "APPROVED", "PAID"] },
         project: {
           organizationId: session.organizationId,
           deletedAt: null,
@@ -295,7 +295,7 @@ export async function getClientAccountStatement(
   const [certs, receipts] = await Promise.all([
     prisma.certification.findMany({
       where: {
-        status: { in: ["APPROVED", "PAID"] },
+        status: { in: ["SUBMITTED", "APPROVED", "PAID"] },
         project: {
           organizationId: session.organizationId,
           clientId,
@@ -415,7 +415,7 @@ export async function getProjectClientAccountStatement(
     prisma.certification.findMany({
       where: {
         projectId: project.id,
-        status: { in: ["APPROVED", "PAID"] },
+        status: { in: ["SUBMITTED", "APPROVED", "PAID"] },
       },
       orderBy: { periodEnd: "asc" },
       select: {
@@ -721,7 +721,7 @@ export async function listOpenCertifications(opts?: {
   const session = await requireSession();
   const rows = await prisma.certification.findMany({
     where: {
-      status: { in: ["APPROVED", "PAID"] },
+      status: { in: ["SUBMITTED", "APPROVED", "PAID"] },
       project: {
         organizationId: session.organizationId,
         deletedAt: null,

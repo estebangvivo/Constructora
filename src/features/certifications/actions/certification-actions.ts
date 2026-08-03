@@ -81,7 +81,7 @@ async function buildLines(
       budgetItemId: { in: [...itemMap.keys()] },
       certification: {
         projectId,
-        status: { in: ["APPROVED", "PAID"] },
+        status: { in: ["SUBMITTED", "APPROVED", "PAID"] },
       },
     },
     select: { budgetItemId: true, currentPct: true },
@@ -319,16 +319,22 @@ export async function setCertificationStatus(input: {
       data.submittedAt = now;
     }
     if (input.status === "APPROVED") {
+      // Presentar confirma la certificación (quien la emite ya la da por válida).
       data.submittedAt = existing.submittedAt ?? now;
       data.approvedAt = now;
     }
     if (input.status === "PAID") {
-      if (existing.status !== "APPROVED" && existing.status !== "PAID") {
+      if (
+        existing.status !== "APPROVED" &&
+        existing.status !== "SUBMITTED" &&
+        existing.status !== "PAID"
+      ) {
         return {
           ok: false,
-          error: "Solo se puede liquidar una certificación aprobada.",
+          error: "Solo se puede liquidar una certificación presentada.",
         };
       }
+      data.submittedAt = existing.submittedAt ?? now;
       data.approvedAt = existing.approvedAt ?? now;
       data.paidAt = now;
     }

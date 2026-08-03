@@ -30,11 +30,22 @@ export type CertificationDetail = {
   retentionPct: number;
   retentionAmount: number;
   netAmount: number;
+  collectedAmount: number;
   notes: string | null;
   submittedAt: Date | null;
   approvedAt: Date | null;
   paidAt: Date | null;
   currency: string;
+  project: {
+    code: string;
+    name: string;
+    address: string | null;
+  };
+  client: {
+    name: string;
+    taxId: string | null;
+    phone: string | null;
+  } | null;
   items: {
     id: string;
     budgetItemId: string;
@@ -104,7 +115,18 @@ export async function getCertificationById(
       },
     },
     include: {
-      project: { select: { id: true, currency: true } },
+      project: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          address: true,
+          currency: true,
+          client: {
+            select: { name: true, taxId: true, phone: true },
+          },
+        },
+      },
       items: {
         include: {
           budgetItem: {
@@ -134,11 +156,24 @@ export async function getCertificationById(
     retentionPct: toNumber(row.retentionPct),
     retentionAmount: toNumber(row.retentionAmount),
     netAmount: toNumber(row.netAmount),
+    collectedAmount: toNumber(row.collectedAmount),
     notes: row.notes,
     submittedAt: row.submittedAt,
     approvedAt: row.approvedAt,
     paidAt: row.paidAt,
     currency: row.project.currency,
+    project: {
+      code: row.project.code,
+      name: row.project.name,
+      address: row.project.address,
+    },
+    client: row.project.client
+      ? {
+          name: row.project.client.name,
+          taxId: row.project.client.taxId,
+          phone: row.project.client.phone,
+        }
+      : null,
     items: row.items.map((item) => ({
       id: item.id,
       budgetItemId: item.budgetItemId,
@@ -187,7 +222,7 @@ export async function listCertifiableBudgetItems(
       budgetItemId: { in: budget.items.map((i) => i.id) },
       certification: {
         projectId,
-        status: { in: ["APPROVED", "PAID"] },
+        status: { in: ["SUBMITTED", "APPROVED", "PAID"] },
       },
     },
     select: {

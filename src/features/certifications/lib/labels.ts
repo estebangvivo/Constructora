@@ -4,7 +4,7 @@ import { normalizeCurrency } from "@/config/currencies";
 export const CERT_STATUS_LABEL: Record<CertificationStatus, string> = {
   DRAFT: "Borrador",
   SUBMITTED: "Presentada",
-  APPROVED: "Aprobada",
+  APPROVED: "Presentada",
   PAID: "Liquidada",
   REJECTED: "Rechazada",
 };

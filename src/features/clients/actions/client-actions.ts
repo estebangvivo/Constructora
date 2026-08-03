@@ -19,7 +19,7 @@ export type ActionResult =
   | { ok: false; error: string };
 
 function canManage(role: string) {
-  return ["ADMIN", "DIRECTOR"].includes(role);
+  return ["ADMIN", "DIRECTOR", "RESIDENT"].includes(role);
 }
 
 export async function createClient(input: ClientInput): Promise<ActionResult> {
@@ -47,6 +47,7 @@ export async function createClient(input: ClientInput): Promise<ActionResult> {
 
     revalidatePath("/clients");
     revalidatePath("/projects");
+    revalidatePath("/treasury/receipts/new");
     return { ok: true, id: client.id };
   } catch (error) {
     console.error("createClient", error);

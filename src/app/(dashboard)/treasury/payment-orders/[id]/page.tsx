@@ -78,6 +78,12 @@ export default async function PaymentOrderDetailPage({ params }: PageProps) {
             )}
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link
+            href="/treasury/payment-orders"
+            className="inline-flex items-center rounded-md border border-border px-3 py-2 text-sm hover:bg-surface"
+          >
+            Volver a órdenes de pago
+          </Link>
           {doc.status !== "CANCELLED" && (
             <ShareTreasuryDocButton
               printHref={`/treasury/payment-orders/${doc.id}/print`}

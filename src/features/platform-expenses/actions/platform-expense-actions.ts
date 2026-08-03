@@ -73,7 +73,8 @@ export async function listPlatformExpenses(filters?: {
     await requireSuperadminSession();
     const items = await dbListPlatformExpenses(filters ?? {});
     return { items, totals: computeExpenseTotals(items) };
-  } catch {
+  } catch (error) {
+    console.error("listPlatformExpenses", error);
     return null;
   }
 }

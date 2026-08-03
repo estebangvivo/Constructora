@@ -6,6 +6,8 @@ import { Plus, Trash2 } from "lucide-react";
 import {
   createPaymentOrder,
   createReceipt,
+  postPaymentOrder,
+  postReceipt,
   type TreasuryLineInput,
   type TreasuryPaymentInput,
 } from "@/features/treasury/actions/treasury-actions";
@@ -14,11 +16,14 @@ import type { PaymentMethod } from "@prisma/client";
 import type { TreasuryProjectOption } from "@/features/treasury/queries/list-projects-for-treasury";
 import { DateInput } from "@/components/ui/date-input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select";
 import { formatMoney, PAYMENT_METHOD_LABEL } from "@/features/treasury/lib/labels";
 import {
   checkFormatLabel,
   normalizeCheckNumber,
 } from "@/features/treasury/lib/check-number";
+import { CreatePartyModal } from "@/features/parties/components/create-party-modal";
+import { withOpenCashRetry } from "@/features/treasury/lib/with-open-cash-retry";
 
 type Option = { id: string; name: string };
 type BudgetItemOption = {
@@ -68,6 +73,19 @@ type TreasuryDocumentFormProps = {
     balance: number;
     currency: string;
   }[];
+  /** Prefill de imputación (ej. desde liquidación de certificación). */
+  defaultDocumentApps?: {
+    documentId: string;
+    amount: number;
+  }[];
+  defaultConcept?: string;
+  /** Monto sugerido de línea / medios de pago (ej. neto de certificación). */
+  defaultAmount?: number;
+  /**
+   * Si se define, fuerza el beneficiario inicial.
+   * `""` = sin catálogo (útil para pago a obreros por nombre libre).
+   */
+  defaultPartyId?: string;
 };
 
 const METHOD_OPTIONS: PaymentMethod[] = [
@@ -126,6 +144,10 @@ export function TreasuryDocumentForm({
   portfolioChecks = [],
   bankAccounts = [],
   openDocuments = [],
+  defaultDocumentApps = [],
+  defaultConcept = "",
+  defaultAmount = 0,
+  defaultPartyId,
 }: TreasuryDocumentFormProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -134,24 +156,59 @@ export function TreasuryDocumentForm({
     () => new Date().toISOString().slice(0, 10),
   );
   const [partyId, setPartyId] = useState(() =>
-    resolveDefaultPartyId(kind, projects, defaultProjectId),
+    defaultPartyId !== undefined
+      ? defaultPartyId
+      : resolveDefaultPartyId(kind, projects, defaultProjectId),
   );
   const [partyName, setPartyName] = useState("");
-  const [concept, setConcept] = useState("");
-  const [currency, setCurrency] = useState(defaultCurrency);
+  const [concept, setConcept] = useState(defaultConcept);
+  const prefilledAppTotal = defaultDocumentApps.reduce(
+    (acc, a) => acc + (Number(a.amount) || 0),
+    0,
+  );
+  const suggestedAmount =
+    prefilledAppTotal > 0
+      ? prefilledAppTotal
+      : Number.isFinite(defaultAmount) && defaultAmount > 0
+        ? defaultAmount
+        : 0;
+  const [currency, setCurrency] = useState(() => {
+    const firstAppId = defaultDocumentApps[0]?.documentId;
+    const doc = firstAppId
+      ? openDocuments.find((d) => d.id === firstAppId)
+      : undefined;
+    return doc?.currency || defaultCurrency;
+  });
   const [notes, setNotes] = useState("");
-  const [lines, setLines] = useState<LineState[]>(() => [
-    emptyLine(defaultProjectId),
-  ]);
+  const [lines, setLines] = useState<LineState[]>(() => {
+    const line = emptyLine(defaultProjectId);
+    if (defaultConcept) line.description = defaultConcept;
+    if (suggestedAmount > 0) line.amount = suggestedAmount;
+    return [line];
+  });
   const [payments, setPayments] = useState<PaymentState[]>(() => [
-    emptyPayment(),
+    emptyPayment(suggestedAmount > 0 ? suggestedAmount : 0),
   ]);
   const [apps, setApps] = useState<
     { key: string; documentId: string; amount: string }[]
-  >([]);
+  >(() =>
+    defaultDocumentApps
+      .filter((a) => a.documentId && a.amount > 0)
+      .map((a) => ({
+        key: Math.random().toString(36).slice(2),
+        documentId: a.documentId,
+        amount: String(a.amount),
+      })),
+  );
+  const [partyOptions, setPartyOptions] = useState<Option[]>(parties);
+  const [partyModalOpen, setPartyModalOpen] = useState(false);
   const [budgetItemsByProject, setBudgetItemsByProject] = useState<
     Record<string, BudgetItemOption[]>
   >({});
+
+  useEffect(() => {
+    setPartyOptions(parties);
+  }, [parties]);
 
   useEffect(() => {
     if (!defaultProjectId) return;
@@ -174,6 +231,24 @@ export function TreasuryDocumentForm({
       if (prev.length !== 1) return prev;
       if (Number(prev[0].amount) === paymentsTotal) return prev;
       return [{ ...prev[0], amount: paymentsTotal }];
+    });
+  }, [paymentsTotal, lines.length]);
+
+  // Varias partidas sin monto aún: repartir el total de medios de pago.
+  useEffect(() => {
+    if (lines.length <= 1 || paymentsTotal <= 0) return;
+    const imputed = lines.reduce((acc, l) => acc + (Number(l.amount) || 0), 0);
+    if (imputed > 0.009) return;
+    const cents = Math.round(paymentsTotal * 100);
+    const base = Math.floor(cents / lines.length);
+    const amounts = Array.from({ length: lines.length }, () => base);
+    let rem = cents - base * lines.length;
+    for (let i = 0; i < rem; i++) amounts[i] += 1;
+    setLines((prev) => {
+      if (prev.length <= 1) return prev;
+      const current = prev.reduce((acc, l) => acc + (Number(l.amount) || 0), 0);
+      if (current > 0.009) return prev;
+      return prev.map((l, i) => ({ ...l, amount: amounts[i] / 100 }));
     });
   }, [paymentsTotal, lines.length]);
 
@@ -210,6 +285,72 @@ export function TreasuryDocumentForm({
     setLines((prev) =>
       prev.map((line) => (line.key === key ? { ...line, ...patch } : line)),
     );
+  }
+
+  function splitAmount(total: number, n: number): number[] {
+    if (n <= 0) return [];
+    const cents = Math.round(total * 100);
+    const base = Math.floor(cents / n);
+    const amounts = Array.from({ length: n }, () => base);
+    let rem = cents - base * n;
+    for (let i = 0; i < rem; i++) amounts[i] += 1;
+    return amounts.map((c) => c / 100);
+  }
+
+  /** Una o más partidas: si hay varias, genera una línea por cada una. */
+  function applyPartidasToLine(lineKey: string, selectedIds: string[]) {
+    setLines((prev) => {
+      const idx = prev.findIndex((l) => l.key === lineKey);
+      if (idx < 0) return prev;
+      const line = prev[idx];
+      const projectId = line.projectId ?? "";
+      const items = budgetItemsByProject[projectId] ?? [];
+
+      if (selectedIds.length === 0) {
+        const next = [...prev];
+        next[idx] = { ...line, budgetItemId: "" };
+        return next;
+      }
+
+      if (selectedIds.length === 1) {
+        const item = items.find((i) => i.id === selectedIds[0]);
+        const next = [...prev];
+        const autoDesc = item ? `${item.code} · ${item.description}` : "";
+        next[idx] = {
+          ...line,
+          budgetItemId: selectedIds[0],
+          description:
+            !line.description.trim() ||
+            (line.budgetItemId &&
+              items.some(
+                (i) =>
+                  i.id === line.budgetItemId &&
+                  line.description === `${i.code} · ${i.description}`,
+              ))
+              ? autoDesc || line.description
+              : line.description,
+        };
+        return next;
+      }
+
+      const otherLines = prev.filter((_, i) => i !== idx);
+      const pool =
+        otherLines.length === 0
+          ? paymentsTotal
+          : Number(line.amount) || 0;
+      const amounts = splitAmount(pool, selectedIds.length);
+      const created: LineState[] = selectedIds.map((id, i) => {
+        const item = items.find((x) => x.id === id);
+        return {
+          key: i === 0 ? line.key : Math.random().toString(36).slice(2),
+          description: item ? `${item.code} · ${item.description}` : "",
+          amount: amounts[i],
+          projectId,
+          budgetItemId: id,
+        };
+      });
+      return [...prev.slice(0, idx), ...created, ...prev.slice(idx + 1)];
+    });
   }
 
   function updatePayment(key: string, patch: Partial<PaymentState>) {
@@ -313,15 +454,45 @@ export function TreasuryDocumentForm({
         return;
       }
 
+      let imputed = !result.postError;
+
+      if (result.postError) {
+        const isReceipt = kind === "receipt";
+        const label = isReceipt ? "Recibo" : "Orden de pago";
+        const createdWord = isReceipt ? "creado" : "creada";
+        const detailLabel = isReceipt
+          ? "detalle del recibo"
+          : "detalle de la orden";
+        if (result.postCode === "NO_OPEN_CASH") {
+          const posted = await withOpenCashRetry(() =>
+            isReceipt ? postReceipt(result.id) : postPaymentOrder(result.id),
+          );
+          imputed = posted.ok;
+          if (!posted.ok) {
+            window.alert(
+              `${label} ${result.number} ${createdWord}, pero no se imputó al presupuesto:\n${posted.error}\n\nPodés imputarlo desde el ${detailLabel}.`,
+            );
+          }
+        } else {
+          window.alert(
+            `${label} ${result.number} ${createdWord}, pero no se imputó al presupuesto:\n${result.postError}\n\nPodés imputarlo desde el ${detailLabel}.`,
+          );
+        }
+      }
+
       const detailHref =
         kind === "receipt"
           ? `/treasury/receipts/${result.id}`
           : `/treasury/payment-orders/${result.id}`;
       const printHref = `${detailHref}/print?autoPrint=1`;
       const wantsPrint = window.confirm(
-        kind === "receipt"
-          ? "Recibo creado. ¿Querés imprimir el reporte?"
-          : "Orden de pago creada. ¿Querés imprimir el reporte?",
+        imputed
+          ? kind === "receipt"
+            ? "Recibo creado e imputado al presupuesto. ¿Querés imprimir el reporte?"
+            : "Orden de pago creada e imputada al presupuesto. ¿Querés imprimir el reporte?"
+          : kind === "receipt"
+            ? "¿Querés imprimir el reporte del recibo?"
+            : "¿Querés imprimir el reporte de la orden de pago?",
       );
 
       router.push(wantsPrint ? printHref : detailHref);
@@ -359,20 +530,38 @@ export function TreasuryDocumentForm({
             ))}
           </select>
         </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-muted-foreground">{partyLabel}</span>
+        <div className="block text-sm">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <span className="text-muted-foreground">{partyLabel}</span>
+            <button
+              type="button"
+              onClick={() => setPartyModalOpen(true)}
+              className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+            >
+              <Plus className="size-3.5" aria-hidden />
+              Nuevo {partyLabel.toLowerCase()}
+            </button>
+          </div>
           <SearchableSelect
             value={partyId}
             onChange={onPartyChange}
             emptyLabel="Sin catálogo / otro"
             placeholder={`Elegir ${partyLabel.toLowerCase()}…`}
             searchPlaceholder={`Buscar ${partyLabel.toLowerCase()}…`}
-            options={parties.map((p) => ({
+            options={partyOptions.map((p) => ({
               value: p.id,
               label: p.name,
             }))}
+            onCreateNew={() => setPartyModalOpen(true)}
+            createNewLabel={`+ Nuevo ${partyLabel.toLowerCase()}`}
           />
-        </label>
+          {partyOptions.length === 0 ? (
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              No hay {partyLabel.toLowerCase()}s cargados. Creá uno con el botón
+              de arriba o usá nombre libre.
+            </p>
+          ) : null}
+        </div>
         <label className="block text-sm">
           <span className="mb-1 block text-muted-foreground">
             Nombre libre (si no hay {partyLabel.toLowerCase()})
@@ -400,8 +589,8 @@ export function TreasuryDocumentForm({
             <h3 className="font-medium">Líneas / imputación</h3>
             <p className="text-sm text-muted-foreground">
               {singleLine
-                ? "El monto se toma de la suma de medios de pago."
-                : "Distribuí el total de medios de pago entre las partidas."}
+                ? "El monto se toma de la suma de medios de pago. Marcá las partidas que quieras y tocá Listo."
+                : "Distribuí el total de medios de pago entre las partidas (una línea por partida al confirmar)."}
               {partyId
                 ? ` Solo obras del ${partyLabel.toLowerCase()} seleccionado.`
                 : defaultProjectId
@@ -483,25 +672,27 @@ export function TreasuryDocumentForm({
                       }}
                     />
                   </label>
-                  <label className="block text-sm">
+                  <div className="block text-sm">
                     <span className="mb-1 block text-muted-foreground">
-                      Partida (presupuesto)
+                      Partida(s) del presupuesto
                     </span>
-                    <SearchableSelect
-                      value={line.budgetItemId ?? ""}
+                    <SearchableMultiSelect
+                      values={line.budgetItemId ? [line.budgetItemId] : []}
                       disabled={!line.projectId}
-                      emptyLabel="Sin partida"
+                      placeholder={
+                        line.projectId
+                          ? "Elegir una o más partidas…"
+                          : "Elegí obra primero"
+                      }
                       searchPlaceholder="Buscar partida…"
                       options={items.map((item) => ({
                         value: item.id,
                         label: `${item.code} · ${item.description}`,
                         keywords: `${item.code} ${item.description}`,
                       }))}
-                      onChange={(budgetItemId) =>
-                        updateLine(line.key, { budgetItemId })
-                      }
+                      onChange={(ids) => applyPartidasToLine(line.key, ids)}
                     />
-                  </label>
+                  </div>
                   <label className="block text-sm">
                     <span className="mb-1 block text-muted-foreground">
                       Monto
@@ -1211,10 +1402,32 @@ export function TreasuryDocumentForm({
           {pending
             ? "Guardando…"
             : kind === "receipt"
-              ? "Crear recibo"
-              : "Crear orden de pago"}
+              ? "Crear e imputar recibo"
+              : "Crear e imputar orden de pago"}
         </button>
       </div>
+
+      <CreatePartyModal
+        kind={kind === "receipt" ? "client" : "supplier"}
+        open={partyModalOpen}
+        onClose={() => setPartyModalOpen(false)}
+        linkProjectId={
+          defaultProjectId ||
+          lines.find((l) => l.projectId)?.projectId ||
+          undefined
+        }
+        onCreated={(party) => {
+          setPartyOptions((prev) =>
+            prev.some((p) => p.id === party.id)
+              ? prev
+              : [...prev, { id: party.id, name: party.name }].sort((a, b) =>
+                  a.name.localeCompare(b.name, "es"),
+                ),
+          );
+          setPartyName("");
+          onPartyChange(party.id);
+        }}
+      />
     </form>
   );
 }

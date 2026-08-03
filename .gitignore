@@ -39,6 +39,43 @@ yarn-error.log*
 !/public/uploads/documents/.gitkeep
 /public/uploads/invoices/**
 !/public/uploads/invoices/.gitkeep
+/public/uploads/punch-list/**
+/public/uploads/feature-requests/**
+
+# marketing video build junk (keep final promo + flyers)
+/public/marketing/video/node_modules/
+/public/marketing/video/piper-models/
+/public/marketing/video/app-recording*/
+/public/marketing/video/app-shots/
+/public/marketing/video/dyn-clips/
+/public/marketing/video/rich-clips/
+/public/marketing/video/voice-tests/
+/public/marketing/video/package.json
+/public/marketing/video/package-lock.json
+/public/marketing/video/app-walkthrough*.mp4
+/public/marketing/video/as*.png
+/public/marketing/video/avs*.png
+/public/marketing/video/hslide*.png
+/public/marketing/video/slide*.png
+/public/marketing/video/clip-*.mp4
+/public/marketing/video/*-hold*.mp4
+/public/marketing/video/*-edit*.mp4
+/public/marketing/video/main-trim.mp4
+/public/marketing/video/full-with-cierre.mp4
+/public/marketing/video/cta-hold.mp4
+/public/marketing/video/bgm-calm.wav
+/public/marketing/video/narracion*.mp3
+/public/marketing/video/narracion.vtt
+/public/marketing/video/simpleobra-promo-*.mp4
+!/public/marketing/video/simpleobra-promo-app-recorrido-16x9.mp4
+/public/marketing/video/ui-loading*.png
+/public/marketing/video/flyer-cierre-16x9.png
+/public/marketing/video/gemini-*.png
+/public/marketing/video/rich-last.png
+/public/marketing/video/lastframe.png
+/public/marketing/video/concat-list.txt
+spa.traineddata
+npm-install-log.txt
 
 # typescript
 next-env.d.ts

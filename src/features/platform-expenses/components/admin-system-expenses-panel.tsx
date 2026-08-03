@@ -136,6 +136,8 @@ export function AdminSystemExpensesPanel({
     if (data) {
       setItems(data.items);
       setTotals(data.totals);
+    } else {
+      setError("No se pudo recargar el listado de gastos.");
     }
     router.refresh();
   }

@@ -49,6 +49,8 @@ export async function createSupplier(
 
     revalidatePath("/suppliers");
     revalidatePath("/projects");
+    revalidatePath("/treasury/payment-orders/new");
+    revalidatePath("/treasury/receipts/new");
     return { ok: true, id: supplier.id };
   } catch (error) {
     console.error("createSupplier", error);

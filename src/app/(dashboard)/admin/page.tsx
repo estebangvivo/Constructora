@@ -14,7 +14,10 @@ import { getAdminMercadoPagoConfig } from "@/features/billing/actions/admin-merc
 import { getAdminTransferBankConfig } from "@/features/billing/actions/admin-transfer-actions";
 import { getAdminPlanPrices } from "@/features/billing/actions/admin-plan-prices-actions";
 import { listAllFeatureRequestsForAdmin } from "@/features/feature-requests/actions/feature-request-actions";
-import { listPlatformExpenses } from "@/features/platform-expenses/actions/platform-expense-actions";
+import {
+  computeExpenseTotals,
+  dbListPlatformExpenses,
+} from "@/features/platform-expenses/lib/expense-db";
 import { AdminPanel } from "@/features/auth/components/admin-panel";
 import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
 import { prisma } from "@/lib/prisma";
@@ -80,7 +83,25 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     superadmin ? getAdminMercadoPagoConfig() : Promise.resolve(null),
     superadmin ? getAdminTransferBankConfig() : Promise.resolve(null),
     superadmin ? getAdminPlanPrices() : Promise.resolve(null),
-    superadmin ? listPlatformExpenses({}) : Promise.resolve(null),
+    superadmin
+      ? dbListPlatformExpenses({})
+          .then((items) => ({
+            items,
+            totals: computeExpenseTotals(items),
+          }))
+          .catch((error) => {
+            console.error("admin listPlatformExpenses", error);
+            return {
+              items: [],
+              totals: {
+                totalArs: 0,
+                totalUsd: 0,
+                totalHours: 0,
+                count: 0,
+              },
+            };
+          })
+      : Promise.resolve(null),
     superadmin ? listAllFeatureRequestsForAdmin() : Promise.resolve([]),
   ]);
 

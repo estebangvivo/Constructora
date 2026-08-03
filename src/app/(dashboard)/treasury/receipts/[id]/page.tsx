@@ -75,6 +75,12 @@ export default async function ReceiptDetailPage({ params }: PageProps) {
             )}
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link
+            href="/treasury/receipts"
+            className="inline-flex items-center rounded-md border border-border px-3 py-2 text-sm hover:bg-surface"
+          >
+            Volver a recibos
+          </Link>
           {doc.status !== "CANCELLED" && (
             <ShareTreasuryDocButton
               printHref={`/treasury/receipts/${doc.id}/print`}

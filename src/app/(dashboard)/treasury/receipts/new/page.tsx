@@ -14,14 +14,15 @@ import { TreasuryDocumentForm } from "@/features/treasury/components/treasury-do
 export const dynamic = "force-dynamic";
 
 type PageProps = {
-  searchParams: Promise<{ projectId?: string }>;
+  searchParams: Promise<{ projectId?: string; certificationId?: string }>;
 };
 
 export default async function NewReceiptPage({ searchParams }: PageProps) {
   const session = await getSession();
   if (!session) redirect("/sign-in");
 
-  const { projectId } = await searchParams;
+  const { projectId, certificationId } = await searchParams;
+  const certId = certificationId?.trim() || "";
 
   const [
     projects,
@@ -36,13 +37,23 @@ export default async function NewReceiptPage({ searchParams }: PageProps) {
     getOrganizationCurrency(),
     getEnabledCurrencies(),
     listActiveBankAccountsForPayment(),
-    listOpenCertifications(
-      projectId ? { projectId } : undefined,
-    ),
+    listOpenCertifications(projectId ? { projectId } : undefined),
   ]);
 
   const defaultProjectId =
     projectId && projects.some((p) => p.id === projectId) ? projectId : "";
+
+  const prefillCert = certId
+    ? openCerts.find((c) => c.id === certId) ?? null
+    : null;
+
+  const defaultDocumentApps = prefillCert
+    ? [{ documentId: prefillCert.id, amount: prefillCert.balance }]
+    : [];
+
+  const defaultConcept = prefillCert
+    ? `Cobro certificación ${prefillCert.number}`
+    : "";
 
   return (
     <div className="px-4 py-6 lg:px-6">
@@ -52,6 +63,17 @@ export default async function NewReceiptPage({ searchParams }: PageProps) {
         </Link>
       </p>
       <h1 className="mb-6 font-display text-3xl tracking-tight">Nuevo recibo</h1>
+      {prefillCert ? (
+        <p className="mb-4 rounded-md border border-border bg-surface/40 px-3 py-2 text-sm text-muted-foreground">
+          Prefill desde certificación{" "}
+          <span className="font-medium text-foreground">{prefillCert.number}</span>
+          {" · "}
+          saldo {prefillCert.balance.toLocaleString("es-AR", {
+            style: "currency",
+            currency: prefillCert.currency,
+          })}
+        </p>
+      ) : null}
       <TreasuryDocumentForm
         kind="receipt"
         projects={projects}
@@ -66,6 +88,8 @@ export default async function NewReceiptPage({ searchParams }: PageProps) {
           balance: c.balance,
           currency: c.currency,
         }))}
+        defaultDocumentApps={defaultDocumentApps}
+        defaultConcept={defaultConcept}
       />
     </div>
   );
