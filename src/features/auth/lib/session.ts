@@ -1,4 +1,6 @@
 import { cookies } from "next/headers";
+import { prisma } from "@/lib/prisma";
+import { isPlatformSuperadminEmail } from "@/features/auth/lib/platform-admin";
 import {
   SESSION_COOKIE,
   signLocalSession,
@@ -38,4 +40,55 @@ export async function readLocalSessionFromCookies(): Promise<LocalSessionPayload
   const token = jar.get(SESSION_COOKIE)?.value;
   if (!token) return null;
   return verifyLocalSession(token);
+}
+
+/**
+ * Emite JWT de sesión.
+ * - bumpSession: true en login/registro → invalida otras sesiones (no superadmin).
+ * - bumpSession: false al cambiar org / renovar cookie → mantiene la misma versión.
+ */
+export async function issueLocalSessionToken(input: {
+  userId: string;
+  organizationId: string | null;
+  /** Si true, cierra otras sesiones del usuario (excepto superadmin). */
+  bumpSession?: boolean;
+}): Promise<string> {
+  const user = await prisma.user.findUnique({
+    where: { id: input.userId },
+    select: { email: true, sessionVersion: true, isActive: true },
+  });
+  if (!user || !user.isActive) {
+    throw new Error("Usuario no encontrado o inactivo.");
+  }
+
+  const isSuperadmin = isPlatformSuperadminEmail(user.email);
+  let sessionVersion = user.sessionVersion ?? 0;
+
+  if (input.bumpSession && !isSuperadmin) {
+    const updated = await prisma.user.update({
+      where: { id: input.userId },
+      data: {
+        sessionVersion: { increment: 1 },
+        lastSeenAt: new Date(),
+        lastActivityAt: new Date(),
+      },
+      select: { sessionVersion: true },
+    });
+    sessionVersion = updated.sessionVersion;
+  } else if (input.bumpSession && isSuperadmin) {
+    try {
+      await prisma.user.update({
+        where: { id: input.userId },
+        data: { lastSeenAt: new Date(), lastActivityAt: new Date() },
+      });
+    } catch (error) {
+      console.warn("issueLocalSessionToken touch activity", error);
+    }
+  }
+
+  return signLocalSession({
+    userId: input.userId,
+    organizationId: input.organizationId,
+    sessionVersion,
+  });
 }

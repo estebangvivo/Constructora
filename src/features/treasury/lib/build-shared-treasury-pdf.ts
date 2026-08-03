@@ -84,6 +84,7 @@ export async function buildSharedTreasuryPdfResponse(
             amount: Number(p.amount),
             checkNumber: p.checkNumber,
             checkBank: p.checkBank,
+            isElectronicCheck: p.isElectronicCheck,
             bankAccountName: p.bankAccount?.name ?? null,
           }))
         : [
@@ -92,6 +93,7 @@ export async function buildSharedTreasuryPdfResponse(
               amount: Number(doc.totalAmount),
               checkNumber: doc.checkNumber,
               checkBank: doc.checkBank,
+              isElectronicCheck: false,
               bankAccountName: null,
             },
           ];
@@ -154,6 +156,7 @@ export async function buildSharedTreasuryPdfResponse(
           amount: Number(p.amount),
           checkNumber: p.checkNumber,
           checkBank: p.checkBank,
+          isElectronicCheck: p.isElectronicCheck,
           bankAccountName: p.bankAccount?.name ?? null,
         }))
       : [
@@ -162,6 +165,7 @@ export async function buildSharedTreasuryPdfResponse(
             amount: Number(doc.totalAmount),
             checkNumber: doc.checkNumber,
             checkBank: doc.checkBank,
+            isElectronicCheck: false,
             bankAccountName: null,
           },
         ];

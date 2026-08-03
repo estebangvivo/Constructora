@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuthSession } from "@/lib/auth";
-import {
-  SESSION_COOKIE,
-  signLocalSession,
-} from "@/features/auth/lib/session-crypto";
+import { SESSION_COOKIE } from "@/features/auth/lib/session-crypto";
+import { issueLocalSessionToken } from "@/features/auth/lib/session";
 import { publicUrl } from "@/lib/request-origin";
 import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
 
@@ -43,7 +41,7 @@ export async function GET(request: Request) {
       return NextResponse.redirect(publicUrl(request, "/onboarding/planes"));
     }
 
-    const token = await signLocalSession({
+    const token = await issueLocalSessionToken({
       userId: session.user.id,
       organizationId: membership.organizationId,
     });

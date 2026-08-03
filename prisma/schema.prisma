@@ -291,6 +291,8 @@ model User {
   lastSeenAt   DateTime?
   /// Última interacción del usuario (para cierre de sesión por inactividad)
   lastActivityAt DateTime?
+  /// Incrementa en cada login: invalida JWTs previos (sesión única, no superadmin).
+  sessionVersion Int @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -1307,6 +1309,8 @@ model CheckInstrument {
   kind           CheckKind   @default(THIRD_PARTY)
   number         String
   bank           String
+  /// true = cheque electrónico (número con prefijo E-)
+  isElectronic   Boolean     @default(false)
   amount         Decimal     @db.Decimal(14, 2)
   currency       String      @default("ARS")
   issueDate      DateTime?   @db.Date
@@ -1422,6 +1426,8 @@ model ReceiptPayment {
   checkIssueDate DateTime?     @db.Date
   checkDueDate   DateTime?     @db.Date
   checkAccount   String?
+  /// true = cheque electrónico (número con prefijo E-)
+  isElectronicCheck Boolean    @default(false)
   sortOrder      Int           @default(0)
   createdAt      DateTime      @default(now())
 
@@ -1507,6 +1513,8 @@ model PaymentOrderPayment {
   checkIssueDate    DateTime?     @db.Date
   checkDueDate      DateTime?     @db.Date
   checkAccount      String?
+  /// true = cheque electrónico (número con prefijo E-)
+  isElectronicCheck Boolean       @default(false)
   sortOrder         Int           @default(0)
   createdAt         DateTime      @default(now())
 

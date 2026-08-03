@@ -12,6 +12,7 @@ const isPublicRoute = createRouteMatcher([
   "/sign-up(.*)",
   "/api/health(.*)",
   "/api/auth/login(.*)",
+  "/api/auth/session-gate(.*)",
   "/api/webhooks(.*)",
   "/api/cron(.*)",
   "/api/billing/mercadopago/webhook(.*)",
@@ -38,6 +39,32 @@ export default async function middleware(
   if (token) {
     const local = await verifyLocalSession(token);
     if (local) {
+      // Sesión única: confirmar que el JWT no fue reemplazado por otro login.
+      try {
+        const gateUrl = new URL("/api/auth/session-gate", request.url);
+        const gateRes = await fetch(gateUrl, {
+          headers: {
+            cookie: request.headers.get("cookie") ?? "",
+          },
+          cache: "no-store",
+        });
+        if (gateRes.status === 401) {
+          const signIn = publicUrl(request, "/sign-in");
+          signIn.searchParams.set("next", request.nextUrl.pathname);
+          signIn.searchParams.set("reason", "session");
+          const redirect = NextResponse.redirect(signIn);
+          redirect.cookies.set(SESSION_COOKIE, "", {
+            httpOnly: true,
+            sameSite: "lax",
+            path: "/",
+            maxAge: 0,
+          });
+          return redirect;
+        }
+      } catch (error) {
+        console.warn("middleware session-gate", error);
+      }
+
       const requestHeaders = new Headers(request.headers);
       requestHeaders.set("x-pathname", request.nextUrl.pathname);
       return NextResponse.next({

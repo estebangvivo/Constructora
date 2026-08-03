@@ -7,8 +7,8 @@ import {
   validatePasswordStrength,
 } from "@/features/auth/lib/password";
 import {
+  issueLocalSessionToken,
   setLocalSessionCookie,
-  signLocalSession,
 } from "@/features/auth/lib/session";
 import { isValidWhatsAppPhone } from "@/features/treasury/lib/share-message";
 
@@ -73,9 +73,10 @@ export async function registerWithPassword(input: {
       },
     });
 
-    const token = await signLocalSession({
+    const token = await issueLocalSessionToken({
       userId: user.id,
       organizationId: null,
+      bumpSession: true,
     });
     await setLocalSessionCookie(token);
     revalidatePath("/", "layout");

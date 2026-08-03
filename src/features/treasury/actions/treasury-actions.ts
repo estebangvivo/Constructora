@@ -40,6 +40,7 @@ import {
   validatePaymentsAgainstTotal,
   type TreasuryPaymentInput,
 } from "@/features/treasury/lib/payments";
+import { normalizeCheckNumber } from "@/features/treasury/lib/check-number";
 
 export type TreasuryLineInput = {
   projectId?: string;
@@ -137,8 +138,10 @@ function legacyCheckFromPayments(payments: TreasuryPaymentInput[]) {
       checkAccount: null as string | null,
     };
   }
+  const isElectronic = Boolean(check.isElectronicCheck);
   return {
-    checkNumber: check.checkNumber?.trim() || null,
+    checkNumber:
+      normalizeCheckNumber(check.checkNumber, isElectronic) || null,
     checkBank: check.checkBank?.trim() || null,
     checkIssueDate: check.checkIssueDate
       ? new Date(check.checkIssueDate)
@@ -753,6 +756,7 @@ export async function postPaymentOrder(id: string): Promise<ActionResult> {
           amount: p.amount,
           checkInstrumentId: p.checkInstrumentId,
           isOwnCheck: p.isOwnCheck,
+          isElectronicCheck: p.isElectronicCheck,
           bankAccountId: p.bankAccountId,
           checkNumber: p.checkNumber,
           checkBank: p.checkBank,

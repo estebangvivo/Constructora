@@ -11,6 +11,7 @@ export type PrintReportPayment = {
   amount: number;
   checkNumber?: string | null;
   checkBank?: string | null;
+  isElectronicCheck?: boolean;
   bankAccountName?: string | null;
 };
 
@@ -125,7 +126,13 @@ export function TreasuryPrintReport({ data }: { data: PrintReportData }) {
             ];
             if (p.method === "CHECK" && (p.checkNumber || p.checkBank)) {
               parts.push(
-                [p.checkNumber, p.checkBank].filter(Boolean).join(" · "),
+                [
+                  p.isElectronicCheck ? "Electrónico" : null,
+                  p.checkNumber,
+                  p.checkBank,
+                ]
+                  .filter(Boolean)
+                  .join(" · "),
               );
             }
             if (p.method === "TRANSFER" && p.bankAccountName) {

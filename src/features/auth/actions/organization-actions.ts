@@ -8,8 +8,8 @@ import {
   hasOrganization,
 } from "@/lib/auth";
 import {
+  issueLocalSessionToken,
   setLocalSessionCookie,
-  signLocalSession,
 } from "@/features/auth/lib/session";
 import { normalizeOrgSlug } from "@/features/auth/lib/org-slug";
 import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
@@ -92,7 +92,7 @@ export async function switchOrganization(
     }
 
     const targetOrgId = membership?.organizationId ?? organizationId;
-    const token = await signLocalSession({
+    const token = await issueLocalSessionToken({
       userId: session.user.id,
       organizationId: targetOrgId,
     });
@@ -120,7 +120,7 @@ export async function clearActiveOrganization(): Promise<OrgActionResult> {
     if (!isPlatformSuperadmin(session)) {
       return { ok: false, error: "Solo el superadmin puede salir a modo plataforma." };
     }
-    const token = await signLocalSession({
+    const token = await issueLocalSessionToken({
       userId: session.user.id,
       organizationId: null,
     });
@@ -190,7 +190,7 @@ export async function createOrganization(input: {
 
     const shouldSwitch = input.switchTo !== false;
     if (shouldSwitch) {
-      const token = await signLocalSession({
+      const token = await issueLocalSessionToken({
         userId: session.user.id,
         organizationId: org.id,
       });

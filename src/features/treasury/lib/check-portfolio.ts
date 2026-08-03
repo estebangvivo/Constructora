@@ -26,6 +26,7 @@ export async function ingestChecksFromPostedReceipt(
       checkIssueDate: Date | null;
       checkDueDate: Date | null;
       checkAccount: string | null;
+      isElectronicCheck?: boolean;
     }[];
   },
 ) {
@@ -36,6 +37,7 @@ export async function ingestChecksFromPostedReceipt(
     if (!number || !bank) {
       throw new Error("Cheque sin número o banco en el recibo.");
     }
+    const isElectronic = Boolean(payment.isElectronicCheck);
 
     const existing = await tx.checkInstrument.findUnique({
       where: {
@@ -62,6 +64,7 @@ export async function ingestChecksFromPostedReceipt(
           dueDate: payment.checkDueDate,
           account: payment.checkAccount,
           drawerName: input.drawerName,
+          isElectronic,
           status: "IN_PORTFOLIO",
           receiptId: input.receiptId,
           paymentOrderId: null,
@@ -76,6 +79,7 @@ export async function ingestChecksFromPostedReceipt(
         kind: "THIRD_PARTY",
         number,
         bank,
+        isElectronic,
         amount: payment.amount,
         currency: input.currency,
         issueDate: payment.checkIssueDate,
@@ -143,6 +147,7 @@ export async function deliverChecksFromPostedPaymentOrder(
       checkIssueDate?: Date | null;
       checkDueDate?: Date | null;
       checkAccount?: string | null;
+      isElectronicCheck?: boolean;
     }[];
   },
 ) {
@@ -153,6 +158,7 @@ export async function deliverChecksFromPostedPaymentOrder(
       const number = payment.checkNumber?.trim();
       const bank = payment.checkBank?.trim();
       const issuedFromBankAccountId = payment.bankAccountId;
+      const isElectronic = Boolean(payment.isElectronicCheck);
       if (!number || !bank) {
         throw new Error("Cheque propio sin número o banco.");
       }
@@ -204,6 +210,7 @@ export async function deliverChecksFromPostedPaymentOrder(
               issueDate: payment.checkIssueDate,
               dueDate: payment.checkDueDate,
               account: payment.checkAccount,
+              isElectronic,
               status: "DELIVERED",
               paymentOrderId: input.paymentOrderId,
               issuedFromBankAccountId,
@@ -219,6 +226,7 @@ export async function deliverChecksFromPostedPaymentOrder(
               kind: "OWN",
               number,
               bank,
+              isElectronic,
               amount: payment.amount,
               currency: input.currency,
               issueDate: payment.checkIssueDate,

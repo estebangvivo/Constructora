@@ -15,6 +15,7 @@ export type CheckListItem = {
   id: string;
   number: string;
   bank: string;
+  isElectronic: boolean;
   amount: number;
   currency: string;
   issueDate: Date | null;
@@ -121,6 +122,7 @@ export async function listChecks(opts?: {
       id: c.id,
       number: c.number,
       bank: c.bank,
+      isElectronic: c.isElectronic,
       amount: toNumber(c.amount),
       currency: c.currency,
       issueDate: c.issueDate,
@@ -155,6 +157,7 @@ export async function listPortfolioChecksForPayment(): Promise<
     currency: string;
     dueDate: string | null;
     drawerName: string | null;
+    isElectronic: boolean;
     label: string;
   }[]
 > {
@@ -167,7 +170,8 @@ export async function listPortfolioChecksForPayment(): Promise<
     currency: c.currency,
     dueDate: c.dueDate ? c.dueDate.toISOString().slice(0, 10) : null,
     drawerName: c.drawerName,
-    label: `${c.number} · ${c.bank} · ${c.amount.toLocaleString("es-AR", {
+    isElectronic: c.isElectronic,
+    label: `${c.isElectronic ? "E · " : ""}${c.number} · ${c.bank} · ${c.amount.toLocaleString("es-AR", {
       style: "currency",
       currency: c.currency,
     })}${c.dueDate ? ` · vto ${formatDateAR(c.dueDate)}` : ""}`,

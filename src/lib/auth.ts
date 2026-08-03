@@ -138,6 +138,17 @@ async function getLocalCookieSession(): Promise<SessionContext | null> {
   });
   if (!user) return null;
 
+  // Sesión única: un login nuevo en otro dispositivo invalida este JWT
+  // (los superadmins de plataforma pueden tener varias sesiones).
+  // No borramos la cookie acá (RSC no puede mutar cookies de forma fiable);
+  // el middleware / session-gate se encargan de limpiarla.
+  if (
+    !isPlatformSuperadminEmail(user.email) &&
+    local.sessionVersion !== (user.sessionVersion ?? 0)
+  ) {
+    return null;
+  }
+
   if (!local.organizationId) {
     const ok = await touchIdleCheck(user.id, null);
     if (!ok) return null;

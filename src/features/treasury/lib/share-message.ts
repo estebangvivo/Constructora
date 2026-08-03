@@ -7,6 +7,7 @@ export type SharePaymentLine = {
   amount: number;
   checkNumber?: string | null;
   checkBank?: string | null;
+  isElectronicCheck?: boolean;
   bankAccountName?: string | null;
 };
 
@@ -55,7 +56,15 @@ export function buildTreasuryShareMessage(input: ShareTreasuryDocInput): string 
         formatMoney(p.amount, input.currency),
       ];
       if (p.method === "CHECK" && (p.checkNumber || p.checkBank)) {
-        parts.push([p.checkNumber, p.checkBank].filter(Boolean).join(" · "));
+        parts.push(
+          [
+            p.isElectronicCheck ? "Electrónico" : null,
+            p.checkNumber,
+            p.checkBank,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        );
       }
       if (p.method === "TRANSFER" && p.bankAccountName) {
         parts.push(p.bankAccountName);

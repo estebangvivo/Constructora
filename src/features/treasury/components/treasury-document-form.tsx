@@ -15,6 +15,10 @@ import type { TreasuryProjectOption } from "@/features/treasury/queries/list-pro
 import { DateInput } from "@/components/ui/date-input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { formatMoney, PAYMENT_METHOD_LABEL } from "@/features/treasury/lib/labels";
+import {
+  checkFormatLabel,
+  normalizeCheckNumber,
+} from "@/features/treasury/lib/check-number";
 
 type Option = { id: string; name: string };
 type BudgetItemOption = {
@@ -34,6 +38,7 @@ export type PortfolioCheckOption = {
   currency: string;
   dueDate: string | null;
   drawerName: string | null;
+  isElectronic: boolean;
   label: string;
 };
 
@@ -90,6 +95,7 @@ function emptyPayment(amount = 0): PaymentState {
     bankAccountId: "",
     checkInstrumentId: "",
     isOwnCheck: false,
+    isElectronicCheck: undefined,
     checkNumber: "",
     checkBank: "",
     checkIssueDate: "",
@@ -268,6 +274,10 @@ export function TreasuryDocumentForm({
               ? undefined
               : p.checkInstrumentId || undefined,
             isOwnCheck: kind === "payment-order" ? Boolean(p.isOwnCheck) : undefined,
+            isElectronicCheck:
+              p.method === "CHECK" && typeof p.isElectronicCheck === "boolean"
+                ? p.isElectronicCheck
+                : undefined,
             checkNumber: p.checkNumber || undefined,
             checkBank: p.checkBank || undefined,
             checkIssueDate: p.checkIssueDate || undefined,
@@ -587,6 +597,8 @@ export function TreasuryDocumentForm({
                         method,
                         bankAccountId: "",
                         checkInstrumentId: "",
+                        isOwnCheck: false,
+                        isElectronicCheck: undefined,
                         checkNumber: "",
                         checkBank: "",
                         checkIssueDate: "",
@@ -702,6 +714,7 @@ export function TreasuryDocumentForm({
                             isOwnCheck: false,
                             bankAccountId: "",
                             checkInstrumentId: "",
+                            isElectronicCheck: undefined,
                             checkNumber: "",
                             checkBank: "",
                             checkDueDate: "",
@@ -720,6 +733,7 @@ export function TreasuryDocumentForm({
                           updatePayment(payment.key, {
                             isOwnCheck: true,
                             checkInstrumentId: "",
+                            isElectronicCheck: undefined,
                             checkNumber: "",
                             checkBank: "",
                             checkDueDate: "",
@@ -748,6 +762,7 @@ export function TreasuryDocumentForm({
                               updatePayment(payment.key, {
                                 checkInstrumentId: "",
                                 amount: 0,
+                                isElectronicCheck: undefined,
                                 checkNumber: "",
                                 checkBank: "",
                                 checkIssueDate: "",
@@ -759,6 +774,7 @@ export function TreasuryDocumentForm({
                             updatePayment(payment.key, {
                               checkInstrumentId: check.id,
                               amount: check.amount,
+                              isElectronicCheck: check.isElectronic,
                               checkNumber: check.number,
                               checkBank: check.bank,
                               checkDueDate: check.dueDate ?? "",
@@ -804,6 +820,49 @@ export function TreasuryDocumentForm({
                     </>
                   ) : (
                     <div className="grid gap-2 sm:grid-cols-2">
+                      <fieldset className="sm:col-span-2">
+                        <legend className="mb-1 block text-sm text-muted-foreground">
+                          Tipo de cheque
+                        </legend>
+                        <div className="flex flex-wrap gap-3 text-sm">
+                          <label className="inline-flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name={`check-format-${payment.key}`}
+                              required
+                              checked={payment.isElectronicCheck === false}
+                              onChange={() =>
+                                updatePayment(payment.key, {
+                                  isElectronicCheck: false,
+                                  checkNumber: normalizeCheckNumber(
+                                    payment.checkNumber,
+                                    false,
+                                  ),
+                                })
+                              }
+                            />
+                            Cheque físico
+                          </label>
+                          <label className="inline-flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name={`check-format-${payment.key}`}
+                              required
+                              checked={payment.isElectronicCheck === true}
+                              onChange={() =>
+                                updatePayment(payment.key, {
+                                  isElectronicCheck: true,
+                                  checkNumber: normalizeCheckNumber(
+                                    payment.checkNumber,
+                                    true,
+                                  ),
+                                })
+                              }
+                            />
+                            Cheque electrónico
+                          </label>
+                        </div>
+                      </fieldset>
                       <label className="block text-sm sm:col-span-2">
                         <span className="mb-1 block text-muted-foreground">
                           Cuenta emisora
@@ -834,6 +893,9 @@ export function TreasuryDocumentForm({
                       <label className="block text-sm">
                         <span className="mb-1 block text-muted-foreground">
                           N° cheque
+                          {payment.isElectronicCheck
+                            ? " (con prefijo E-)"
+                            : ""}
                         </span>
                         <input
                           required
@@ -842,6 +904,20 @@ export function TreasuryDocumentForm({
                             updatePayment(payment.key, {
                               checkNumber: e.target.value,
                             })
+                          }
+                          onBlur={() => {
+                            if (payment.isElectronicCheck === undefined) return;
+                            updatePayment(payment.key, {
+                              checkNumber: normalizeCheckNumber(
+                                payment.checkNumber,
+                                Boolean(payment.isElectronicCheck),
+                              ),
+                            });
+                          }}
+                          placeholder={
+                            payment.isElectronicCheck
+                              ? "E-12345678"
+                              : "12345678"
                           }
                           className="w-full rounded-md border border-border bg-background px-3 py-2 outline-none ring-accent focus:ring-2"
                         />
@@ -879,6 +955,9 @@ export function TreasuryDocumentForm({
                       <p className="text-xs text-muted-foreground sm:col-span-2">
                         El banco se debita cuando se cumpla el vencimiento
                         (acción en cartera de cheques propios).
+                        {payment.isElectronicCheck
+                          ? ` ${checkFormatLabel(true)}: el número se guarda con prefijo E-.`
+                          : ""}
                       </p>
                     </div>
                   )}
@@ -887,9 +966,53 @@ export function TreasuryDocumentForm({
 
               {payment.method === "CHECK" && kind === "receipt" && (
                 <div className="grid gap-2 sm:grid-cols-2">
+                  <fieldset className="sm:col-span-2">
+                    <legend className="mb-1 block text-sm text-muted-foreground">
+                      Tipo de cheque
+                    </legend>
+                    <div className="flex flex-wrap gap-3 text-sm">
+                      <label className="inline-flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name={`check-format-${payment.key}`}
+                          required
+                          checked={payment.isElectronicCheck === false}
+                          onChange={() =>
+                            updatePayment(payment.key, {
+                              isElectronicCheck: false,
+                              checkNumber: normalizeCheckNumber(
+                                payment.checkNumber,
+                                false,
+                              ),
+                            })
+                          }
+                        />
+                        Cheque físico
+                      </label>
+                      <label className="inline-flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name={`check-format-${payment.key}`}
+                          required
+                          checked={payment.isElectronicCheck === true}
+                          onChange={() =>
+                            updatePayment(payment.key, {
+                              isElectronicCheck: true,
+                              checkNumber: normalizeCheckNumber(
+                                payment.checkNumber,
+                                true,
+                              ),
+                            })
+                          }
+                        />
+                        Cheque electrónico
+                      </label>
+                    </div>
+                  </fieldset>
                   <label className="block text-sm">
                     <span className="mb-1 block text-muted-foreground">
                       N° cheque
+                      {payment.isElectronicCheck ? " (con prefijo E-)" : ""}
                     </span>
                     <input
                       required
@@ -898,6 +1021,18 @@ export function TreasuryDocumentForm({
                         updatePayment(payment.key, {
                           checkNumber: e.target.value,
                         })
+                      }
+                      onBlur={() => {
+                        if (payment.isElectronicCheck === undefined) return;
+                        updatePayment(payment.key, {
+                          checkNumber: normalizeCheckNumber(
+                            payment.checkNumber,
+                            Boolean(payment.isElectronicCheck),
+                          ),
+                        });
+                      }}
+                      placeholder={
+                        payment.isElectronicCheck ? "E-12345678" : "12345678"
                       }
                       className="w-full rounded-md border border-border bg-background px-3 py-2 outline-none ring-accent focus:ring-2"
                     />

@@ -6,9 +6,10 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword, verifyPassword } from "@/features/auth/lib/password";
 import {
   clearLocalSessionCookie,
+  issueLocalSessionToken,
   setLocalSessionCookie,
-  signLocalSession,
 } from "@/features/auth/lib/session";
+import { isPlatformSuperadminEmail } from "@/features/auth/lib/platform-admin";
 
 export type AuthActionResult =
   | { ok: true; needsOrgPicker?: boolean; needsOnboarding?: boolean }
@@ -42,33 +43,27 @@ export async function loginWithPassword(input: {
       return { ok: false, error: "Credenciales inválidas." };
     }
 
+    const isSuperadmin = isPlatformSuperadminEmail(user.email);
     const memberships = await prisma.organizationMember.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "asc" },
       select: { organizationId: true },
     });
 
-    const token = await signLocalSession({
+    const token = await issueLocalSessionToken({
       userId: user.id,
-      organizationId: memberships[0]?.organizationId ?? null,
+      organizationId: isSuperadmin
+        ? null
+        : (memberships[0]?.organizationId ?? null),
+      bumpSession: true,
     });
     await setLocalSessionCookie(token);
-
-    try {
-      await prisma.$executeRaw`
-        UPDATE users
-        SET "lastSeenAt" = NOW(), "lastActivityAt" = NOW()
-        WHERE id = ${user.id}
-      `;
-    } catch (error) {
-      console.warn("loginWithPassword touch activity", error);
-    }
 
     revalidatePath("/", "layout");
     return {
       ok: true,
-      needsOrgPicker: memberships.length > 1,
-      needsOnboarding: memberships.length === 0,
+      needsOrgPicker: !isSuperadmin && memberships.length > 1,
+      needsOnboarding: !isSuperadmin && memberships.length === 0,
     };
   } catch (error) {
     console.error("loginWithPassword", error);

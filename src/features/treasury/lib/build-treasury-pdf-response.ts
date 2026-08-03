@@ -49,22 +49,24 @@ export async function buildReceiptPdfResponse(id: string): Promise<Response> {
 
   const payments =
     doc.payments.length > 0
-      ? doc.payments.map((p) => ({
-          method: p.method,
-          amount: Number(p.amount),
-          checkNumber: p.checkNumber,
-          checkBank: p.checkBank,
-          bankAccountName: p.bankAccount?.name ?? null,
-        }))
-      : [
-          {
-            method: doc.paymentMethod,
-            amount: Number(doc.totalAmount),
-            checkNumber: doc.checkNumber,
-            checkBank: doc.checkBank,
-            bankAccountName: null,
-          },
-        ];
+        ? doc.payments.map((p) => ({
+            method: p.method,
+            amount: Number(p.amount),
+            checkNumber: p.checkNumber,
+            checkBank: p.checkBank,
+            isElectronicCheck: p.isElectronicCheck,
+            bankAccountName: p.bankAccount?.name ?? null,
+          }))
+        : [
+            {
+              method: doc.paymentMethod,
+              amount: Number(doc.totalAmount),
+              checkNumber: doc.checkNumber,
+              checkBank: doc.checkBank,
+              isElectronicCheck: false,
+              bankAccountName: null,
+            },
+          ];
 
   const logo = await loadOrganizationLogo(org.logoUrl);
 
@@ -119,22 +121,24 @@ export async function buildPaymentOrderPdfResponse(
 
   const payments =
     doc.payments.length > 0
-      ? doc.payments.map((p) => ({
-          method: p.method,
-          amount: Number(p.amount),
-          checkNumber: p.checkNumber,
-          checkBank: p.checkBank,
-          bankAccountName: p.bankAccount?.name ?? null,
-        }))
-      : [
-          {
-            method: doc.paymentMethod,
-            amount: Number(doc.totalAmount),
-            checkNumber: doc.checkNumber,
-            checkBank: doc.checkBank,
-            bankAccountName: null,
-          },
-        ];
+        ? doc.payments.map((p) => ({
+            method: p.method,
+            amount: Number(p.amount),
+            checkNumber: p.checkNumber,
+            checkBank: p.checkBank,
+            isElectronicCheck: p.isElectronicCheck,
+            bankAccountName: p.bankAccount?.name ?? null,
+          }))
+        : [
+            {
+              method: doc.paymentMethod,
+              amount: Number(doc.totalAmount),
+              checkNumber: doc.checkNumber,
+              checkBank: doc.checkBank,
+              isElectronicCheck: false,
+              bankAccountName: null,
+            },
+          ];
 
   const logo = await loadOrganizationLogo(org.logoUrl);
 

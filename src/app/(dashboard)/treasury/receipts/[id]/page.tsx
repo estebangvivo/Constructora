@@ -124,7 +124,15 @@ export default async function ReceiptDetailPage({ params }: PageProps) {
                   {p.method === "CHECK" && (p.checkNumber || p.checkBank) ? (
                     <span className="text-muted-foreground">
                       {" · "}
-                      {[p.checkNumber, p.checkBank].filter(Boolean).join(" · ")}
+                      {[
+                        "isElectronicCheck" in p && p.isElectronicCheck
+                          ? "Electrónico"
+                          : null,
+                        p.checkNumber,
+                        p.checkBank,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </span>
                   ) : null}
                   {p.method === "TRANSFER" &&

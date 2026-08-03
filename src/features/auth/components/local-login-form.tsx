@@ -12,6 +12,8 @@ const fieldClass =
 export function LocalLoginForm() {
   const searchParams = useSearchParams();
   const error = searchParams.get("error");
+  const reason = searchParams.get("reason");
+  const sessionReplaced = reason === "session";
 
   return (
     <form
@@ -46,6 +48,15 @@ export function LocalLoginForm() {
           required
         />
       </label>
+
+      {sessionReplaced && !error && (
+        <p
+          role="alert"
+          className="rounded-md border border-amber-700/40 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900"
+        >
+          Tu sesión se cerró porque iniciaste sesión en otro dispositivo.
+        </p>
+      )}
 
       {error && (
         <p

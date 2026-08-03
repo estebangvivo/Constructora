@@ -6,6 +6,12 @@ export type LocalSessionPayload = {
   userId: string;
   /** null = usuario sin empresa (onboarding / pago). */
   organizationId: string | null;
+  /**
+   * Versión de sesión del usuario.
+   * Al loguearse desde otro dispositivo se incrementa y este JWT queda inválido
+   * (excepto superadmins de plataforma).
+   */
+  sessionVersion: number;
 };
 
 function secretKey() {
@@ -22,6 +28,7 @@ export async function signLocalSession(
   return new SignJWT({
     userId: payload.userId,
     organizationId: payload.organizationId ?? "",
+    sv: payload.sessionVersion,
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -38,9 +45,13 @@ export async function verifyLocalSession(
     const organizationId = payload.organizationId;
     if (typeof userId !== "string") return null;
     if (typeof organizationId !== "string") return null;
+    const sv = payload.sv;
+    const sessionVersion =
+      typeof sv === "number" && Number.isFinite(sv) ? Math.trunc(sv) : 0;
     return {
       userId,
       organizationId: organizationId.length > 0 ? organizationId : null,
+      sessionVersion,
     };
   } catch {
     return null;

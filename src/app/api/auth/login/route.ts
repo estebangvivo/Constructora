@@ -3,8 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/features/auth/lib/password";
 import {
   SESSION_COOKIE,
-  signLocalSession,
 } from "@/features/auth/lib/session-crypto";
+import { issueLocalSessionToken } from "@/features/auth/lib/session";
 import { publicUrl } from "@/lib/request-origin";
 import { isPlatformSuperadminEmail } from "@/features/auth/lib/platform-admin";
 
@@ -59,22 +59,14 @@ async function authenticate(emailRaw: string, password: string) {
   });
 
   // Superadmin entra sin empresa activa; elige una después si quiere operar un tenant.
-  const token = await signLocalSession({
+  // bumpSession: cierra otras sesiones del mismo usuario (no aplica a superadmin).
+  const token = await issueLocalSessionToken({
     userId: user.id,
     organizationId: isSuperadmin
       ? null
       : (memberships[0]?.organizationId ?? null),
+    bumpSession: true,
   });
-
-  try {
-    await prisma.$executeRaw`
-      UPDATE users
-      SET "lastSeenAt" = NOW(), "lastActivityAt" = NOW()
-      WHERE id = ${user.id}
-    `;
-  } catch (error) {
-    console.warn("login touch activity", error);
-  }
 
   return {
     ok: true as const,

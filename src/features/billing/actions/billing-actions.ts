@@ -128,10 +128,10 @@ export async function startTrialSignup(input: {
       return created;
     });
 
-    const { signLocalSession, setLocalSessionCookie } = await import(
+    const { issueLocalSessionToken, setLocalSessionCookie } = await import(
       "@/features/auth/lib/session"
     );
-    const token = await signLocalSession({
+    const token = await issueLocalSessionToken({
       userId: session.user.id,
       organizationId: org.id,
     });
@@ -619,10 +619,10 @@ export async function syncMercadoPagoCheckoutReturn(input: {
     }
     if (existing.status === "APPROVED") {
       if (existing.organizationId) {
-        const { signLocalSession, setLocalSessionCookie } = await import(
+        const { issueLocalSessionToken, setLocalSessionCookie } = await import(
           "@/features/auth/lib/session"
         );
-        const token = await signLocalSession({
+        const token = await issueLocalSessionToken({
           userId: session.user.id,
           organizationId: existing.organizationId,
         });
@@ -636,10 +636,10 @@ export async function syncMercadoPagoCheckoutReturn(input: {
     });
 
     if (updated.organizationId) {
-      const { signLocalSession, setLocalSessionCookie } = await import(
+      const { issueLocalSessionToken, setLocalSessionCookie } = await import(
         "@/features/auth/lib/session"
       );
-      const token = await signLocalSession({
+      const token = await issueLocalSessionToken({
         userId: session.user.id,
         organizationId: updated.organizationId,
       });

@@ -5,8 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { requireAuthSession } from "@/lib/auth";
 import { activateBillingPayment } from "@/features/billing/lib/activate";
 import {
+  issueLocalSessionToken,
   setLocalSessionCookie,
-  signLocalSession,
 } from "@/features/auth/lib/session";
 import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
 import { getBillingUsdArsRate } from "@/features/billing/lib/fx";
@@ -170,7 +170,7 @@ export async function approveBillingPayment(
     // Si el aprobador no es el pagador, no tocamos su cookie.
     // Si el pagador estÃ¡ logueado en otro lado, al refrescar verÃ¡ la org.
     if (updated.organizationId && updated.userId === session.user.id) {
-      const token = await signLocalSession({
+      const token = await issueLocalSessionToken({
         userId: session.user.id,
         organizationId: updated.organizationId,
       });

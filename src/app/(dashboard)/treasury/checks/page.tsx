@@ -219,6 +219,11 @@ export default async function ChecksPage({ searchParams }: PageProps) {
                   >
                     <td className="py-3 pr-3 font-medium tabular-nums">
                       {c.number}
+                      {c.isElectronic ? (
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">
+                          · electr.
+                        </span>
+                      ) : null}
                     </td>
                     <td className="py-3 pr-3">{c.bank}</td>
                     <td className="py-3 pr-3 tabular-nums">

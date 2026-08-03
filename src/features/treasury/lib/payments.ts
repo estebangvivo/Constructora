@@ -1,5 +1,6 @@
 import type { PaymentMethod } from "@prisma/client";
 import { PAYMENT_METHOD_LABEL, formatMoney } from "@/features/treasury/lib/labels";
+import { normalizeCheckNumber } from "@/features/treasury/lib/check-number";
 
 export type TreasuryPaymentInput = {
   method: PaymentMethod;
@@ -10,6 +11,8 @@ export type TreasuryPaymentInput = {
   checkInstrumentId?: string;
   /** true = emitir cheque propio (OP). */
   isOwnCheck?: boolean;
+  /** true = cheque electrónico (número con prefijo E-). */
+  isElectronicCheck?: boolean;
   checkNumber?: string;
   checkBank?: string;
   checkIssueDate?: string;
@@ -27,6 +30,7 @@ export type TreasuryPaymentView = {
   checkIssueDate: Date | null;
   checkDueDate: Date | null;
   checkAccount: string | null;
+  isElectronicCheck?: boolean;
   sortOrder: number;
 };
 
@@ -101,6 +105,9 @@ export function validatePaymentsAgainstTotal(
           if (!p.checkNumber?.trim() || !p.checkBank?.trim()) {
             return "Completá número y banco del cheque propio.";
           }
+          if (p.isElectronicCheck === undefined) {
+            return "Indicá si el cheque propio es electrónico o físico.";
+          }
           if (!p.bankAccountId) {
             return "Elegí la cuenta emisora del cheque propio.";
           }
@@ -112,6 +119,8 @@ export function validatePaymentsAgainstTotal(
         }
       } else if (!p.checkNumber?.trim() || !p.checkBank?.trim()) {
         return "Completá número y banco en cada pago con cheque.";
+      } else if (p.isElectronicCheck === undefined) {
+        return "Indicá si el cheque es electrónico o físico.";
       }
     }
   }
@@ -140,6 +149,10 @@ export function paymentCreateData(
         p.method === "TRANSFER" ? p.bankAccountId || null : null;
 
       if (p.method === "CHECK") {
+        const isElectronic = Boolean(p.isElectronicCheck);
+        const checkNumber =
+          normalizeCheckNumber(p.checkNumber, isElectronic) || null;
+
         if (opts?.forPaymentOrder) {
           const isOwn = Boolean(p.isOwnCheck);
           return {
@@ -149,7 +162,10 @@ export function paymentCreateData(
             bankAccountId: isOwn ? p.bankAccountId || null : null,
             checkInstrumentId: isOwn ? null : p.checkInstrumentId || null,
             isOwnCheck: isOwn,
-            checkNumber: p.checkNumber?.trim() || null,
+            isElectronicCheck: isElectronic,
+            checkNumber: isOwn
+              ? checkNumber
+              : p.checkNumber?.trim() || null,
             checkBank: p.checkBank?.trim() || null,
             checkIssueDate: p.checkIssueDate
               ? new Date(p.checkIssueDate)
@@ -163,7 +179,8 @@ export function paymentCreateData(
           amount: Number(p.amount),
           sortOrder: index,
           bankAccountId,
-          checkNumber: p.checkNumber?.trim() || null,
+          isElectronicCheck: isElectronic,
+          checkNumber,
           checkBank: p.checkBank?.trim() || null,
           checkIssueDate: p.checkIssueDate
             ? new Date(p.checkIssueDate)
@@ -180,6 +197,8 @@ export function paymentCreateData(
           sortOrder: index,
           bankAccountId,
           checkInstrumentId: null as string | null,
+          isOwnCheck: false,
+          isElectronicCheck: false,
           checkNumber: null as string | null,
           checkBank: null as string | null,
           checkIssueDate: null as Date | null,
@@ -193,6 +212,7 @@ export function paymentCreateData(
         amount: Number(p.amount),
         sortOrder: index,
         bankAccountId,
+        isElectronicCheck: false,
         checkNumber: null as string | null,
         checkBank: null as string | null,
         checkIssueDate: null as Date | null,

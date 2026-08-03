@@ -588,7 +588,11 @@ export async function updateOrganizationUser(input: {
           lastName: input.lastName?.trim() || null,
           phone: input.phone?.trim() || null,
           isActive: input.isActive,
-          ...(passwordHash ? { passwordHash } : {}),
+          ...(passwordHash
+            ? { passwordHash, sessionVersion: { increment: 1 } }
+            : !input.isActive
+              ? { sessionVersion: { increment: 1 } }
+              : {}),
         },
       });
 

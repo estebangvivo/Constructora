@@ -32,6 +32,7 @@ export default async function ReceiptPrintPage({ params, searchParams }: PagePro
           amount: Number(p.amount),
           checkNumber: p.checkNumber,
           checkBank: p.checkBank,
+          isElectronicCheck: p.isElectronicCheck,
           bankAccountName: p.bankAccount?.name ?? null,
         }))
       : [
@@ -40,6 +41,7 @@ export default async function ReceiptPrintPage({ params, searchParams }: PagePro
             amount: Number(doc.totalAmount),
             checkNumber: doc.checkNumber,
             checkBank: doc.checkBank,
+            isElectronicCheck: false,
             bankAccountName: null,
           },
         ];
