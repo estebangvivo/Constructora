@@ -44,6 +44,7 @@ import { isFeatureRequestActive } from "@/features/feature-requests/lib/labels";
 import { AdminSystemExpensesPanel } from "@/features/platform-expenses/components/admin-system-expenses-panel";
 import type { PlatformExpenseListResult } from "@/features/platform-expenses/actions/platform-expense-actions";
 import { cn } from "@/lib/utils";
+import { formatPresenceLabel } from "@/features/auth/lib/presence";
 
 type UserRow = {
   membershipId: string;
@@ -83,18 +84,6 @@ const ROLE_LABEL: Record<OrganizationRole, string> = {
 
 const fieldClass =
   "w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none ring-accent focus:ring-2";
-
-function formatLastSeen(iso: string | null, isOnline: boolean) {
-  if (isOnline) return "En línea";
-  if (!iso) return "Sin actividad";
-  const ms = Date.now() - new Date(iso).getTime();
-  const mins = Math.max(1, Math.round(ms / 60_000));
-  if (mins < 60) return `Hace ${mins} min`;
-  const hours = Math.round(mins / 60);
-  if (hours < 48) return `Hace ${hours} h`;
-  const days = Math.round(hours / 24);
-  return `Hace ${days} d`;
-}
 
 type AdminPanelProps = {
   overview: AdminOrganizationOverview[];
@@ -306,9 +295,13 @@ export function AdminPanel({
             <p className="inline-flex items-center gap-1.5">
               <span className="size-2 rounded-full bg-emerald-500" />
               <span className="font-medium text-foreground">{totalOnline}</span>{" "}
-              en línea ahora
+              conectados ahora
             </p>
           </div>
+          <p className="text-xs text-muted-foreground">
+            “Habilitado” es la cuenta; “Conectado ahora” indica presencia en
+            los últimos 2 minutos.
+          </p>
 
           {isPlatformSuperadmin ? (
             <AdminSuperadminOrgsPanel overview={overview} />
@@ -335,7 +328,7 @@ export function AdminPanel({
                     />
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {org.onlineCount}/{org.memberCount} en línea
+                    {org.onlineCount}/{org.memberCount} conectados
                   </p>
                 </div>
                 <div className="overflow-x-auto">
@@ -344,8 +337,8 @@ export function AdminPanel({
                       <tr>
                         <th className="px-4 py-2 font-medium">Usuario</th>
                         <th className="px-4 py-2 font-medium">Rol</th>
-                        <th className="px-4 py-2 font-medium">Estado</th>
-                        <th className="px-4 py-2 font-medium">Presencia</th>
+                        <th className="px-4 py-2 font-medium">Cuenta</th>
+                        <th className="px-4 py-2 font-medium">Conexión</th>
                         <th className="px-4 py-2 font-medium">Módulos</th>
                       </tr>
                     </thead>
@@ -365,11 +358,11 @@ export function AdminPanel({
                             <td className="px-4 py-3">{ROLE_LABEL[m.role]}</td>
                             <td className="px-4 py-3">
                               {m.isActive ? (
-                                <span className="text-emerald-700 dark:text-emerald-400">
-                                  Activo
+                                <span className="text-muted-foreground">
+                                  Habilitado
                                 </span>
                               ) : (
-                                <span className="text-danger">Inactivo</span>
+                                <span className="text-danger">Deshabilitado</span>
                               )}
                             </td>
                             <td className="px-4 py-3">
@@ -382,7 +375,7 @@ export function AdminPanel({
                                       : "bg-muted-foreground/40",
                                   )}
                                 />
-                                {formatLastSeen(
+                                {formatPresenceLabel(
                                   m.lastSeenAt,
                                   m.isOnline && m.isActive,
                                 )}

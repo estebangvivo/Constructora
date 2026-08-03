@@ -173,7 +173,7 @@ export function UsersAdminPanel({
                   <p className="font-medium">
                     {name}{" "}
                     {!u.isActive && (
-                      <span className="text-xs text-danger">(inactivo)</span>
+                      <span className="text-xs text-danger">(deshabilitado)</span>
                     )}
                   </p>
                   <p className="text-sm text-muted-foreground">
@@ -536,7 +536,7 @@ function UserForm({
               checked={isActive}
               onChange={(e) => setIsActive(e.target.checked)}
             />
-            Usuario activo
+            Usuario con cuenta habilitada
           </label>
         )}
       </div>

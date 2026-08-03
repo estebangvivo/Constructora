@@ -19,8 +19,7 @@ import {
   BILLING_PLANS,
   normalizeBillingPlanId,
 } from "@/features/billing/lib/plans";
-
-const ONLINE_MS = 2 * 60 * 1000;
+import { isUserOnline } from "@/features/auth/lib/presence";
 
 export type AdminMemberOverview = {
   membershipId: string;
@@ -129,28 +128,33 @@ export async function listAdminOrganizationsOverview(): Promise<
   const now = Date.now();
 
   return orgs.map((org) => {
-    const members: AdminMemberOverview[] = org.members.map((m) => {
-      const lastSeen = lastSeenMap.get(m.user.id) ?? null;
-      const lastSeenAt = lastSeen?.toISOString() ?? null;
-      const isOnline = Boolean(
-        lastSeen && now - lastSeen.getTime() < ONLINE_MS,
-      );
-      return {
-        membershipId: m.id,
-        userId: m.user.id,
-        email: m.user.email,
-        firstName: m.user.firstName,
-        lastName: m.user.lastName,
-        role: m.role,
-        isActive: m.user.isActive,
-        allowedModules:
-          m.allowedModules.length > 0
-            ? m.allowedModules
-            : [...ROLE_DEFAULT_MODULES[m.role]],
-        lastSeenAt,
-        isOnline,
-      };
-    });
+    const members: AdminMemberOverview[] = org.members
+      .map((m) => {
+        const lastSeen = lastSeenMap.get(m.user.id) ?? null;
+        const lastSeenAt = lastSeen?.toISOString() ?? null;
+        const isOnline = isUserOnline(lastSeen, now);
+        return {
+          membershipId: m.id,
+          userId: m.user.id,
+          email: m.user.email,
+          firstName: m.user.firstName,
+          lastName: m.user.lastName,
+          role: m.role,
+          isActive: m.user.isActive,
+          allowedModules:
+            m.allowedModules.length > 0
+              ? m.allowedModules
+              : [...ROLE_DEFAULT_MODULES[m.role]],
+          lastSeenAt,
+          isOnline,
+        };
+      })
+      .sort((a, b) => {
+        const aOn = a.isOnline && a.isActive ? 1 : 0;
+        const bOn = b.isOnline && b.isActive ? 1 : 0;
+        if (bOn !== aOn) return bOn - aOn;
+        return a.email.localeCompare(b.email, "es");
+      });
 
     return {
       id: org.id,
