@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { isDevAuthBypass } from "@/lib/auth-config";
 import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
 import { SIDEBAR_NAV, filterNavByAccess } from "@/config/navigation";
+import { APP_SLOGAN } from "@/config/brand";
 import { getOrganizationProfile } from "@/features/settings/queries/get-organization";
 import { organizationLogoSrc } from "@/features/settings/lib/organization-logo";
 import { getHomeDashboardData } from "@/features/dashboard/queries/get-home-dashboard";
@@ -78,7 +79,7 @@ export default async function HomePage({ searchParams }: PageProps) {
           <p className="mt-2 max-w-xl text-muted-foreground">
             {session
               ? `Hola${session.user.firstName ? `, ${session.user.firstName}` : ""}. Resumen del negocio y acceso a cada módulo.`
-              : "Gestión de obras, presupuesto, campo y logística."}
+              : APP_SLOGAN}
           </p>
         </div>
       </div>

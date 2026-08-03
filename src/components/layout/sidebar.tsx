@@ -2,6 +2,7 @@
 
 import { HardHat, LogOut, Building2 } from "lucide-react";
 import { SIDEBAR_NAV, filterNavByAccess } from "@/config/navigation";
+import { APP_NAME } from "@/config/brand";
 import { logoutLocal } from "@/features/auth/actions/auth-actions";
 import { NotificationsBell } from "@/features/notifications/components/notifications-bell";
 import { OperadorSidebarWidget } from "@/features/turnero/components/operador-sidebar-widget";
@@ -51,7 +52,7 @@ export function Sidebar({
         )}
         <div className="min-w-0 flex-1">
           <span className="block truncate font-display text-lg tracking-tight">
-            {organizationName ?? "Constructora"}
+            {organizationName ?? APP_NAME}
           </span>
           <a
             href="/select-organization"

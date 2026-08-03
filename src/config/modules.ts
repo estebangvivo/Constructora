@@ -1,5 +1,5 @@
 /**
- * Mapa de módulos del ERP Constructora.
+ * Mapa de módulos del ERP SimpleObra.
  * Fuente de verdad para navegación, permisos y lazy-loading de features.
  */
 export const MODULES = {

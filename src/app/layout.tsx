@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { DM_Sans, IBM_Plex_Sans } from "next/font/google";
 import { AuthProvider } from "@/features/auth/auth-provider";
 import { HardNavForLegacy } from "@/components/compat/hard-nav-for-legacy";
+import { APP_NAME, APP_SLOGAN } from "@/config/brand";
 import "@/styles/globals.css";
 
 const display = DM_Sans({
@@ -22,10 +23,10 @@ const sans = IBM_Plex_Sans({
 
 export const metadata: Metadata = {
   title: {
-    default: "Constructora",
-    template: "%s · Constructora",
+    default: APP_NAME,
+    template: `%s · ${APP_NAME}`,
   },
-  description: "Software de gestión para empresas constructoras",
+  description: APP_SLOGAN,
 };
 
 /** Crítico para Fire/Silk y móviles: sin esto la UI se ve minúscula. */

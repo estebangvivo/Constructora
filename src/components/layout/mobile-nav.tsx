@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { HardHat, LogOut, Menu, Building2 } from "lucide-react";
 import { SIDEBAR_NAV, filterNavByAccess } from "@/config/navigation";
+import { APP_NAME } from "@/config/brand";
 import { logoutLocal } from "@/features/auth/actions/auth-actions";
 import { NotificationsBell } from "@/features/notifications/components/notifications-bell";
 import type { AppModuleKey } from "@/features/auth/lib/modules";
@@ -51,7 +52,7 @@ export function MobileNav({
           )}
           <span className="min-w-0">
             <span className="block truncate font-display text-lg tracking-tight">
-              {organizationName ?? "Constructora"}
+              {organizationName ?? APP_NAME}
             </span>
           </span>
         </a>

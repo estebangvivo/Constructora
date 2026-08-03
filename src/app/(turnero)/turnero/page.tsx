@@ -1,6 +1,7 @@
 "use client";
 
 import { TurneroLogo } from "@/features/turnero/components/turnero-brand";
+import { APP_NAME } from "@/config/brand";
 
 const vistas = [
   { href: "/turnero/totem", titulo: "Tótem", texto: "Emitir turnos por nombre" },
@@ -52,7 +53,7 @@ export default function TurneroInicio() {
             href="/"
             className="text-sm font-bold text-neutral-500 underline-offset-4 hover:text-[#f97316] hover:underline"
           >
-            Volver a Constructora
+            Volver a {APP_NAME}
           </a>
         </div>
       </section>

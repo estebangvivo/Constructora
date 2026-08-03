@@ -39,9 +39,9 @@ export type ManualSection = {
 };
 
 export const MANUAL_INTRO = {
-  title: "Manual de uso",
+  title: "Manual de uso · SimpleObra",
   subtitle:
-    "Guía del ERP Buñas: alta y planes SaaS, obras, campo, compras, inventario, tesorería, turnero y administración.",
+    "Guía de SimpleObra: alta y planes SaaS, obras, campo, compras, inventario, tesorería, turnero y administración.",
 };
 
 export const MANUAL_SECTIONS: ManualSection[] = [

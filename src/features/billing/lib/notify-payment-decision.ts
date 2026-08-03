@@ -38,7 +38,7 @@ function buildMessage(input: {
       "Ya podés ingresar al sistema con tu cuenta.",
       `${appBaseUrl()}/billing`,
       "",
-      "— Buñas",
+      "— SimpleObra",
     ].join("\n");
     return { subject, text };
   }
@@ -59,7 +59,7 @@ function buildMessage(input: {
     "Podés corregir el comprobante o elegir otro medio de pago:",
     `${appBaseUrl()}/billing`,
     "",
-    "— Buñas",
+    "— SimpleObra",
   ].join("\n");
   return { subject, text };
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowLeft } from "lucide-react";
+import { APP_NAME } from "@/config/brand";
 
 /**
  * Enlace nativo (no next/link) para Silk / Fire.
@@ -14,7 +15,7 @@ export function TurneroBackToApp() {
         className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-neutral-400 transition hover:text-[#f97316] sm:px-6"
       >
         <ArrowLeft className="size-4 shrink-0" aria-hidden />
-        Volver a Constructora
+        Volver a {APP_NAME}
       </a>
     </div>
   );

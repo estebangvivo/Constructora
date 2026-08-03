@@ -4,6 +4,7 @@ import { LocalRegisterForm } from "@/features/auth/components/local-register-for
 import { isClerkConfigured, isDevAuthBypass } from "@/lib/auth-config";
 import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { APP_NAME, APP_SLOGAN } from "@/config/brand";
 
 export default async function SignUpPage() {
   const session = await getSession();
@@ -29,7 +30,11 @@ export default async function SignUpPage() {
     <div className="flex min-h-dvh min-h-screen items-center justify-center bg-background px-4 py-8">
       <div className="w-full max-w-md space-y-5 rounded-lg border border-border bg-surface p-5 sm:p-6">
         <div className="text-center">
-          <h1 className="font-display text-2xl tracking-tight">Crear cuenta</h1>
+          <p className="font-display text-3xl tracking-tight">{APP_NAME}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{APP_SLOGAN}</p>
+          <h1 className="mt-5 font-display text-xl tracking-tight">
+            Crear cuenta
+          </h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Registrate para contratar el sistema y crear tu empresa.
           </p>
