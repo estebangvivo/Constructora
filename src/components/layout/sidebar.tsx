@@ -1,8 +1,9 @@
 "use client";
 
-import { HardHat, LogOut, Building2 } from "lucide-react";
+import { LogOut, Building2 } from "lucide-react";
 import { SIDEBAR_NAV, filterNavByAccess } from "@/config/navigation";
 import { APP_NAME } from "@/config/brand";
+import { OrgBrandMark } from "@/components/brand/org-brand-mark";
 import { logoutLocal } from "@/features/auth/actions/auth-actions";
 import { NotificationsBell } from "@/features/notifications/components/notifications-bell";
 import { OperadorSidebarWidget } from "@/features/turnero/components/operador-sidebar-widget";
@@ -40,16 +41,11 @@ export function Sidebar({
   return (
     <aside className="hidden h-full w-60 shrink-0 flex-col overflow-hidden border-r border-border bg-sidebar text-sidebar-foreground print:hidden md:flex">
       <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
-        {logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={logoUrl}
-            alt=""
-            className="size-7 rounded object-contain"
-          />
-        ) : (
-          <HardHat className="size-5" aria-hidden />
-        )}
+        <OrgBrandMark
+          logoUrl={logoUrl}
+          className="size-8 shrink-0 object-contain"
+          orgClassName="rounded-md bg-white/95 p-0.5"
+        />
         <div className="min-w-0 flex-1">
           <span className="block truncate font-display text-lg tracking-tight">
             {organizationName ?? APP_NAME}

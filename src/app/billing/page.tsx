@@ -26,6 +26,7 @@ import {
 } from "@/features/billing/lib/effective-plans";
 import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
 import { formatDateAR } from "@/lib/format-date";
+import { AppBrandLogo } from "@/components/brand/app-brand-logo";
 
 export const dynamic = "force-dynamic";
 
@@ -134,13 +135,16 @@ export default async function BillingPage({
     <div className="min-h-dvh bg-background text-foreground">
       <header className="border-b border-border">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium">
-              {organization?.name ?? "Suscripción"}
-            </p>
-            <p className="truncate text-xs text-muted-foreground">
-              {session.user.email}
-            </p>
+          <div className="flex min-w-0 items-center gap-3">
+            <AppBrandLogo size="header" />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">
+                {organization?.name ?? "Suscripción"}
+              </p>
+              <p className="truncate text-xs text-muted-foreground">
+                {session.user.email}
+              </p>
+            </div>
           </div>
           <form action={logoutLocal}>
             <button

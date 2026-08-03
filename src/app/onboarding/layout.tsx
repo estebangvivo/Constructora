@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { logoutLocal } from "@/features/auth/actions/auth-actions";
 import { prisma } from "@/lib/prisma";
 import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
+import { AppBrandLogo } from "@/components/brand/app-brand-logo";
 
 export const dynamic = "force-dynamic";
 
@@ -37,10 +38,13 @@ export default async function OnboardingLayout({
     <div className="min-h-dvh bg-background text-foreground">
       <header className="border-b border-border px-4 py-3">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
-          <p className="min-w-0 truncate text-sm text-muted-foreground">
-            Sesión:{" "}
-            <span className="text-foreground">{session.user.email}</span>
-          </p>
+          <div className="flex min-w-0 items-center gap-3">
+            <AppBrandLogo size="header" />
+            <p className="hidden min-w-0 truncate text-sm text-muted-foreground sm:block">
+              Sesión:{" "}
+              <span className="text-foreground">{session.user.email}</span>
+            </p>
+          </div>
           <form action={logoutLocal}>
             <button
               type="submit"

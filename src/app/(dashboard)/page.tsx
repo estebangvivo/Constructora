@@ -5,6 +5,7 @@ import { isDevAuthBypass } from "@/lib/auth-config";
 import { isPlatformSuperadmin } from "@/features/auth/lib/platform-admin";
 import { SIDEBAR_NAV, filterNavByAccess } from "@/config/navigation";
 import { APP_SLOGAN } from "@/config/brand";
+import { OrgBrandMark } from "@/components/brand/org-brand-mark";
 import { getOrganizationProfile } from "@/features/settings/queries/get-organization";
 import { organizationLogoSrc } from "@/features/settings/lib/organization-logo";
 import { getHomeDashboardData } from "@/features/dashboard/queries/get-home-dashboard";
@@ -64,14 +65,12 @@ export default async function HomePage({ searchParams }: PageProps) {
   return (
     <div className="px-4 py-8 lg:px-6">
       <div className="mb-8 flex flex-wrap items-end gap-4">
-        {logoUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={logoUrl}
-            alt=""
-            className="size-14 rounded-md border border-border object-contain bg-surface p-1"
-          />
-        )}
+        <OrgBrandMark
+          logoUrl={logoUrl}
+          className="size-14 object-contain"
+          orgClassName="rounded-md border border-border bg-surface p-1"
+          appClassName="rounded-md border border-border bg-surface p-1"
+        />
         <div>
           <h1 className="font-display text-3xl tracking-tight md:text-4xl">
             {organization?.name ?? "Panel de control"}

@@ -27,6 +27,10 @@ export const metadata: Metadata = {
     template: `%s · ${APP_NAME}`,
   },
   description: APP_SLOGAN,
+  icons: {
+    icon: [{ url: "/brand/simpleobra-mark.png", type: "image/png" }],
+    apple: [{ url: "/brand/simpleobra-mark.png", type: "image/png" }],
+  },
 };
 
 /** Crítico para Fire/Silk y móviles: sin esto la UI se ve minúscula. */

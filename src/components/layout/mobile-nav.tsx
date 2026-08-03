@@ -1,9 +1,10 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { HardHat, LogOut, Menu, Building2 } from "lucide-react";
+import { LogOut, Menu, Building2 } from "lucide-react";
 import { SIDEBAR_NAV, filterNavByAccess } from "@/config/navigation";
 import { APP_NAME } from "@/config/brand";
+import { OrgBrandMark } from "@/components/brand/org-brand-mark";
 import { logoutLocal } from "@/features/auth/actions/auth-actions";
 import { NotificationsBell } from "@/features/notifications/components/notifications-bell";
 import type { AppModuleKey } from "@/features/auth/lib/modules";
@@ -40,16 +41,11 @@ export function MobileNav({
     <div className="border-b border-border bg-sidebar text-sidebar-foreground print:hidden md:hidden">
       <div className="flex h-14 items-center justify-between px-4">
           <a href="/" className="flex min-w-0 items-center gap-2">
-          {logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={logoUrl}
-              alt=""
-              className="size-7 shrink-0 rounded object-contain"
-            />
-          ) : (
-            <HardHat className="size-5 shrink-0" aria-hidden />
-          )}
+          <OrgBrandMark
+            logoUrl={logoUrl}
+            className="size-8 shrink-0 object-contain"
+            orgClassName="rounded-md bg-white/95 p-0.5"
+          />
           <span className="min-w-0">
             <span className="block truncate font-display text-lg tracking-tight">
               {organizationName ?? APP_NAME}
