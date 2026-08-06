@@ -24,10 +24,9 @@ export default async function ProposalDetailPage({
   const proposal = await getProposal(id);
   if (!proposal) notFound();
 
-  const canManage = ["ADMIN", "DIRECTOR", "RESIDENT"].includes(
-    session.organizationRole,
-  );
-  const canApprove = ["ADMIN", "DIRECTOR"].includes(session.organizationRole);
+  const role = session.organizationRole ?? "";
+  const canManage = ["ADMIN", "DIRECTOR", "RESIDENT"].includes(role);
+  const canApprove = ["ADMIN", "DIRECTOR"].includes(role);
 
   return (
     <div className="px-4 py-6 lg:px-6">
