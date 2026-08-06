@@ -4,8 +4,10 @@ import {
   countProjectsByScope,
   listProjects,
 } from "@/features/projects/queries/get-projects";
+import { listProjectsFinancialBrief } from "@/features/projects/queries/list-projects-financial-brief";
 import { CreateProjectButton } from "@/features/projects/components/create-project-button";
 import { ProjectLifecycleButton } from "@/features/projects/components/project-lifecycle-button";
+import { ProjectMarginBadge } from "@/features/projects/components/project-margin-badge";
 import {
   PROJECT_STATUS_LABEL,
   PROJECT_STATUS_STYLE,
@@ -35,6 +37,7 @@ export default async function ProjectsPage({ searchParams }: PageProps) {
   let projects: Awaited<ReturnType<typeof listProjects>> = [];
   let counts = { open: 0, closed: 0 };
   let clients: Awaited<ReturnType<typeof listActiveClients>> = [];
+  let financials: Awaited<ReturnType<typeof listProjectsFinancialBrief>> = {};
   let loadError: string | null = null;
 
   try {
@@ -43,6 +46,7 @@ export default async function ProjectsPage({ searchParams }: PageProps) {
       countProjectsByScope(),
       listActiveClients(),
     ]);
+    financials = await listProjectsFinancialBrief(projects.map((p) => p.id));
   } catch {
     loadError =
       "No se pudieron cargar las obras. ¿Corriste `npm run db:setup`?";
@@ -142,6 +146,7 @@ export default async function ProjectsPage({ searchParams }: PageProps) {
                 >
                   {PROJECT_STATUS_LABEL[project.status]}
                 </span>
+                <ProjectMarginBadge brief={financials[project.id]} />
                 <div className="w-28">
                   <div className="mb-1 flex justify-between text-xs text-muted-foreground">
                     <span>Avance</span>

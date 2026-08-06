@@ -47,6 +47,7 @@ export async function createClient(input: ClientInput): Promise<ActionResult> {
 
     revalidatePath("/clients");
     revalidatePath("/projects");
+    revalidatePath("/proposals");
     revalidatePath("/treasury/receipts/new");
     return { ok: true, id: client.id };
   } catch (error) {

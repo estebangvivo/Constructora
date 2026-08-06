@@ -3,6 +3,8 @@ import { AlertTriangle } from "lucide-react";
 import { getChecksDueAlert } from "@/features/treasury/queries/list-checks";
 import { formatMoney } from "@/features/treasury/lib/labels";
 import { formatDateAR } from "@/lib/format-date";
+import { requireSession } from "@/lib/auth";
+import { dispatchCheckDueExternalAlerts } from "@/features/alerts/lib/dispatch-check-alerts";
 
 function daysLabel(days: number): string {
   if (days < 0) {
@@ -18,6 +20,18 @@ function daysLabel(days: number): string {
 export async function ChecksDueAlertBanner() {
   const alert = await getChecksDueAlert();
   if (alert.total === 0) return null;
+
+  // Envío externo silencioso 1 vez/día (email/WhatsApp si están configurados).
+  try {
+    const session = await requireSession();
+    void dispatchCheckDueExternalAlerts({
+      organizationId: session.organizationId,
+      alert,
+      force: false,
+    });
+  } catch {
+    /* no bloquear UI */
+  }
 
   const preview = [...alert.overdue, ...alert.dueSoon].slice(0, 3);
   const remaining = alert.total - preview.length;

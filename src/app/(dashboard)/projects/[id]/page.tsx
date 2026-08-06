@@ -23,6 +23,7 @@ import { DeleteProjectButton } from "@/features/projects/components/delete-proje
 import { ClientPaidBreakdown } from "@/features/projects/components/client-paid-breakdown";
 import { ActualCostBreakdown } from "@/features/projects/components/actual-cost-breakdown";
 import { ProjectOverviewCharts } from "@/features/projects/components/project-overview-charts";
+import { ProjectProfitabilityPanel } from "@/features/projects/components/project-profitability-panel";
 import { ProjectClientAccount } from "@/features/projects/components/project-client-account";
 import { listProjectSuppliers } from "@/features/suppliers/queries/list-suppliers";
 import { formatBudgetMoney } from "@/features/budget/lib/labels";
@@ -211,6 +212,17 @@ export default async function ProjectOverviewPage({
           </div>
         </dl>
       </section>
+
+      <ProjectProfitabilityPanel
+        currency={currency}
+        budgetEstimated={budgetEstimated}
+        certifiedNet={financials?.certifiedNet ?? 0}
+        cobrado={cobrado}
+        pagado={pagado}
+        receivable={financials?.receivable ?? 0}
+        cashMargin={financials?.cashMargin ?? 0}
+        fxIncomplete={fxIncomplete}
+      />
 
       <ProjectOverviewCharts
         currency={currency}

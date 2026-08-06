@@ -139,6 +139,7 @@ export function PunchListForm({
           type="file"
           name="photos"
           accept="image/*,application/pdf"
+          capture="environment"
           multiple
           className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-accent file:px-3 file:py-2 file:text-sm file:font-medium file:text-accent-foreground"
         />

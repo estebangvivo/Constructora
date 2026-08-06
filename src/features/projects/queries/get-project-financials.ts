@@ -29,6 +29,12 @@ export type ProjectFinancialSummary = {
   scheduleProgressPct: number;
   /** Costo real acumulado en partidas (actualCost, ya en moneda de partida). */
   budgetActualCost: number | null;
+  /** Certificado neto (SUBMITTED/APPROVED/PAID) convertido a `currency`. */
+  certifiedNet: number;
+  /** Saldo por cobrar estimado: certificado − cobrado (puede ser negativo). */
+  receivable: number;
+  /** Margen de caja: cobrado − pagado. */
+  cashMargin: number;
   /** true si faltó alguna cotización al convertir. */
   fxIncomplete: boolean;
 };
@@ -56,6 +62,7 @@ export async function getProjectFinancialSummary(
     rejectionFees,
     budget,
     tasks,
+    certifications,
   ] = await Promise.all([
     prisma.receiptLine.findMany({
       where: {
@@ -140,6 +147,18 @@ export async function getProjectFinancialSummary(
     prisma.task.findMany({
       where: { projectId },
       select: { progressPct: true },
+    }),
+    prisma.certification.findMany({
+      where: {
+        projectId,
+        status: { in: ["SUBMITTED", "APPROVED", "PAID"] },
+      },
+      select: {
+        netAmount: true,
+        periodEnd: true,
+        submittedAt: true,
+        createdAt: true,
+      },
     }),
   ]);
 
@@ -270,6 +289,30 @@ export async function getProjectFinancialSummary(
             tasks.length,
         );
 
+  let certifiedNet = 0;
+  for (const cert of certifications) {
+    const asOf = cert.periodEnd ?? cert.submittedAt ?? cert.createdAt;
+    const converted = await tryConvertAmountOnDate(
+      prisma,
+      session.organizationId,
+      toNumber(cert.netAmount),
+      chartCurrency,
+      chartCurrency,
+      asOf,
+    );
+    if (converted == null) {
+      fxIncomplete = true;
+      certifiedNet += toNumber(cert.netAmount);
+    } else {
+      certifiedNet += converted;
+    }
+  }
+  certifiedNet = Math.round(certifiedNet * 100) / 100;
+
+  const receivable = Math.round((certifiedNet - clientPaidConverted) * 100) / 100;
+  const cashMargin =
+    Math.round((clientPaidConverted - paidOutConverted) * 100) / 100;
+
   return {
     currency: chartCurrency,
     clientPaidByCurrency: sumByCurrency(
@@ -322,6 +365,9 @@ export async function getProjectFinancialSummary(
     budgetCurrency: budget?.currency ?? project.currency,
     scheduleProgressPct,
     budgetActualCost,
+    certifiedNet,
+    receivable,
+    cashMargin,
     fxIncomplete,
   };
 }

@@ -5,6 +5,7 @@ import type { AppRole } from "@/types";
 export const APP_MODULE_KEYS = [
   "home",
   "projects",
+  "proposals",
   "treasury",
   "clients",
   "suppliers",
@@ -45,6 +46,12 @@ export const APP_MODULES: AppModuleDef[] = [
     label: "Obras (listado)",
     group: "global",
     pathPrefixes: ["/projects"],
+  },
+  {
+    key: "proposals",
+    label: "Presupuestos previos",
+    group: "global",
+    pathPrefixes: ["/proposals"],
   },
   {
     key: "treasury",
@@ -187,6 +194,7 @@ export const ROLE_DEFAULT_MODULES: Record<OrganizationRole, AppModuleKey[]> = {
   RESIDENT: [
     "home",
     "projects",
+    "proposals",
     "treasury",
     "clients",
     "suppliers",
@@ -218,6 +226,7 @@ export const ROLE_DEFAULT_MODULES: Record<OrganizationRole, AppModuleKey[]> = {
   VIEWER: [
     "home",
     "projects",
+    "proposals",
     "manual",
     "featureRequests",
     "project.overview",
@@ -251,6 +260,8 @@ export function hasModule(
 export const SIDEBAR_MODULE_BY_HREF: Record<string, AppModuleKey> = {
   "/": "home",
   "/projects": "projects",
+  "/proposals": "proposals",
+  "/campo": "projects",
   "/treasury": "treasury",
   "/clients": "clients",
   "/suppliers": "suppliers",
@@ -284,9 +295,11 @@ export function moduleForPathname(pathname: string): AppModuleKey | null {
   if (pathname.startsWith("/treasury")) return "treasury";
   if (pathname.startsWith("/clients")) return "clients";
   if (pathname.startsWith("/suppliers")) return "suppliers";
+  if (pathname.startsWith("/proposals")) return "proposals";
   if (pathname.startsWith("/manual")) return "manual";
   if (pathname.startsWith("/turnero")) return "turnero";
   if (pathname.startsWith("/solicitudes")) return "featureRequests";
+  if (pathname.startsWith("/campo")) return "projects";
   if (pathname === "/" || pathname === "") return "home";
 
   const projectMatch = pathname.match(/^\/projects\/([^/]+)(\/.*)?$/);

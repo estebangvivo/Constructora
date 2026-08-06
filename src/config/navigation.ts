@@ -11,6 +11,7 @@ import {
   FolderKanban,
   HardHat,
   LayoutDashboard,
+  MapPinned,
   Package,
   Settings,
   ShoppingCart,
@@ -45,11 +46,27 @@ export type NavItem = {
 export const SIDEBAR_NAV: NavItem[] = [
   { title: "Inicio", href: "/", icon: LayoutDashboard, module: "home" },
   {
+    title: "Presupuestos",
+    href: "/proposals",
+    icon: FileStack,
+    description: "Cotizaciones previas; al aprobar se crea la obra",
+    roles: ["ADMIN", "DIRECTOR", "RESIDENT"],
+    module: "proposals",
+  },
+  {
     title: "Obras",
     href: "/projects",
     icon: FolderKanban,
     description: "Proyectos, avance y módulos de cada obra",
     module: "projects",
+  },
+  {
+    title: "Datos en Obra",
+    href: "/campo",
+    icon: MapPinned,
+    description: "Acceso rápido a parte diario y punch list",
+    module: "projects",
+    fieldPriority: true,
   },
   {
     title: "Tesorería",

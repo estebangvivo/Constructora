@@ -32,7 +32,7 @@ export default async function NewDailyReportPage({
         </p>
         <h2 className="font-display text-xl tracking-tight">Nuevo parte</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Completá cada captura. Todas tienen espacio de notas en texto libre.
+          Completá el parte en pasos cortos. Podés volver atrás sin perder lo cargado.
         </p>
       </div>
       <DailyReportForm projectId={id} />

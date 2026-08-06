@@ -4,6 +4,7 @@ import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { OrganizationTheme } from "@/features/settings/components/organization-theme";
 import { ChecksDueAlertBanner } from "@/features/treasury/components/checks-due-alert-banner";
 import { TrialAlertBanner } from "@/features/billing/components/trial-alert-banner";
+import { FieldBottomNav } from "@/components/layout/field-bottom-nav";
 import { PresenceHeartbeat } from "@/features/auth/components/presence-heartbeat";
 import { SessionIdleGuard } from "@/features/auth/components/session-idle-guard";
 import { organizationLogoSrc } from "@/features/settings/lib/organization-logo";
@@ -151,6 +152,7 @@ export default async function DashboardLayout({
         <TrialAlertBanner />
         <ChecksDueAlertBanner />
         {children}
+        <FieldBottomNav />
       </DashboardShell>
     </>
   );

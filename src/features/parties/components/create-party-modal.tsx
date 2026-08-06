@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { createClient } from "@/features/clients/actions/client-actions";
@@ -32,6 +32,8 @@ type CreatePartyModalProps = {
   onCreated: (party: CreatedParty) => void;
   /** Si se indica, vincula el nuevo proveedor/cliente a esta obra. */
   linkProjectId?: string | null;
+  /** Prefill del nombre (ej. texto buscado en el select). */
+  initialName?: string;
 };
 
 export function CreatePartyModal({
@@ -40,10 +42,20 @@ export function CreatePartyModal({
   onClose,
   onCreated,
   linkProjectId,
+  initialName,
 }: CreatePartyModalProps) {
   const [values, setValues] = useState<PartyFormValues>(EMPTY);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (!open) return;
+    setError(null);
+    setValues({
+      ...EMPTY,
+      name: initialName?.trim() || "",
+    });
+  }, [open, initialName]);
 
   if (!open || typeof document === "undefined") return null;
 

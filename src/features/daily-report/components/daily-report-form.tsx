@@ -63,6 +63,15 @@ export function DailyReportForm({ projectId, initial }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState(0);
+
+  const STEPS = [
+    { key: "general", title: "Fecha y clima" },
+    { key: "workforce", title: "Personal" },
+    { key: "equipment", title: "Equipos" },
+    { key: "advances", title: "Avances" },
+    { key: "incidents", title: "Incidencias" },
+  ] as const;
 
   const [reportDate, setReportDate] = useState(
     toDateInputValue(initial?.reportDate ?? new Date()),
@@ -169,79 +178,108 @@ export function DailyReportForm({ projectId, initial }: Props) {
 
   return (
     <form onSubmit={onSubmit} className="space-y-5">
-      <section className="grid gap-3 sm:grid-cols-3">
-        <label className="block text-sm">
-          <span className="mb-1 block text-muted-foreground">Fecha</span>
-          <DateInput
-            required
-            value={reportDate}
-            onChange={setReportDate}
-            className="w-full bg-surface"
-          />
-        </label>
-        <label className="block text-sm sm:col-span-2">
-          <span className="mb-1 block text-muted-foreground">
-            Notas generales del día
-          </span>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={2}
-            className={notesClass}
-            placeholder="Observaciones generales del parte…"
-          />
-        </label>
-      </section>
-
-      <Section
-        title="Clima"
-        icon={<CloudSun className="size-4 text-accent" aria-hidden />}
-      >
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block text-sm">
-            <span className="mb-1 block text-muted-foreground">Condición</span>
-            <select
-              value={weather}
-              onChange={(e) =>
-                setWeather(e.target.value as WeatherCondition | "")
-              }
-              className={fieldClass}
-            >
-              <option value="">—</option>
-              {WEATHER_OPTIONS.map((w) => (
-                <option key={w} value={w}>
-                  {WEATHER_LABEL[w]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-muted-foreground">
-              Temperatura (°C)
-            </span>
-            <input
-              type="number"
-              step="0.1"
-              value={temperature}
-              onChange={(e) => setTemperature(e.target.value)}
-              className={fieldClass}
-            />
-          </label>
-          <label className="block text-sm sm:col-span-2">
-            <span className="mb-1 block text-muted-foreground">
-              Notas de clima
-            </span>
-            <textarea
-              value={weatherNotes}
-              onChange={(e) => setWeatherNotes(e.target.value)}
-              rows={2}
-              className={notesClass}
-              placeholder="Ej. Lluvia a la tarde, viento fuerte en altura…"
-            />
-          </label>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-medium">
+            Paso {step + 1} de {STEPS.length}: {STEPS[step].title}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Podés avanzar y volver sin perder datos
+          </p>
         </div>
-      </Section>
+        <div className="flex gap-1">
+          {STEPS.map((s, i) => (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => setStep(i)}
+              className={`h-1.5 flex-1 rounded-full transition-colors ${
+                i <= step ? "bg-accent" : "bg-muted"
+              }`}
+              aria-label={s.title}
+            />
+          ))}
+        </div>
+      </div>
 
+      {step === 0 && (
+        <>
+          <section className="grid gap-3 sm:grid-cols-3">
+            <label className="block text-sm">
+              <span className="mb-1 block text-muted-foreground">Fecha</span>
+              <DateInput
+                required
+                value={reportDate}
+                onChange={setReportDate}
+                className="w-full bg-surface"
+              />
+            </label>
+            <label className="block text-sm sm:col-span-2">
+              <span className="mb-1 block text-muted-foreground">
+                Notas generales del día
+              </span>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                className={notesClass}
+                placeholder="Observaciones generales del parte…"
+              />
+            </label>
+          </section>
+
+          <Section
+            title="Clima"
+            icon={<CloudSun className="size-4 text-accent" aria-hidden />}
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-sm">
+                <span className="mb-1 block text-muted-foreground">Condición</span>
+                <select
+                  value={weather}
+                  onChange={(e) =>
+                    setWeather(e.target.value as WeatherCondition | "")
+                  }
+                  className={fieldClass}
+                >
+                  <option value="">—</option>
+                  {WEATHER_OPTIONS.map((w) => (
+                    <option key={w} value={w}>
+                      {WEATHER_LABEL[w]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm">
+                <span className="mb-1 block text-muted-foreground">
+                  Temperatura (°C)
+                </span>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={temperature}
+                  onChange={(e) => setTemperature(e.target.value)}
+                  className={fieldClass}
+                />
+              </label>
+              <label className="block text-sm sm:col-span-2">
+                <span className="mb-1 block text-muted-foreground">
+                  Notas de clima
+                </span>
+                <textarea
+                  value={weatherNotes}
+                  onChange={(e) => setWeatherNotes(e.target.value)}
+                  rows={2}
+                  className={notesClass}
+                  placeholder="Ej. Lluvia a la tarde, viento fuerte en altura…"
+                />
+              </label>
+            </div>
+          </Section>
+        </>
+      )}
+
+      {step === 1 && (
       <Section
         title="Personal"
         icon={<HardHat className="size-4 text-accent" aria-hidden />}
@@ -361,7 +399,9 @@ export function DailyReportForm({ projectId, initial }: Props) {
           </label>
         </div>
       </Section>
+      )}
 
+      {step === 2 && (
       <Section
         title="Máquinas / equipos"
         icon={<Wrench className="size-4 text-accent" aria-hidden />}
@@ -472,7 +512,9 @@ export function DailyReportForm({ projectId, initial }: Props) {
           </label>
         </div>
       </Section>
+      )}
 
+      {step === 3 && (
       <Section
         title="Avances"
         icon={<TrendingUp className="size-4 text-accent" aria-hidden />}
@@ -575,7 +617,9 @@ export function DailyReportForm({ projectId, initial }: Props) {
           </label>
         </div>
       </Section>
+      )}
 
+      {step === 4 && (
       <Section
         title="Incidencias"
         icon={<TriangleAlert className="size-4 text-accent" aria-hidden />}
@@ -690,6 +734,7 @@ export function DailyReportForm({ projectId, initial }: Props) {
           </label>
         </div>
       </Section>
+      )}
 
       {error && (
         <p className="text-sm text-danger" role="alert">
@@ -697,20 +742,18 @@ export function DailyReportForm({ projectId, initial }: Props) {
         </p>
       )}
 
-      <div className="flex flex-wrap justify-between gap-2">
-        {initial ? (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={onDelete}
-            className="rounded-md px-3 py-2 text-sm text-danger hover:bg-danger/10 disabled:opacity-60"
-          >
-            Eliminar
-          </button>
-        ) : (
-          <span />
-        )}
+      <div className="flex flex-wrap justify-between gap-2 pb-16 md:pb-0">
         <div className="flex gap-2">
+          {initial ? (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={onDelete}
+              className="rounded-md px-3 py-2 text-sm text-danger hover:bg-danger/10 disabled:opacity-60"
+            >
+              Eliminar
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => router.back()}
@@ -718,17 +761,38 @@ export function DailyReportForm({ projectId, initial }: Props) {
           >
             Cancelar
           </button>
-          <button
-            type="submit"
-            disabled={pending}
-            className="rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground disabled:opacity-60"
-          >
-            {pending
-              ? "Guardando…"
-              : initial
-                ? "Guardar cambios"
-                : "Crear parte"}
-          </button>
+        </div>
+        <div className="flex gap-2">
+          {step > 0 && (
+            <button
+              type="button"
+              onClick={() => setStep((s) => Math.max(0, s - 1))}
+              className="rounded-md border border-border px-4 py-2 text-sm"
+            >
+              Anterior
+            </button>
+          )}
+          {step < STEPS.length - 1 ? (
+            <button
+              type="button"
+              onClick={() => setStep((s) => Math.min(STEPS.length - 1, s + 1))}
+              className="rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground"
+            >
+              Siguiente
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={pending}
+              className="rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground disabled:opacity-60"
+            >
+              {pending
+                ? "Guardando…"
+                : initial
+                  ? "Guardar cambios"
+                  : "Crear parte"}
+            </button>
+          )}
         </div>
       </div>
     </form>

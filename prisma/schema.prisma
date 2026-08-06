@@ -55,6 +55,14 @@ enum BudgetStatus {
   LOCKED /// Cerrado / no editable
 }
 
+/// Presupuesto comercial previo a la obra (cotización / propuesta).
+enum ProposalStatus {
+  DRAFT
+  SENT /// Enviado al cliente
+  REJECTED
+  CONVERTED /// Aprobado y convertido en obra + presupuesto
+}
+
 enum ChangeOrderStatus {
   PENDING
   APPROVED
@@ -251,6 +259,7 @@ model Organization {
   turneroContadoresDiarios TurneroContadorDiario[]
   notifications            AppNotification[]
   featureRequests          FeatureRequest[]
+  proposals                Proposal[]
 
   @@map("organizations")
 }
@@ -299,6 +308,7 @@ model User {
   memberships          OrganizationMember[]
   projectMemberships   ProjectMembership[]
   createdProjects      Project[]            @relation("ProjectCreator")
+  createdProposals     Proposal[]           @relation("ProposalCreator")
   dailyReports         DailyReport[]        @relation("DailyReportAuthor")
   punchItemsCreated    PunchListItem[]      @relation("PunchListCreator")
   punchItemsAssigned   PunchListItem[]      @relation("PunchListAssignee")
@@ -498,6 +508,7 @@ model Project {
   receiptLines       ReceiptLine[]
   paymentOrderLines  PaymentOrderLine[]
   checkRejectionFees CheckRejectionFee[]
+  sourceProposal     Proposal?             @relation("ProposalConvertedProject")
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -527,6 +538,7 @@ model Client {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   projects     Project[]
   receipts     Receipt[]
+  proposals    Proposal[]
 
   @@index([organizationId, isActive])
   @@index([organizationId, name])
@@ -549,6 +561,64 @@ model ProjectSupplier {
   @@unique([projectId, supplierId])
   @@index([supplierId])
   @@map("project_suppliers")
+}
+
+// =============================================================================
+// PRESUPUESTO PREVIO (cotización / propuesta comercial)
+// =============================================================================
+
+/// Presupuesto previo a la obra. Al aprobarse genera Project + Budget.
+model Proposal {
+  id                 String         @id @default(cuid())
+  organizationId     String
+  clientId           String?
+  createdById        String?
+  code               String /// Código (ej. PRE-2026-001); pasa a código de obra al convertir
+  name               String /// Nombre propuesto de la obra
+  description        String?
+  address            String?
+  city               String?
+  currency           String         @default("ARS")
+  status             ProposalStatus @default(DRAFT)
+  notes              String?
+  sentAt             DateTime?
+  rejectedAt         DateTime?
+  convertedAt        DateTime?
+  convertedProjectId String?        @unique
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client           Client?        @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  createdBy        User?          @relation("ProposalCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  convertedProject Project?       @relation("ProposalConvertedProject", fields: [convertedProjectId], references: [id], onDelete: SetNull)
+  items            ProposalItem[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@index([clientId])
+  @@map("proposals")
+}
+
+model ProposalItem {
+  id          String   @id @default(cuid())
+  proposalId  String
+  code        String
+  description String
+  quantity    Decimal  @db.Decimal(14, 4)
+  unit        String
+  unitCost    Decimal  @db.Decimal(14, 2)
+  totalCost   Decimal  @db.Decimal(14, 2)
+  currency    String   @default("ARS")
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@unique([proposalId, code])
+  @@index([proposalId])
+  @@map("proposal_items")
 }
 
 // =============================================================================

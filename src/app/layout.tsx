@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { DM_Sans, IBM_Plex_Sans } from "next/font/google";
 import { AuthProvider } from "@/features/auth/auth-provider";
 import { HardNavForLegacy } from "@/components/compat/hard-nav-for-legacy";
+import { PwaRegister } from "@/components/pwa/pwa-register";
+import { PwaInstallBanner } from "@/components/pwa/pwa-install-banner";
 import { APP_NAME, APP_SLOGAN } from "@/config/brand";
 import "@/styles/globals.css";
 
@@ -27,9 +29,19 @@ export const metadata: Metadata = {
     template: `%s · ${APP_NAME}`,
   },
   description: APP_SLOGAN,
+  applicationName: APP_NAME,
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: APP_NAME,
+    statusBarStyle: "default",
+  },
   icons: {
-    icon: [{ url: "/brand/simpleobra-mark.png", type: "image/png" }],
-    apple: [{ url: "/brand/simpleobra-mark.png", type: "image/png" }],
+    icon: [
+      { url: "/brand/pwa/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/brand/pwa/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/brand/pwa/icon-192.png", sizes: "180x180", type: "image/png" }],
   },
 };
 
@@ -50,6 +62,8 @@ export default function RootLayout({
     <html lang="es" className={`${display.variable} ${sans.variable}`}>
       <body className="min-h-dvh min-h-screen overflow-x-hidden font-sans antialiased">
         <HardNavForLegacy />
+        <PwaRegister />
+        <PwaInstallBanner />
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
