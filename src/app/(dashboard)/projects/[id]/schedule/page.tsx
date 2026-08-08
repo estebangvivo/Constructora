@@ -17,7 +17,7 @@ export default async function SchedulePage({ params }: ProjectRouteParams) {
   if (!schedule) notFound();
 
   const canManage = ["ADMIN", "DIRECTOR", "RESIDENT"].includes(
-    session.organizationRole,
+    session.organizationRole ?? "",
   );
 
   return <ScheduleBoard schedule={schedule} canManage={canManage} />;
